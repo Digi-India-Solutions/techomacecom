@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --font-heading: var(--font-poppins), 'Poppins', sans-serif;
+  --font-body: var(--font-inter), 'Inter', sans-serif;
+
+  /* Soft Healthcare Palette */
+  --color-slate-header: #1E293B;
+  --color-slate-hover: #273449;
+  
+  --color-teal-primary: #0F766E;
+  --color-teal-hover: #0B5F58;
+  --color-teal-light: #E6F4F3;
+  --color-teal-subtle: #F0FDF4;
+
+  /* Accent Orange - ONLY for logo, % OFF discount badges, Deal tags, sale countdown */
+  --color-accent-orange: #F28C38;
+  --color-accent-orange-hover: #D97706;
+
+  /* Backgrounds & Neutrals */
+  --color-page-bg: #F8FAFC;
+  --color-card-bg: #FFFFFF;
+  --color-border: #E2E8F0;
+
+  /* Typography */
+  --color-text-primary: #1E293B;
+  --color-text-secondary: #64748B;
+  --color-text-muted: #94A3B8;
+
+  /* Status */
+  --color-success: #16A34A;
+  --color-badge-gold: #F5B841;
+  --color-error: #DC2626;
+}
+
+body {
+  font-family: var(--font-inter), 'Inter', sans-serif;
+  background-color: #F8FAFC;
+  color: #1E293B;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6, .font-heading, button, nav {
+  font-family: var(--font-poppins), 'Poppins', sans-serif;
+}
+
+/* Custom scrollbar for horizontal product carousels & drawers */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Hide scrollbar for clean UI scroll rows */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Hexagon badge & card polygon */
+.clip-hexagon {
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+}

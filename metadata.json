@@ -1,0 +1,8 @@
+{
+  "name": "Remix Buy Denmed - Medical \u0026 Dental Equipment Store",
+  "description": "Pan-India B2C online store for medical and dental equipment, instruments, consumables, rentals, and sleep diagnostic services.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
