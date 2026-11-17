@@ -1,0 +1,128 @@
+import React from 'react';
+import { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
+import { getBrandBySlug, getProducts } from '@/lib/api';
+import ProductCard from '@/components/product/ProductCard';
+import { ShieldCheck, ChevronRight, MapPin, Award } from 'lucide-react';
+
+interface BrandPageProps {
+  params: Promise<{ slug: string }>;
+}
+
+export async function generateMetadata({ params }: BrandPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const brand = await getBrandBySlug(slug);
+
+  if (!brand) {
+    return {
+      title: 'Brand Not Found | Buy Denmed',
+      description: 'The requested brand was not found.'
+    };
+  }
+
+  return {
+    title: `${brand.name} Products Online - Authorized Distributor | Buy Denmed`,
+    description: `Shop genuine ${brand.name} products with manufacturer warranty, pan-India delivery, and GST tax invoice. ${brand.description}`,
+    openGraph: {
+      title: `${brand.name} | Buy Denmed`,
+      description: brand.description,
+      images: [{ url: brand.bannerImage || brand.logo }]
+    }
+  };
+}
+
+export default async function BrandPage({ params }: BrandPageProps) {
+  const { slug } = await params;
+  const brand = await getBrandBySlug(slug);
+
+  if (!brand) {
+    notFound();
+  }
+
+  const productsData = await getProducts({ brandIds: [brand.id], limit: 40 });
+
+  return (
+    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-8">
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-xs text-[#5B6B82]">
+        <Link href="/" className="hover:text-[#1D5FAF]">Home</Link>
+        <ChevronRight className="w-3.5 h-3.5 text-[#5B6B82]" />
+        <Link href="/brands" className="hover:text-[#1D5FAF]">Brands</Link>
+        <ChevronRight className="w-3.5 h-3.5 text-[#5B6B82]" />
+        <span className="font-semibold text-[#12263F]">{brand.name}</span>
+      </nav>
+
+      {/* Brand Hero Banner */}
+      <div className="relative rounded-3xl bg-[#0B2545] text-white overflow-hidden shadow-xl border border-[#13335E]">
+        <div className="absolute inset-0 opacity-25">
+          <Image
+            src={brand.bannerImage}
+            alt={brand.name}
+            fill
+            className="object-cover"
+            priority
+            referrerPolicy="no-referrer"
+          />
+        </div>
+
+        <div className="relative z-10 p-6 sm:p-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white p-2 relative overflow-hidden shadow-lg shrink-0">
+              <Image
+                src={brand.logo}
+                alt={brand.name}
+                fill
+                className="object-cover"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <div className="space-y-1">
+              {brand.authorizedDistributor && (
+                <div className="inline-flex items-center gap-1.5 text-[12px] font-bold text-green-400 bg-white/10 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Authorized Indian Distributor</span>
+                </div>
+              )}
+              <h1 className="text-2xl sm:text-4xl font-black tracking-tight">{brand.name}</h1>
+              <p className="text-xs text-blue-100/80 max-w-xl leading-relaxed">
+                {brand.description}
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/15 text-center shrink-0">
+            <div className="text-2xl font-black text-[#EAF2FC]">{productsData.products.length}</div>
+            <div className="text-xs text-blue-100/90">Catalog Products</div>
+            <div className="text-[11px] text-blue-200/75 mt-1">Origin: {brand.originCountry}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Brand Products Grid */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-[#12263F]">
+            All Products from {brand.name}
+          </h2>
+          <span className="text-xs text-[#5B6B82]">
+            Showing {productsData.products.length} items
+          </span>
+        </div>
+
+        {productsData.products.length === 0 ? (
+          <div className="bg-white p-12 text-center rounded-2xl border border-[#DCE6F2]">
+            <p className="text-xs text-[#5B6B82]">No products currently in stock for this brand.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {productsData.products.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

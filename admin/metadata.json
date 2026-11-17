@@ -1,0 +1,6 @@
+{
+  "name": "Buy Denmed Admin",
+  "description": "Operations, catalog, inventory, and medical equipment rental administration panel for Buy Denmed.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

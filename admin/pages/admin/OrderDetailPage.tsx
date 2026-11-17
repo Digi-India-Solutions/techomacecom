@@ -1,0 +1,726 @@
+import React, { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  BellRing,
+  CheckCircle2,
+  ExternalLink,
+  FileText,
+  PackageCheck,
+  Printer,
+  Truck,
+  X,
+  XCircle,
+} from 'lucide-react';
+import type { Order } from '@/types/admin';
+import {
+  addOrderInternalNote,
+  createOrderShipment,
+  getOrderById,
+  updateOrderStatus,
+} from '@/lib/api/admin/orders';
+import { formatDateTime, formatINR } from '@/lib/api/admin/client';
+import { useAuth } from '@/components/admin/AuthContext';
+import { useToast } from '@/components/admin/ToastProvider';
+import { StatusBadge } from '@/components/admin/StatusBadge';
+import { SafeImage } from '@/components/admin/SafeImage';
+import { FormField, inputClass, selectClass, textareaClass } from '@/components/admin/FormField';
+
+export function OrderDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
+  const { showToast } = useToast();
+
+  const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [noteInput, setNoteInput] = useState('');
+
+  // Shiprocket modal
+  const [shipModalOpen, setShipModalOpen] = useState(false);
+  const [courier, setCourier] = useState('BlueDart Air Express');
+  const [weightKg, setWeightKg] = useState(14.5);
+  const [lengthCm, setLengthCm] = useState(45);
+  const [widthCm, setWidthCm] = useState(35);
+  const [heightCm, setHeightCm] = useState(55);
+
+  // Cancel modal
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+
+  // Invoice modal
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    getOrderById(id)
+      .then((data) => {
+        if (data) setOrder(data);
+      })
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const handleStatusChange = async (
+    nextStatus: Order['orderStatus'],
+    note?: string
+  ) => {
+    if (!order) return;
+    const updated = await updateOrderStatus({
+      id: order.id,
+      status: nextStatus,
+      actor: user?.name || 'Admin',
+      note,
+    });
+    setOrder(updated);
+    showToast({
+      title: `Order marked ${nextStatus}`,
+      description:
+        nextStatus === 'cancelled' && updated.paymentStatus === 'refunded'
+          ? 'Automatic Razorpay refund initiated for prepaid amount.'
+          : undefined,
+      variant: nextStatus === 'cancelled' ? 'warning' : 'success',
+    });
+  };
+
+  const handleCreateShipment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    const updated = await createOrderShipment({
+      id: order.id,
+      courier,
+      weightKg,
+      lengthCm,
+      widthCm,
+      heightCm,
+      actor: user?.name || 'Admin',
+    });
+    setOrder(updated);
+    setShipModalOpen(false);
+    showToast({
+      title: 'Shipment created via Shiprocket',
+      description: `AWB: ${updated.shipment?.awb}`,
+      variant: 'success',
+    });
+  };
+
+  const handleAddNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order || !noteInput.trim()) return;
+    const updated = await addOrderInternalNote(order.id, noteInput.trim());
+    setOrder(updated);
+    setNoteInput('');
+    showToast({ title: 'Internal note added', variant: 'info' });
+  };
+
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-[#DCE6F2] bg-white p-8 text-sm text-[#5B6B82]">
+        Loading order details...
+      </div>
+    );
+  }
+
+  if (!order) {
+    return (
+      <div className="rounded-xl border border-[#DCE6F2] bg-white p-8 space-y-3">
+        <p className="text-base font-semibold text-[#12263F]">Order not found</p>
+        <Link to="/admin/orders" className="text-xs font-semibold text-[#1D5FAF] hover:underline">
+          Back to Orders
+        </Link>
+      </div>
+    );
+  }
+
+  const isB2B = Boolean(order.gstDetails?.gstin);
+
+  return (
+    <div className="space-y-5">
+      {/* Header & Action Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Link
+            to="/admin/orders"
+            className="rounded-lg border border-[#DCE6F2] bg-white p-2 text-[#12263F] hover:bg-[#EAF2FC]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold font-mono text-[#12263F]">
+                {order.orderNumber}
+              </h1>
+              <StatusBadge status={order.orderStatus} />
+              <StatusBadge status={order.paymentStatus} />
+              {isB2B && (
+                <span className="rounded-md bg-[#EAF2FC] px-2 py-0.5 text-xs font-semibold text-[#1D5FAF]">
+                  B2B Tax Invoice
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-xs text-[#5B6B82] tabular-nums">
+              Placed on {formatDateTime(order.createdAt)} · Payment: {order.paymentMethod}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {order.orderStatus === 'new' && (
+            <button
+              type="button"
+              onClick={() => handleStatusChange('confirmed')}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Confirm Order
+            </button>
+          )}
+          {(order.orderStatus === 'new' || order.orderStatus === 'confirmed') && (
+            <button
+              type="button"
+              onClick={() => handleStatusChange('packed')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE6F2] bg-white px-3.5 py-2 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC]"
+            >
+              <PackageCheck className="h-3.5 w-3.5 text-[#1D5FAF]" />
+              Mark Packed
+            </button>
+          )}
+          {(order.orderStatus === 'confirmed' || order.orderStatus === 'packed') && (
+            <button
+              type="button"
+              onClick={() => setShipModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+            >
+              <Truck className="h-3.5 w-3.5" />
+              Create Shipment
+            </button>
+          )}
+          {order.orderStatus === 'shipped' && (
+            <button
+              type="button"
+              onClick={() => handleStatusChange('delivered')}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Mark Delivered
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setInvoiceOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE6F2] bg-white px-3.5 py-2 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC]"
+          >
+            <FileText className="h-3.5 w-3.5 text-[#1D5FAF]" />
+            GST Invoice ({isB2B ? 'B2B' : 'B2C'})
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              showToast({
+                title: 'Notifications resent',
+                description: `SMS, WhatsApp & Email dispatched to ${order.customerPhone}`,
+                variant: 'info',
+              })
+            }
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE6F2] bg-white px-3.5 py-2 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC]"
+          >
+            <BellRing className="h-3.5 w-3.5 text-[#5B6B82]" />
+            Resend Notification
+          </button>
+
+          {order.orderStatus !== 'cancelled' && order.orderStatus !== 'delivered' && (
+            <button
+              type="button"
+              onClick={() => setCancelModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-700 hover:bg-red-100"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+              Cancel Order
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+        {/* Left 2 cols: Items + Price Breakdown + Timeline */}
+        <div className="xl:col-span-2 space-y-5">
+          {/* Items Table */}
+          <div className="rounded-xl border border-[#DCE6F2] bg-white overflow-hidden">
+            <div className="border-b border-[#DCE6F2] px-5 py-3.5">
+              <h2 className="text-base font-semibold text-[#12263F]">Order Items</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[#DCE6F2] bg-[#F6F9FD] text-xs font-semibold text-[#5B6B82]">
+                    <th className="px-4 py-3">Product / Variant</th>
+                    <th className="px-4 py-3">SKU</th>
+                    <th className="px-4 py-3 text-right">Qty</th>
+                    <th className="px-4 py-3 text-right">Taxable Unit</th>
+                    <th className="px-4 py-3 text-right">GST</th>
+                    <th className="px-4 py-3 text-right">Line Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#DCE6F2]">
+                  {order.items.map((item) => (
+                    <tr key={item.id}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-[#DCE6F2]">
+                            <SafeImage src={item.imageUrl} alt={item.productName} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-[#12263F]">
+                              {item.productName}
+                            </p>
+                            <p className="text-[11px] text-[#5B6B82]">{item.variantName}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-[#5B6B82]">
+                        {item.sku}
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs font-semibold tabular-nums">
+                        {item.qty}
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs tabular-nums">
+                        {formatINR(item.unitPrice)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs text-[#5B6B82] tabular-nums">
+                        {formatINR(item.gstAmount)} ({item.gstPercent}%)
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-[#12263F] tabular-nums">
+                        {formatINR(item.lineTotal)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Price Breakdown */}
+            <div className="border-t border-[#DCE6F2] bg-[#F6F9FD] px-5 py-4 flex justify-end">
+              <div className="w-full max-w-xs space-y-1.5 text-xs tabular-nums">
+                <div className="flex justify-between text-[#5B6B82]">
+                  <span>Taxable Subtotal</span>
+                  <span>{formatINR(order.subtotal)}</span>
+                </div>
+                {order.discount > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-medium">
+                    <span>
+                      Discount {order.couponCode ? `(${order.couponCode})` : ''}
+                    </span>
+                    <span>-{formatINR(order.discount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-[#5B6B82]">
+                  <span>Shipping</span>
+                  <span>{order.shippingCharge === 0 ? 'Free' : formatINR(order.shippingCharge)}</span>
+                </div>
+                <div className="flex justify-between text-[#5B6B82]">
+                  <span>Total GST</span>
+                  <span>{formatINR(order.gstTotal)}</span>
+                </div>
+                <div className="flex justify-between border-t border-[#DCE6F2] pt-2 text-sm font-bold text-[#12263F]">
+                  <span>Grand Total</span>
+                  <span>{formatINR(order.total)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Shipment Tracking Card */}
+          {order.shipment && (
+            <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 flex flex-wrap items-center justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#1D5FAF]">
+                  Shiprocket Dispatch
+                </p>
+                <p className="text-sm font-semibold text-[#12263F]">
+                  {order.shipment.courier} · AWB:{' '}
+                  <span className="font-mono">{order.shipment.awb}</span>
+                </p>
+                <p className="text-xs text-[#5B6B82] tabular-nums">
+                  {order.shipment.weightKg} kg ({order.shipment.lengthCm}×
+                  {order.shipment.widthCm}×{order.shipment.heightCm} cm) · Shipped{' '}
+                  {formatDateTime(order.shipment.shippedAt)}
+                </p>
+              </div>
+              <a
+                href={order.shipment.trackingUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE6F2] bg-[#EAF2FC] px-3.5 py-2 text-xs font-semibold text-[#1D5FAF] hover:bg-[#1D5FAF] hover:text-white transition-colors"
+              >
+                Track Shipment
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          )}
+
+          {/* Status Timeline */}
+          <div className="rounded-xl border border-[#DCE6F2] bg-white p-5">
+            <h2 className="text-base font-semibold text-[#12263F] mb-4">Status Timeline</h2>
+            <div className="space-y-3">
+              {order.timeline.map((ev) => (
+                <div
+                  key={ev.id}
+                  className="flex items-start justify-between gap-4 rounded-xl border border-[#DCE6F2] bg-[#F6F9FD] px-4 py-3"
+                >
+                  <div>
+                    <p className="text-xs font-semibold text-[#12263F]">{ev.status}</p>
+                    <p className="mt-0.5 text-xs text-[#5B6B82]">{ev.note}</p>
+                  </div>
+                  <div className="text-right text-[11px] text-[#5B6B82] shrink-0 tabular-nums">
+                    <p className="font-medium text-[#12263F]">{ev.actor}</p>
+                    <p>{formatDateTime(ev.timestamp)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Col: Customer, Addresses, GST, Payment, Notes */}
+        <div className="space-y-5">
+          <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-[#12263F]">Customer</h2>
+              <Link
+                to={`/admin/customers/${order.customerId}`}
+                className="text-xs font-semibold text-[#1D5FAF] hover:underline"
+              >
+                View Profile
+              </Link>
+            </div>
+            <div className="text-xs space-y-1">
+              <p className="text-sm font-semibold text-[#12263F]">{order.customerName}</p>
+              <p className="text-[#5B6B82]">{order.customerEmail}</p>
+              <p className="text-[#12263F] tabular-nums">{order.customerPhone}</p>
+            </div>
+
+            {order.gstDetails && (
+              <div className="rounded-lg border border-[#DCE6F2] bg-[#EAF2FC]/50 p-3 text-xs space-y-0.5">
+                <p className="font-semibold text-[#1D5FAF]">B2B GST Details</p>
+                <p className="font-medium text-[#12263F]">{order.gstDetails.companyName}</p>
+                <p className="font-mono text-[#5B6B82]">GSTIN: {order.gstDetails.gstin}</p>
+              </div>
+            )}
+
+            <div className="border-t border-[#DCE6F2] pt-3 space-y-2 text-xs">
+              <div>
+                <p className="font-semibold text-[#5B6B82] uppercase text-[10px]">
+                  Shipping Address
+                </p>
+                <p className="mt-0.5 text-[#12263F]">
+                  {order.shippingAddress.line1}
+                  {order.shippingAddress.line2 ? `, ${order.shippingAddress.line2}` : ''},{' '}
+                  {order.shippingAddress.city}, {order.shippingAddress.state} -{' '}
+                  {order.shippingAddress.pincode}
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold text-[#5B6B82] uppercase text-[10px]">
+                  Billing Address
+                </p>
+                <p className="mt-0.5 text-[#12263F]">
+                  {order.billingAddress.line1}, {order.billingAddress.city},{' '}
+                  {order.billingAddress.state} - {order.billingAddress.pincode}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Payment Info */}
+          <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-2.5 text-xs">
+            <h2 className="text-base font-semibold text-[#12263F]">Payment Information</h2>
+            <div className="flex justify-between">
+              <span className="text-[#5B6B82]">Method</span>
+              <span className="font-semibold text-[#12263F]">{order.paymentMethod}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#5B6B82]">Status</span>
+              <StatusBadge status={order.paymentStatus} />
+            </div>
+            {order.razorpayPaymentId && (
+              <div className="flex justify-between">
+                <span className="text-[#5B6B82]">Razorpay ID</span>
+                <span className="font-mono text-[#12263F]">{order.razorpayPaymentId}</span>
+              </div>
+            )}
+            {order.emiPlan && (
+              <div className="rounded-lg bg-[#F6F9FD] border border-[#DCE6F2] p-2.5 text-[#12263F]">
+                <span className="font-semibold">EMI Plan:</span> {order.emiPlan}
+              </div>
+            )}
+          </div>
+
+          {/* Internal Notes */}
+          <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-3">
+            <h2 className="text-base font-semibold text-[#12263F]">Internal Notes</h2>
+            <form onSubmit={handleAddNote} className="space-y-2">
+              <textarea
+                value={noteInput}
+                onChange={(e) => setNoteInput(e.target.value)}
+                placeholder="Add dispatch or technician note..."
+                className={textareaClass}
+              />
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-[#0B2545] px-3 py-2 text-xs font-semibold text-white hover:bg-[#11335E]"
+              >
+                Add Note
+              </button>
+            </form>
+            {order.internalNotes.length > 0 && (
+              <ul className="space-y-2 pt-1">
+                {order.internalNotes.map((n, idx) => (
+                  <li
+                    key={idx}
+                    className="rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] px-3 py-2 text-xs text-[#12263F]"
+                  >
+                    {n}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Create Shipment Modal */}
+      {shipModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/45 p-4">
+          <div className="w-full max-w-md rounded-xl border border-[#DCE6F2] bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#DCE6F2] px-5 py-4">
+              <h3 className="text-base font-semibold text-[#12263F]">
+                Create Shiprocket Shipment
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShipModalOpen(false)}
+                className="rounded-lg p-1 text-[#5B6B82] hover:bg-[#EAF2FC]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateShipment} className="p-5 space-y-4">
+              <FormField label="Select Courier Partner" required>
+                <select
+                  value={courier}
+                  onChange={(e) => setCourier(e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="BlueDart Air Express">BlueDart Air Express (₹420)</option>
+                  <option value="Delhivery Surface">Delhivery Surface (₹260)</option>
+                  <option value="Xpressbees Heavy Freight">Xpressbees Heavy Freight (₹850)</option>
+                  <option value="DTDC Medical Priority">DTDC Medical Priority (₹390)</option>
+                </select>
+              </FormField>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Package Weight (kg)">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={weightKg}
+                    onChange={(e) => setWeightKg(Number(e.target.value))}
+                    className={`${inputClass} tabular-nums`}
+                  />
+                </FormField>
+                <FormField label="Length (cm)">
+                  <input
+                    type="number"
+                    value={lengthCm}
+                    onChange={(e) => setLengthCm(Number(e.target.value))}
+                    className={`${inputClass} tabular-nums`}
+                  />
+                </FormField>
+                <FormField label="Width (cm)">
+                  <input
+                    type="number"
+                    value={widthCm}
+                    onChange={(e) => setWidthCm(Number(e.target.value))}
+                    className={`${inputClass} tabular-nums`}
+                  />
+                </FormField>
+                <FormField label="Height (cm)">
+                  <input
+                    type="number"
+                    value={heightCm}
+                    onChange={(e) => setHeightCm(Number(e.target.value))}
+                    className={`${inputClass} tabular-nums`}
+                  />
+                </FormField>
+              </div>
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShipModalOpen(false)}
+                  className="rounded-lg border border-[#DCE6F2] px-4 py-2 text-xs font-semibold text-[#12263F]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+                >
+                  Generate AWB &amp; Dispatch
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Order Modal */}
+      {cancelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/45 p-4">
+          <div className="w-full max-w-md rounded-xl border border-[#DCE6F2] bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#DCE6F2] px-5 py-4">
+              <h3 className="text-base font-semibold text-[#12263F]">Cancel Order</h3>
+              <button
+                type="button"
+                onClick={() => setCancelModalOpen(false)}
+                className="rounded-lg p-1 text-[#5B6B82] hover:bg-[#EAF2FC]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {order.paymentStatus === 'paid' && (
+                <div className="rounded-lg border border-[#F28C38]/40 bg-[#F28C38]/10 p-3 text-xs text-[#12263F]">
+                  This order is prepaid ({formatINR(order.total)}). Cancelling will automatically trigger a full refund via {order.paymentMethod}.
+                </div>
+              )}
+              <FormField label="Cancellation Reason" required>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="e.g. Customer requested change of model / unserviceable freight pin"
+                  className={textareaClass}
+                />
+              </FormField>
+              <div className="flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setCancelModalOpen(false)}
+                  className="rounded-lg border border-[#DCE6F2] px-4 py-2 text-xs font-semibold text-[#12263F]"
+                >
+                  Keep Order
+                </button>
+                <button
+                  type="button"
+                  disabled={!cancelReason.trim()}
+                  onClick={async () => {
+                    await handleStatusChange('cancelled', cancelReason.trim());
+                    setCancelModalOpen(false);
+                  }}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  Confirm Cancellation
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* B2B / B2C GST Invoice Print Preview Modal */}
+      {invoiceOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/55 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-[#DCE6F2] bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-[#DCE6F2] px-5 py-3.5 bg-[#F6F9FD]">
+              <span className="text-sm font-semibold text-[#12263F]">
+                {isB2B ? 'Tax Invoice (B2B GSTIN)' : 'Retail Tax Invoice (B2C)'} — {order.orderNumber}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#174D8F]"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Print / Save PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvoiceOpen(false)}
+                  className="rounded-lg p-1 text-[#5B6B82] hover:bg-[#EAF2FC]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-5 text-xs text-[#12263F]">
+              <div className="flex justify-between border-b border-[#DCE6F2] pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-[#0B2545]">Buy Denmed Healthcare Pvt Ltd</h3>
+                  <p className="text-[#5B6B82]">Plot B-114, Okhla Industrial Area Phase II, New Delhi 110020</p>
+                  <p className="font-mono text-[#5B6B82]">Seller GSTIN: 07AABCB8129D1Z4</p>
+                </div>
+                <div className="text-right tabular-nums">
+                  <p className="font-bold text-[#1D5FAF]">{isB2B ? 'B2B TAX INVOICE' : 'B2C TAX INVOICE'}</p>
+                  <p>Invoice: BDM/26-27/{order.orderNumber.slice(-4)}</p>
+                  <p>Date: {order.createdAt.slice(0, 10)}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="font-semibold text-[#5B6B82] uppercase text-[10px]">Billed To</p>
+                  <p className="font-semibold">{order.gstDetails?.companyName || order.billingAddress.name}</p>
+                  <p>{order.billingAddress.line1}, {order.billingAddress.city} - {order.billingAddress.pincode}</p>
+                  {order.gstDetails && (
+                    <p className="font-mono font-semibold text-[#1D5FAF]">Buyer GSTIN: {order.gstDetails.gstin}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="font-semibold text-[#5B6B82] uppercase text-[10px]">Shipped To</p>
+                  <p className="font-semibold">{order.shippingAddress.name}</p>
+                  <p>{order.shippingAddress.line1}, {order.shippingAddress.city} - {order.shippingAddress.pincode}</p>
+                  <p>State: {order.shippingAddress.state}</p>
+                </div>
+              </div>
+
+              <table className="w-full border border-[#DCE6F2] border-collapse">
+                <thead>
+                  <tr className="bg-[#F6F9FD] border-b border-[#DCE6F2]">
+                    <th className="p-2 text-left">Item &amp; SKU</th>
+                    <th className="p-2 text-right">Qty</th>
+                    <th className="p-2 text-right">Taxable</th>
+                    <th className="p-2 text-right">GST</th>
+                    <th className="p-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#DCE6F2] tabular-nums">
+                  {order.items.map((it) => (
+                    <tr key={it.id}>
+                      <td className="p-2">
+                        {it.productName} <span className="font-mono text-[#5B6B82]">({it.sku})</span>
+                      </td>
+                      <td className="p-2 text-right">{it.qty}</td>
+                      <td className="p-2 text-right">{formatINR(it.unitPrice * it.qty)}</td>
+                      <td className="p-2 text-right">{formatINR(it.gstAmount)} ({it.gstPercent}%)</td>
+                      <td className="p-2 text-right font-semibold">{formatINR(it.lineTotal)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="flex justify-between items-end pt-2">
+                <p className="text-[11px] text-[#5B6B82] max-w-sm">
+                  Certified that the particulars given above are true and correct. Authorized Signatory — Buy Denmed Healthcare Pvt Ltd.
+                </p>
+                <div className="text-right tabular-nums">
+                  <p className="text-[#5B6B82]">Total GST: {formatINR(order.gstTotal)}</p>
+                  <p className="text-base font-bold text-[#0B2545]">Invoice Total: {formatINR(order.total)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
