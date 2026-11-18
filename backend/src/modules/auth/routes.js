@@ -25,4 +25,9 @@ router.put("/me", requireCustomer, validate({ body: v.updateProfileSchema }), c.
 router.post("/me/mobile/send", requireCustomer, customerAuthLimiter, validate({ body: v.addMobileSchema }), c.sendMobileOtp);
 router.post("/me/mobile/verify", requireCustomer, customerAuthLimiter, validate({ body: v.verifyMobileSchema }), c.verifyMobile);
 
+// Signed-in devices. Under /auth so the path-scoped refresh cookie identifies "this device".
+router.get("/sessions", requireCustomer, c.sessions);
+router.post("/sessions/revoke-others", requireCustomer, c.revokeOthers);
+router.delete("/sessions/:id", requireCustomer, validate({ params: v.sessionIdParams }), c.revokeSession);
+
 export default router;

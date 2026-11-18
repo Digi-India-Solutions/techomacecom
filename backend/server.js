@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./config/load-env.js"; // one .env, *_LOCAL / *_PRODUCTION picked automatically
 import "./src/lib/serialize.js"; // BigInt → JSON (must load before any response is sent)
 import express from "express";
 import cors from "cors";

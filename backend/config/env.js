@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { envKeyHint } from "./load-env.js";
 
 /**
  * Every environment variable the API reads, in one place.
@@ -10,7 +10,7 @@ const isProduction = process.env.NODE_ENV === "production";
 function required(name) {
   const value = process.env[name];
   if (!value || !value.trim()) {
-    throw new Error(`Missing required environment variable ${name} (see backend/.env.example)`);
+    throw new Error(`Missing required environment variable ${envKeyHint(name)} in backend/.env (see .env.example)`);
   }
   return value.trim();
 }
@@ -32,6 +32,37 @@ function bool(name, fallback) {
   return ["1", "true", "yes", "on"].includes(raw.trim().toLowerCase());
 }
 
+const trimSlash = (url) => url.replace(/\/+$/, "");
+
+/**
+ * URLs for this environment. config/load-env.js has already copied
+ * FRONTEND_URL_LOCAL or FRONTEND_URL_PRODUCTION into FRONTEND_URL (same for every key).
+ * In production a missing URL stops startup instead of silently using localhost.
+ */
+function urlFor(name, localDefault) {
+  const value = optional(name);
+  if (!value && isProduction) throw new Error(`Missing ${envKeyHint(name)} in backend/.env (needed when NODE_ENV=production)`);
+  return trimSlash(value || localDefault);
+}
+
+const port = int("PORT", 5001);
+const frontendUrl = urlFor("FRONTEND_URL", "http://localhost:3000");
+const adminUrl = urlFor("ADMIN_URL", "http://localhost:3001");
+const apiUrl = urlFor("API_URL", `http://localhost:${port}`); // public origin of this API (no /api/v1)
+
+/** Browser origins allowed by CORS: the storefront + admin above, their www / 127.0.0.1 twins, plus extras. */
+function corsOrigins() {
+  const list = [frontendUrl, adminUrl];
+  for (const url of [frontendUrl, adminUrl]) {
+    const u = new URL(url);
+    if (u.hostname === "localhost") list.push(url.replace("localhost", "127.0.0.1"));
+    else if (!u.hostname.startsWith("www.") && u.hostname.split(".").length === 2) list.push(url.replace("://", "://www."));
+  }
+  const extra = optional(isProduction ? "PRODUCTION_URL" : "LOCAL_URL"); // optional extra origins, comma-separated
+  list.push(...extra.split(",").map((o) => trimSlash(o.trim())).filter(Boolean));
+  return [...new Set(list)];
+}
+
 const jwtSecret = required("JWT_SECRET_KEY");
 const refreshSecret = required("REFRESH_TOKEN_SECRET");
 if (isProduction && (jwtSecret.length < 32 || refreshSecret.length < 32 || jwtSecret === refreshSecret)) {
@@ -41,10 +72,12 @@ if (isProduction && (jwtSecret.length < 32 || refreshSecret.length < 32 || jwtSe
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   isProduction,
-  port: int("PORT", 5001),
+  port,
 
-  frontendUrl: optional("FRONTEND_URL", "http://localhost:3000").replace(/\/+$/, ""),
-  adminUrl: optional("ADMIN_URL", "http://localhost:3001").replace(/\/+$/, ""),
+  frontendUrl,
+  adminUrl,
+  apiUrl,
+  corsOrigins: corsOrigins(),
 
   jwt: {
     accessSecret: jwtSecret,
@@ -93,7 +126,7 @@ export const env = {
     // Images are stored on this server's disk (no Cloudinary / S3) and served at /uploads/…
     dir: optional("UPLOADS_DIR", "uploads"), // relative to backend/ or absolute
     // Public origin that serves /uploads (this API in dev; api.buydenmed.com or a CDN in production)
-    publicBaseUrl: (optional("ASSET_BASE_URL") || `http://localhost:${int("PORT", 5001)}`).replace(/\/+$/, ""),
+    publicBaseUrl: trimSlash(optional("ASSET_BASE_URL") || apiUrl),
     maxFileMb: int("UPLOAD_MAX_FILE_MB", 10),
     maxFiles: 10,
     // WebP encoding. Lossy at quality 85 looks identical to the original and is ~3–5× smaller than lossless.

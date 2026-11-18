@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Indian mobile numbers are stored as 10 digits (e.g. 9811234567).
  * Accepts "+91 98112 34567", "09811234567", "919811234567", …
@@ -14,4 +16,22 @@ export function normalizeMobile(input) {
 /** 98XXXXXX67 — for logs and messages that should not show the full number. */
 export function maskMobile(mobile) {
   return mobile ? `${mobile.slice(0, 2)}XXXXXX${mobile.slice(-2)}` : "";
+}
+
+/**
+ * zod field: any common way of writing an Indian mobile → "9811234567".
+ *   mobileField()                            required
+ *   mobileField({ allowEmpty: true })        "" → null (clears the number)
+ *   mobileField({ allowEmpty: true }).optional()  missing → unchanged
+ */
+export function mobileField({ allowEmpty = false, message = "Enter a valid 10-digit Indian mobile number" } = {}) {
+  return z.string({ error: "Mobile number is required" }).transform((v, ctx) => {
+    if (allowEmpty && !v.trim()) return null;
+    const m = normalizeMobile(v);
+    if (!m) {
+      ctx.addIssue({ code: "custom", message });
+      return z.NEVER;
+    }
+    return m;
+  });
 }

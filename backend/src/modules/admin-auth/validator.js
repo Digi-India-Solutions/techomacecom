@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { PASSWORD_RULE } from "../../lib/password.js";
+import { mobileField } from "../../lib/mobile.js";
+import { listQuery, queryId } from "../../lib/list.js";
 
 const email = z.email("Enter a valid email address").trim().toLowerCase().max(200);
 export const newPassword = z.string().regex(PASSWORD_RULE.regex, PASSWORD_RULE.message);
@@ -17,11 +19,17 @@ export const resetSchema = z.object({
   password: newPassword,
 });
 
-export const updateMeSchema = z.object({
-  name: z.string().trim().min(2).max(120).optional(),
-  mobile: z.string().trim().max(15).optional(),
-  department: z.string().trim().max(80).optional(),
-});
+export const updateMeSchema = z
+  .object({
+    name: z.string().trim().min(2, "Name must be at least 2 characters").max(120, "Name is too long").optional(),
+    mobile: mobileField({ allowEmpty: true }).optional(), // "" clears it
+    department: z.string().trim().max(80, "Department is too long").optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Nothing to update" });
+
+export const sessionIdParams = z.object({ id: queryId });
+
+export const myActivityQuery = listQuery({});
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Enter your current password"),

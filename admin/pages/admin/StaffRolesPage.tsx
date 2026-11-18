@@ -7,7 +7,6 @@ import {
   ShieldCheck,
   Trash2,
   UserCheck,
-  UserCog,
   UserX,
 } from 'lucide-react';
 import type {
@@ -26,7 +25,6 @@ import {
   saveStaffMember,
   toggleStaffActive,
 } from '@/lib/api/admin/staff';
-import { changeAdminPassword, PASSWORD_HINT } from '@/lib/api/admin/auth';
 import { formatDateTime } from '@/lib/api/admin/client';
 import { useAuth } from '@/components/admin/AuthContext';
 import { useToast } from '@/components/admin/ToastProvider';
@@ -35,7 +33,7 @@ import { StatusBadge } from '@/components/admin/StatusBadge';
 import { Drawer } from '@/components/admin/Drawer';
 import { FormField, inputClass, selectClass } from '@/components/admin/FormField';
 
-type StaffTabKey = 'staff' | 'roles' | 'profile';
+type StaffTabKey = 'staff' | 'roles';
 
 function emptyMatrix(): RolePermissionMatrix {
   const m = {} as RolePermissionMatrix;
@@ -46,7 +44,7 @@ function emptyMatrix(): RolePermissionMatrix {
 }
 
 export function StaffRolesPage() {
-  const { user, updateProfile, can, reload } = useAuth();
+  const { user, can, reload } = useAuth();
   const canCreate = can('staff.create');
   const canEdit = can('staff.edit');
   const canDelete = can('staff.delete');
@@ -80,12 +78,6 @@ export function StaffRolesPage() {
   const [roleLocked, setRoleLocked] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // My Profile tab state
-  const [myName, setMyName] = useState(user?.name || '');
-  const [myPhone, setMyPhone] = useState(user?.phone || '');
-  const [myDept, setMyDept] = useState(user?.department || '');
-  const [currPwd, setCurrPwd] = useState('');
-  const [newPwd, setNewPwd] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -341,7 +333,7 @@ export function StaffRolesPage() {
             Staff &amp; Roles
           </h1>
           <p className="mt-0.5 text-sm text-[#5B6B82]">
-            Manage team accounts, configure granular module permissions, and update your profile.
+            Manage team accounts and configure granular module permissions. Your own details are under My Profile.
           </p>
         </div>
 
@@ -372,7 +364,6 @@ export function StaffRolesPage() {
         {[
           { key: 'staff' as const, label: 'Staff Members', icon: UserCheck },
           { key: 'roles' as const, label: 'Roles & Permission Matrix', icon: ShieldCheck },
-          { key: 'profile' as const, label: 'My Profile', icon: UserCog },
         ].map((t) => {
           const Icon = t.icon;
           const active = tab === t.key;
@@ -468,107 +459,6 @@ export function StaffRolesPage() {
               </div>
             );
           })}
-        </div>
-      )}
-
-      {tab === 'profile' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              try {
-                await updateProfile({ name: myName, phone: myPhone, department: myDept });
-                showToast({ title: 'My Profile updated', variant: 'success' });
-              } catch (err) {
-                errorToast('Could not update profile', err);
-              }
-            }}
-            className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-4"
-          >
-            <h2 className="text-base font-semibold text-[#12263F]">My Profile Details</h2>
-            <FormField label="Full Name" required>
-              <input
-                type="text"
-                required
-                value={myName}
-                onChange={(e) => setMyName(e.target.value)}
-                className={inputClass}
-              />
-            </FormField>
-            <FormField label="Email">
-              <input type="email" disabled value={user?.email || ''} className={inputClass} />
-            </FormField>
-            <FormField label="Phone">
-              <input
-                type="text"
-                value={myPhone}
-                onChange={(e) => setMyPhone(e.target.value)}
-                className={inputClass}
-              />
-            </FormField>
-            <FormField label="Department">
-              <input
-                type="text"
-                value={myDept}
-                onChange={(e) => setMyDept(e.target.value)}
-                className={inputClass}
-              />
-            </FormField>
-            <button
-              type="submit"
-              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
-            >
-              Save Profile
-            </button>
-          </form>
-
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              try {
-                const res = await changeAdminPassword({
-                  currentPassword: currPwd,
-                  newPassword: newPwd,
-                });
-                setCurrPwd('');
-                setNewPwd('');
-                showToast({ title: 'Password updated', description: res.message, variant: 'success' });
-              } catch (err) {
-                showToast({
-                  title: 'Failed to update password',
-                  description: err instanceof Error ? err.message : 'Check password',
-                  variant: 'error',
-                });
-              }
-            }}
-            className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-4 h-fit"
-          >
-            <h2 className="text-base font-semibold text-[#12263F]">Change Password</h2>
-            <FormField label="Current Password" required>
-              <input
-                type="password"
-                required
-                value={currPwd}
-                onChange={(e) => setCurrPwd(e.target.value)}
-                className={inputClass}
-              />
-            </FormField>
-            <FormField label="New Password" required hint={PASSWORD_HINT}>
-              <input
-                type="password"
-                required
-                value={newPwd}
-                onChange={(e) => setNewPwd(e.target.value)}
-                className={inputClass}
-              />
-            </FormField>
-            <button
-              type="submit"
-              className="rounded-lg bg-[#0B2545] px-4 py-2 text-xs font-semibold text-white hover:bg-[#143766]"
-            >
-              Update Password
-            </button>
-          </form>
         </div>
       )}
 

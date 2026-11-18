@@ -6,10 +6,16 @@ import Image from 'next/image';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useUserStore, useWishlistStore, useRentalStore, useToastStore } from '@/lib/store';
 import { getOrders } from '@/lib/api';
-import type { Order, Address } from '@/types';
+import type { Order } from '@/types';
 import ProductCard from '@/components/product/ProductCard';
 import RentalsTabContent from '@/components/account/RentalsTabContent';
 import WriteReviewModal from '@/components/product/WriteReviewModal';
+import ProfileHeader from '@/components/account/ProfileHeader';
+import ProfileTab from '@/components/account/ProfileTab';
+import AddressesTab from '@/components/account/AddressesTab';
+import GstTab from '@/components/account/GstTab';
+import SecurityTab from '@/components/account/SecurityTab';
+import { EmptyState, SectionHeader, btnPrimary, btnSecondary } from '@/components/account/ui';
 import {
   User as UserIcon,
   Package,
@@ -18,36 +24,19 @@ import {
   Heart,
   Bed,
   Download,
-  Plus,
-  Trash2,
-  Pencil,
   Check,
-  CheckCircle2,
   ChevronDown,
-  LogOut,
   Star,
   Truck,
-  Loader2,
-  ShieldCheck,
-  X,
+  KeyRound,
   Lock
 } from 'lucide-react';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { AccountSkeleton, OrderListSkeleton } from '@/components/skeletons/PageSkeletons';
-import { logoutCustomer } from '@/lib/api/customerAuth';
+import { fetchCurrentCustomer, logoutCustomer } from '@/lib/api/customerAuth';
 
-type Tab = 'orders' | 'rentals' | 'wishlist' | 'addresses' | 'gst' | 'profile';
-const TABS: Tab[] = ['orders', 'rentals', 'wishlist', 'addresses', 'gst', 'profile'];
-
-const GSTIN_REGEX = /^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
-
-const inputClass =
-  'w-full text-sm px-3.5 py-2.5 bg-white border border-[#D5DEEA] rounded-lg text-[#12263F] placeholder-[#97A3B4] focus:outline-none focus:border-[#1D5FAF] focus:ring-3 focus:ring-[#1D5FAF]/15 transition disabled:bg-[#F6F9FD] disabled:text-[#5B6B82]';
-
-const btnPrimary =
-  'inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-[#1D5FAF] hover:bg-[#174E90] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors cursor-pointer';
-const btnSecondary =
-  'inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-[#D5DEEA] bg-white hover:border-[#1D5FAF] hover:text-[#1D5FAF] text-[#12263F] text-sm font-semibold transition-colors cursor-pointer';
+type Tab = 'orders' | 'rentals' | 'wishlist' | 'addresses' | 'gst' | 'profile' | 'security';
+const TABS: Tab[] = ['orders', 'rentals', 'wishlist', 'addresses', 'gst', 'profile', 'security'];
 
 const formatINR = (n: number) => `₹${n.toLocaleString('en-IN')}`;
 const formatDate = (d: string) =>
@@ -61,56 +50,6 @@ const STATUS_STYLES: Record<string, string> = {
   Delivered: 'bg-green-50 text-green-700',
   Cancelled: 'bg-red-50 text-red-700'
 };
-
-/* ─────────────────────────── Small building blocks ─────────────────────────── */
-
-const Field: React.FC<{ label: string; htmlFor: string; required?: boolean; error?: string; hint?: string; children: React.ReactNode }> = ({
-  label,
-  htmlFor,
-  required,
-  error,
-  hint,
-  children
-}) => (
-  <div>
-    <label htmlFor={htmlFor} className="block text-[13px] font-semibold text-[#12263F] mb-1.5">
-      {label}
-      {required && <span className="text-[#DC2626] ml-0.5">*</span>}
-    </label>
-    {children}
-    {error ? (
-      <p className="mt-1 text-[12px] text-[#DC2626]">{error}</p>
-    ) : hint ? (
-      <p className="mt-1 text-[12px] text-[#8A97A8]">{hint}</p>
-    ) : null}
-  </div>
-);
-
-const SectionHeader: React.FC<{ title: string; subtitle?: string; action?: React.ReactNode }> = ({ title, subtitle, action }) => (
-  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pb-5 mb-6 border-b border-[#E8EEF5]">
-    <div>
-      <h2 className="text-xl font-semibold text-[#12263F]">{title}</h2>
-      {subtitle && <p className="text-[14px] text-[#5B6B82] mt-1">{subtitle}</p>}
-    </div>
-    {action}
-  </div>
-);
-
-const EmptyState: React.FC<{ icon: React.ElementType; title: string; text: string; cta?: React.ReactNode }> = ({
-  icon: Icon,
-  title,
-  text,
-  cta
-}) => (
-  <div className="text-center py-14 px-6 border border-dashed border-[#D5DEEA] rounded-2xl">
-    <div className="w-12 h-12 rounded-full bg-[#EAF2FC] text-[#1D5FAF] flex items-center justify-center mx-auto">
-      <Icon className="w-6 h-6" />
-    </div>
-    <h3 className="mt-4 text-[16px] font-semibold text-[#12263F]">{title}</h3>
-    <p className="mt-1 text-[14px] text-[#5B6B82] max-w-sm mx-auto">{text}</p>
-    {cta && <div className="mt-5">{cta}</div>}
-  </div>
-);
 
 /** Opens a print-ready GST invoice in a new tab (user can Save as PDF). */
 function openInvoice(order: Order) {
@@ -323,165 +262,6 @@ const OrderCard: React.FC<{ order: Order; onReview: (id: string, name: string) =
   );
 };
 
-/* ────────────────────────────── Address form ────────────────────────────── */
-
-type AddressDraft = Omit<Address, 'id'>;
-
-const blankAddress = (name = '', phone = ''): AddressDraft => ({
-  type: 'Clinic',
-  name,
-  clinicHospitalName: '',
-  phone,
-  addressLine1: '',
-  addressLine2: '',
-  pincode: '',
-  city: '',
-  state: '',
-  isDefault: false
-});
-
-const AddressForm: React.FC<{
-  initial: AddressDraft;
-  isEdit: boolean;
-  onCancel: () => void;
-  onSave: (a: AddressDraft) => void;
-}> = ({ initial, isEdit, onCancel, onSave }) => {
-  const [draft, setDraft] = useState<AddressDraft>(initial);
-  const set = <K extends keyof AddressDraft>(k: K, v: AddressDraft[K]) => setDraft((d) => ({ ...d, [k]: v }));
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSave(draft);
-      }}
-      className="rounded-2xl border border-[#1D5FAF]/30 bg-[#F8FAFD] p-5 sm:p-6 mb-6"
-    >
-      <div className="flex items-center justify-between mb-5">
-        <h3 className="text-[16px] font-semibold text-[#12263F]">{isEdit ? 'Edit address' : 'Add a new address'}</h3>
-        <button type="button" onClick={onCancel} className="p-1.5 rounded-md text-[#5B6B82] hover:bg-white cursor-pointer" aria-label="Close">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      <fieldset className="mb-5">
-        <legend className="text-[13px] font-semibold text-[#12263F] mb-2">Address type</legend>
-        <div className="flex flex-wrap gap-2">
-          {(['Clinic', 'Hospital', 'Office', 'Home'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => set('type', t)}
-              aria-pressed={draft.type === t}
-              className={`px-3.5 py-1.5 rounded-full text-[13px] border transition-colors cursor-pointer ${
-                draft.type === t ? 'bg-[#1D5FAF] border-[#1D5FAF] text-white' : 'bg-white border-[#D5DEEA] text-[#12263F] hover:border-[#9DB4D3]'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </fieldset>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Contact name" htmlFor="ad-name" required>
-          <input id="ad-name" required value={draft.name} onChange={(e) => set('name', e.target.value)} className={inputClass} autoComplete="name" />
-        </Field>
-        <Field label="Mobile number" htmlFor="ad-phone" required>
-          <input
-            id="ad-phone"
-            required
-            type="tel"
-            inputMode="numeric"
-            pattern="(\+91\s?)?[6-9][0-9]{9}"
-            title="10-digit Indian mobile number"
-            value={draft.phone}
-            onChange={(e) => set('phone', e.target.value)}
-            className={inputClass}
-            autoComplete="tel"
-          />
-        </Field>
-        {draft.type !== 'Home' && (
-          <div className="sm:col-span-2">
-            <Field label="Clinic / hospital name" htmlFor="ad-org">
-              <input
-                id="ad-org"
-                value={draft.clinicHospitalName || ''}
-                onChange={(e) => set('clinicHospitalName', e.target.value)}
-                className={inputClass}
-                autoComplete="organization"
-              />
-            </Field>
-          </div>
-        )}
-        <div className="sm:col-span-2">
-          <Field label="Address line 1" htmlFor="ad-l1" required>
-            <input
-              id="ad-l1"
-              required
-              placeholder="Building, floor, street"
-              value={draft.addressLine1}
-              onChange={(e) => set('addressLine1', e.target.value)}
-              className={inputClass}
-              autoComplete="address-line1"
-            />
-          </Field>
-        </div>
-        <div className="sm:col-span-2">
-          <Field label="Address line 2" htmlFor="ad-l2">
-            <input
-              id="ad-l2"
-              placeholder="Area, landmark (optional)"
-              value={draft.addressLine2 || ''}
-              onChange={(e) => set('addressLine2', e.target.value)}
-              className={inputClass}
-              autoComplete="address-line2"
-            />
-          </Field>
-        </div>
-        <Field label="PIN code" htmlFor="ad-pin" required>
-          <input
-            id="ad-pin"
-            required
-            inputMode="numeric"
-            pattern="[1-9][0-9]{5}"
-            title="6-digit PIN code"
-            maxLength={6}
-            value={draft.pincode}
-            onChange={(e) => set('pincode', e.target.value.replace(/\D/g, ''))}
-            className={inputClass}
-            autoComplete="postal-code"
-          />
-        </Field>
-        <Field label="City" htmlFor="ad-city" required>
-          <input id="ad-city" required value={draft.city} onChange={(e) => set('city', e.target.value)} className={inputClass} autoComplete="address-level2" />
-        </Field>
-        <Field label="State" htmlFor="ad-state" required>
-          <input id="ad-state" required value={draft.state} onChange={(e) => set('state', e.target.value)} className={inputClass} autoComplete="address-level1" />
-        </Field>
-        <label className="flex items-center gap-2.5 self-end pb-2.5 text-[14px] text-[#12263F] cursor-pointer">
-          <input
-            type="checkbox"
-            checked={draft.isDefault}
-            onChange={(e) => set('isDefault', e.target.checked)}
-            className="w-4 h-4 accent-[#1D5FAF]"
-          />
-          Make this my default address
-        </label>
-      </div>
-
-      <div className="flex justify-end gap-2 mt-6">
-        <button type="button" onClick={onCancel} className={btnSecondary}>
-          Cancel
-        </button>
-        <button type="submit" className={btnPrimary}>
-          {isEdit ? 'Save changes' : 'Save address'}
-        </button>
-      </div>
-    </form>
-  );
-};
-
 /* ──────────────────────────────── Page ──────────────────────────────── */
 
 function AccountInner() {
@@ -490,42 +270,28 @@ function AccountInner() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') as Tab | null;
 
-  const { user, isAuthenticated, logout, updateUser, addAddress, updateAddress, removeAddress, setDefaultAddress, updateGst, setAuthModalOpen } =
-    useUserStore();
+  const { user, isAuthenticated, logout, setUser, setAuthModalOpen } = useUserStore();
   const { items: wishlistItems } = useWishlistStore();
   const { rentals } = useRentalStore();
   const { addToast } = useToastStore();
   const hydrated = useHydrated();
 
   const [activeTab, setActiveTab] = useState<Tab>(tabParam && TABS.includes(tabParam) ? tabParam : 'orders');
+  // Follow ?tab= when it changes (header links like "Track Order" / "Wishlist")
+  const [prevTabParam, setPrevTabParam] = useState(tabParam);
+  if (tabParam !== prevTabParam) {
+    setPrevTabParam(tabParam);
+    if (tabParam && TABS.includes(tabParam)) setActiveTab(tabParam);
+  }
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [reviewModalData, setReviewModalData] = useState<{ productId: string; productName: string } | null>(null);
-
-  // Address editor: null = closed, 'new' = adding, otherwise the id being edited
-  const [editingAddress, setEditingAddress] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-
-  // Profile form
-  const [profile, setProfile] = useState({ name: '', phone: '', email: '', degree: '', registrationNumber: '' });
-  const [profileSaving, setProfileSaving] = useState(false);
-
-  // GST form
-  const [gstin, setGstin] = useState('');
-  const [legalName, setLegalName] = useState('');
-  const [gstTouched, setGstTouched] = useState(false);
-
-  // Keep the tab in sync with ?tab= (header links like "Track Order" / "Wishlist")
-  useEffect(() => {
-    if (tabParam && TABS.includes(tabParam)) setActiveTab(tabParam);
-  }, [tabParam]);
 
   const contentRef = useRef<HTMLElement>(null);
 
   const changeTab = useCallback(
     (tab: Tab, scrollToContent = false) => {
       setActiveTab(tab);
-      setEditingAddress(null);
       router.replace(`${pathname}?tab=${tab}`, { scroll: false });
       // Bring the section into view when it's below the fold (e.g. clicked from the header tiles on mobile)
       if (scrollToContent && contentRef.current) {
@@ -538,6 +304,23 @@ function AccountInner() {
     [router, pathname]
   );
 
+  // Always show the latest profile, addresses and GST details from the API
+  // (they may have been changed on another device since the app loaded).
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) return;
+    let alive = true;
+    fetchCurrentCustomer()
+      .then((fresh) => {
+        if (!alive) return;
+        if (fresh) setUser(fresh);
+        else logout(); // session ended elsewhere
+      })
+      .catch(() => undefined); // offline: keep the cached copy
+    return () => {
+      alive = false;
+    };
+  }, [hydrated, isAuthenticated, setUser, logout]);
+
   // Load orders
   useEffect(() => {
     let alive = true;
@@ -548,21 +331,6 @@ function AccountInner() {
       alive = false;
     };
   }, []);
-
-  // Fill forms from the signed-in user
-  useEffect(() => {
-    if (!user) return;
-    setProfile({
-      name: user.name || '',
-      phone: user.phone || '',
-      email: user.email || '',
-      degree: user.degree || '',
-      registrationNumber: user.registrationNumber || ''
-    });
-    setGstin(user.gstDetails?.gstin || '');
-    setLegalName(user.gstDetails?.legalBusinessName || '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
 
   /* ── Signed-out state ── */
   if (!hydrated) return <AccountSkeleton />;
@@ -603,133 +371,19 @@ function AccountInner() {
     router.push('/');
   };
 
-  const profileDirty =
-    profile.name !== (user.name || '') ||
-    profile.phone !== (user.phone || '') ||
-    profile.email !== (user.email || '') ||
-    profile.degree !== (user.degree || '') ||
-    profile.registrationNumber !== (user.registrationNumber || '');
-
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setProfileSaving(true);
-    await new Promise((r) => setTimeout(r, 400));
-    updateUser({
-      name: profile.name.trim(),
-      phone: profile.phone.trim(),
-      email: profile.email.trim(),
-      degree: profile.degree.trim() || undefined,
-      registrationNumber: profile.registrationNumber.trim() || undefined
-    });
-    setProfileSaving(false);
-    addToast({ type: 'success', title: 'Profile updated', message: 'Your details have been saved.' });
-  };
-
-  const gstValid = GSTIN_REGEX.test(gstin);
-  const gstError = gstTouched && gstin && !gstValid ? 'Enter a valid 15-character GSTIN, e.g. 09AAACM1234F1Z8' : undefined;
-  const gstDirty = gstin !== (user.gstDetails?.gstin || '') || legalName !== (user.gstDetails?.legalBusinessName || '');
-
-  const handleSaveGst = (e: React.FormEvent) => {
-    e.preventDefault();
-    setGstTouched(true);
-    if (!gstValid || !legalName.trim()) return;
-    updateGst({ gstin, legalBusinessName: legalName.trim(), isVerified: false });
-    addToast({ type: 'success', title: 'GST details saved', message: 'They will be added to invoices at checkout.' });
-  };
-
-  const handleRemoveGst = () => {
-    updateUser({ gstDetails: undefined });
-    setGstin('');
-    setLegalName('');
-    setGstTouched(false);
-    addToast({ type: 'info', title: 'GST details removed', message: 'Invoices will be issued without a GSTIN.' });
-  };
-
-  const handleSaveAddress = (draft: AddressDraft) => {
-    if (editingAddress === 'new') {
-      addAddress({ ...draft, id: `addr-${Date.now()}`, isDefault: draft.isDefault || user.addresses.length === 0 });
-      addToast({ type: 'success', title: 'Address added', message: 'You can now select it at checkout.' });
-    } else if (editingAddress) {
-      updateAddress(editingAddress, draft);
-      addToast({ type: 'success', title: 'Address updated', message: 'Your changes have been saved.' });
-    }
-    setEditingAddress(null);
-  };
-
-  const handleDeleteAddress = (id: string) => {
-    removeAddress(id);
-    setConfirmDeleteId(null);
-    addToast({ type: 'info', title: 'Address removed', message: 'The address was deleted.' });
-  };
-
-  const navItems: { id: Tab; label: string; icon: React.ElementType; badge?: number }[] = [
+  const navItems: { id: Tab; label: string; icon: React.ElementType; badge?: number; alert?: boolean }[] = [
     { id: 'orders', label: 'Orders', icon: Package, badge: orders.length },
     { id: 'rentals', label: 'Rentals', icon: Bed, badge: rentals.length },
     { id: 'wishlist', label: 'Wishlist', icon: Heart, badge: wishlistItems.length },
     { id: 'addresses', label: 'Addresses', icon: MapPin, badge: user.addresses.length },
-    { id: 'gst', label: 'GST details', icon: FileText },
-    { id: 'profile', label: 'Profile', icon: UserIcon }
+    { id: 'gst', label: 'GST details', icon: FileText, badge: user.gstProfiles?.length },
+    { id: 'profile', label: 'Profile', icon: UserIcon, alert: !user.phone || !user.name },
+    { id: 'security', label: 'Login & devices', icon: KeyRound }
   ];
-
-  const initials = user.name
-    .replace(/^Dr\.?\s*/i, '')
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase())
-    .join('');
-
-  const editingInitial: AddressDraft | null =
-    editingAddress === 'new'
-      ? blankAddress(user.name, user.phone)
-      : editingAddress
-      ? (() => {
-          const a = user.addresses.find((x) => x.id === editingAddress);
-          if (!a) return null;
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { id, ...rest } = a;
-          return rest;
-        })()
-      : null;
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      {/* ── Profile header ── */}
-      <section className="bg-white rounded-2xl border border-[#DCE6F2] p-5 sm:p-6 mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#0B2545] text-white flex items-center justify-center text-xl font-semibold shrink-0">
-            {initials || <UserIcon className="w-7 h-7" />}
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-semibold text-[#12263F] truncate">{user.name}</h1>
-              {user.registrationNumber && (
-                <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#16A34A] bg-[#DCFCE7] px-2 py-0.5 rounded-full">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  Registered practitioner
-                </span>
-              )}
-            </div>
-            <p className="text-[14px] text-[#5B6B82] mt-1 truncate">
-              {[user.degree, user.registrationNumber && `Reg. ${user.registrationNumber}`].filter(Boolean).join(' · ') || user.email}
-            </p>
-            <p className="text-[13px] text-[#8A97A8] mt-0.5 truncate">
-              {user.phone && `+91 ${user.phone.replace(/^\+91\s?/, '')}`} {user.phone && user.email && '·'} {user.email}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center">
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-[#D5DEEA] bg-white text-[#12263F] text-sm font-semibold shrink-0 cursor-pointer transition-colors hover:border-[#DC2626]/50 hover:bg-red-50 hover:text-[#DC2626]"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Sign out</span>
-          </button>
-        </div>
-      </section>
+      <ProfileHeader user={user} onSignOut={handleSignOut} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-6 items-start">
         {/* ── Navigation ── */}
@@ -761,14 +415,19 @@ function AccountInner() {
                       <Icon className={`w-[18px] h-[18px] transition-colors ${active ? 'text-[#1D5FAF]' : 'text-[#0A0A0A] group-hover:text-[#1D5FAF]'}`} />
                       {item.label}
                     </span>
-                    {item.badge !== undefined && item.badge > 0 && (
-                      <span
-                        className={`min-w-[22px] h-[22px] px-1.5 rounded-full text-[12px] font-semibold flex items-center justify-center ${
-                          active ? 'bg-[#1D5FAF] text-white' : 'bg-[#EEF2F7] text-[#0A0A0A] group-hover:bg-[#DCE8F7] group-hover:text-[#1D5FAF]'
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
+                    {item.alert ? (
+                      <span className="w-2 h-2 rounded-full bg-[#F28C38]" aria-label="Needs attention" />
+                    ) : (
+                      item.badge !== undefined &&
+                      item.badge > 0 && (
+                        <span
+                          className={`min-w-[22px] h-[22px] px-1.5 rounded-full text-[12px] font-semibold flex items-center justify-center ${
+                            active ? 'bg-[#1D5FAF] text-white' : 'bg-[#EEF2F7] text-[#0A0A0A] group-hover:bg-[#DCE8F7] group-hover:text-[#1D5FAF]'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )
                     )}
                   </button>
                 </li>
@@ -834,271 +493,10 @@ function AccountInner() {
             </>
           )}
 
-          {/* ADDRESSES */}
-          {activeTab === 'addresses' && (
-            <>
-              <SectionHeader
-                title="Saved addresses"
-                subtitle="Clinic, hospital and home delivery locations."
-                action={
-                  editingAddress === null && (
-                    <button type="button" onClick={() => setEditingAddress('new')} className={btnPrimary}>
-                      <Plus className="w-4 h-4" />
-                      Add address
-                    </button>
-                  )
-                }
-              />
-
-              {editingInitial && (
-                <AddressForm
-                  key={editingAddress}
-                  initial={editingInitial}
-                  isEdit={editingAddress !== 'new'}
-                  onCancel={() => setEditingAddress(null)}
-                  onSave={handleSaveAddress}
-                />
-              )}
-
-              {user.addresses.length === 0 && editingAddress === null ? (
-                <EmptyState
-                  icon={MapPin}
-                  title="No saved addresses"
-                  text="Add your clinic or hospital address for faster checkout."
-                  cta={
-                    <button type="button" onClick={() => setEditingAddress('new')} className={btnPrimary}>
-                      <Plus className="w-4 h-4" /> Add address
-                    </button>
-                  }
-                />
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {user.addresses.map((addr) => (
-                    <div
-                      key={addr.id}
-                      className={`rounded-2xl border p-5 flex flex-col ${
-                        addr.isDefault ? 'border-[#1D5FAF] ring-1 ring-[#1D5FAF]/20' : 'border-[#DCE6F2]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[12px] font-semibold uppercase tracking-wide text-[#5B6B82] bg-[#EEF2F7] px-2 py-0.5 rounded">
-                          {addr.type}
-                        </span>
-                        {addr.isDefault && (
-                          <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#1D5FAF]">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Default
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[15px] font-semibold text-[#12263F]">{addr.clinicHospitalName || addr.name}</p>
-                      {addr.clinicHospitalName && <p className="text-[14px] text-[#12263F]">{addr.name}</p>}
-                      <p className="text-[14px] text-[#5B6B82] mt-1 leading-relaxed">
-                        {addr.addressLine1}
-                        {addr.addressLine2 && `, ${addr.addressLine2}`}
-                        <br />
-                        {addr.city}, {addr.state} – {addr.pincode}
-                      </p>
-                      <p className="text-[13px] text-[#5B6B82] mt-1">Phone: {addr.phone}</p>
-
-                      <div className="mt-auto pt-4">
-                        {confirmDeleteId === addr.id ? (
-                          <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-100">
-                            <span className="text-[13px] text-red-800 flex-1">Delete this address?</span>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteId(null)}
-                              className="px-3 py-1.5 rounded-md text-[13px] font-semibold text-[#12263F] bg-white border border-[#D5DEEA] cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteAddress(addr.id)}
-                              className="px-3 py-1.5 rounded-md text-[13px] font-semibold text-white bg-[#DC2626] hover:bg-[#B91C1C] cursor-pointer"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-4 pt-3 border-t border-[#EEF2F7] text-[13px] font-semibold">
-                            <button
-                              type="button"
-                              onClick={() => setEditingAddress(addr.id)}
-                              className="inline-flex items-center gap-1.5 text-[#1D5FAF] hover:underline cursor-pointer"
-                            >
-                              <Pencil className="w-3.5 h-3.5" /> Edit
-                            </button>
-                            {!addr.isDefault && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDefaultAddress(addr.id);
-                                  addToast({ type: 'success', title: 'Default address updated', message: addr.clinicHospitalName || addr.name });
-                                }}
-                                className="text-[#1D5FAF] hover:underline cursor-pointer"
-                              >
-                                Set as default
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteId(addr.id)}
-                              className="inline-flex items-center gap-1.5 ml-auto text-[#5B6B82] hover:text-[#DC2626] cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" /> Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* GST */}
-          {activeTab === 'gst' && (
-            <>
-              <SectionHeader title="GST details" subtitle="Added to your tax invoices so you can claim input tax credit." />
-              <form onSubmit={handleSaveGst} className="max-w-xl space-y-5" noValidate>
-                <Field label="GSTIN" htmlFor="gst-gstin" required error={gstError} hint="15 characters, as on your GST certificate">
-                  <div className="relative">
-                    <input
-                      id="gst-gstin"
-                      value={gstin}
-                      maxLength={15}
-                      onChange={(e) => setGstin(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''))}
-                      onBlur={() => setGstTouched(true)}
-                      placeholder="09AAACM1234F1Z8"
-                      className={`${inputClass} font-mono tracking-wider pr-10 ${gstError ? '!border-[#DC2626]' : ''}`}
-                    />
-                    {gstValid && <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#16A34A]" />}
-                  </div>
-                </Field>
-                <Field
-                  label="Legal business name"
-                  htmlFor="gst-name"
-                  required
-                  error={gstTouched && !legalName.trim() ? 'Enter the name registered with GST' : undefined}
-                >
-                  <input
-                    id="gst-name"
-                    value={legalName}
-                    onChange={(e) => setLegalName(e.target.value)}
-                    placeholder="As on GST registration"
-                    className={inputClass}
-                  />
-                </Field>
-
-                {gstValid && (
-                  <p className="text-[13px] text-[#5B6B82] bg-[#F8FAFD] border border-[#E8EEF5] rounded-lg px-3.5 py-2.5">
-                    State code <span className="font-semibold text-[#12263F]">{gstin.slice(0, 2)}</span> · PAN{' '}
-                    <span className="font-mono font-semibold text-[#12263F]">{gstin.slice(2, 12)}</span>
-                  </p>
-                )}
-
-                <div className="flex flex-wrap items-center gap-3 pt-1">
-                  <button type="submit" disabled={!gstDirty} className={btnPrimary}>
-                    Save GST details
-                  </button>
-                  {user.gstDetails?.gstin && (
-                    <button type="button" onClick={handleRemoveGst} className="text-[14px] font-semibold text-[#5B6B82] hover:text-[#DC2626] cursor-pointer">
-                      Remove
-                    </button>
-                  )}
-                </div>
-              </form>
-            </>
-          )}
-
-          {/* PROFILE */}
-          {activeTab === 'profile' && (
-            <>
-              <SectionHeader title="Profile" subtitle="Your details appear on quotations and invoices." />
-              <form onSubmit={handleSaveProfile} className="max-w-2xl">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <Field label="Full name" htmlFor="pf-name" required>
-                    <input
-                      id="pf-name"
-                      required
-                      value={profile.name}
-                      onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                      className={inputClass}
-                      autoComplete="name"
-                    />
-                  </Field>
-                  <Field label="Mobile number" htmlFor="pf-phone" required>
-                    <input
-                      id="pf-phone"
-                      required
-                      type="tel"
-                      inputMode="numeric"
-                      pattern="(\+91\s?)?[6-9][0-9]{9}"
-                      title="10-digit Indian mobile number"
-                      value={profile.phone}
-                      onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                      className={inputClass}
-                      autoComplete="tel"
-                    />
-                  </Field>
-                  <div className="sm:col-span-2">
-                    <Field label="Email" htmlFor="pf-email" required>
-                      <input
-                        id="pf-email"
-                        required
-                        type="email"
-                        value={profile.email}
-                        onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                        className={inputClass}
-                        autoComplete="email"
-                      />
-                    </Field>
-                  </div>
-                  <Field label="Qualification" htmlFor="pf-degree" hint="e.g. BDS, MDS (Prosthodontics)">
-                    <input
-                      id="pf-degree"
-                      value={profile.degree}
-                      onChange={(e) => setProfile({ ...profile, degree: e.target.value })}
-                      className={inputClass}
-                    />
-                  </Field>
-                  <Field label="Council registration no." htmlFor="pf-reg" hint="Dental / Medical Council number">
-                    <input
-                      id="pf-reg"
-                      value={profile.registrationNumber}
-                      onChange={(e) => setProfile({ ...profile, registrationNumber: e.target.value.toUpperCase() })}
-                      className={`${inputClass} font-mono`}
-                    />
-                  </Field>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 mt-7 pt-5 border-t border-[#E8EEF5]">
-                  <button type="submit" disabled={!profileDirty || profileSaving} className={btnPrimary}>
-                    {profileSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                    {profileSaving ? 'Saving…' : 'Save changes'}
-                  </button>
-                  {profileDirty && !profileSaving && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setProfile({
-                          name: user.name || '',
-                          phone: user.phone || '',
-                          email: user.email || '',
-                          degree: user.degree || '',
-                          registrationNumber: user.registrationNumber || ''
-                        })
-                      }
-                      className="text-[14px] font-semibold text-[#5B6B82] hover:text-[#12263F] cursor-pointer"
-                    >
-                      Discard changes
-                    </button>
-                  )}
-                </div>
-              </form>
-            </>
-          )}
+          {activeTab === 'addresses' && <AddressesTab user={user} />}
+          {activeTab === 'gst' && <GstTab user={user} />}
+          {activeTab === 'profile' && <ProfileTab user={user} />}
+          {activeTab === 'security' && <SecurityTab user={user} />}
         </main>
       </div>
 

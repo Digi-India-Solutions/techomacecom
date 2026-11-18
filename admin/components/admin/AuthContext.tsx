@@ -32,6 +32,8 @@ interface AuthContextValue {
   /** Re-reads the user and permissions (e.g. after an admin edits your role). */
   reload: () => Promise<void>;
   updateProfile: (updates: Partial<Pick<AdminUser, 'name' | 'phone' | 'department'>>) => Promise<void>;
+  /** Replace the session with a fresh one returned by the API (e.g. after a photo upload). */
+  applySession: (session: AuthSession) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -87,6 +89,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(await updateAdminProfile(updates));
   }, []);
 
+  const applySession = useCallback((next: AuthSession) => {
+    setSession(next);
+    setStatus('authenticated');
+  }, []);
+
   const permissions = session?.permissions ?? [];
   const can = useCallback((permission: AdminPermission | string) => hasPermission(permissions, permission), [permissions]);
 
@@ -103,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         reload,
         updateProfile,
+        applySession,
       }}
     >
       {children}

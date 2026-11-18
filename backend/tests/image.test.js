@@ -34,3 +34,12 @@ test("rejects non-images and SVG", async () => {
   const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><script>alert(1)</script></svg>');
   await assert.rejects(processImage(svg), /Unsupported image type \(svg\)/);
 });
+
+test("profile photos are square-cropped, capped at the size asked for, never enlarged", async () => {
+  const wide = await processImage(await photo(1200, 800), { maxDimension: 256, variantWidths: [], square: true });
+  assert.equal(wide.main.width, 256);
+  assert.equal(wide.main.height, 256);
+  assert.equal(wide.variants.length, 0);
+  const tiny = await processImage(await photo(180, 120, "png"), { maxDimension: 256, variantWidths: [], square: true });
+  assert.deepEqual([tiny.main.width, tiny.main.height], [120, 120]);
+});

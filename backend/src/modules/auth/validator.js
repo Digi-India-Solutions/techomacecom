@@ -1,16 +1,8 @@
 import { z } from "zod";
-import { normalizeMobile } from "../../lib/mobile.js";
+import { mobileField } from "../../lib/mobile.js";
+import { queryId } from "../../lib/list.js";
 
-const mobile = z
-  .string({ error: "Mobile number is required" })
-  .transform((v, ctx) => {
-    const m = normalizeMobile(v);
-    if (!m) {
-      ctx.addIssue({ code: "custom", message: "Enter a valid 10-digit Indian mobile number" });
-      return z.NEVER;
-    }
-    return m;
-  });
+const mobile = mobileField();
 
 const otp = z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit OTP");
 
@@ -31,13 +23,32 @@ export const googleSchema = z.object({
   customerType: z.enum(CUSTOMER_TYPES).optional(),
 });
 
+const optionalText = (max, label) =>
+  z
+    .string()
+    .trim()
+    .max(max, `${label} must be at most ${max} characters`)
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v || null)); // "" clears
+
 export const updateProfileSchema = z
   .object({
-    name: z.string().trim().min(2, "Name must be at least 2 characters").max(120).optional(),
-    email: z.union([z.email("Enter a valid email address").max(200), z.literal("")]).optional(),
-    customerType: z.enum(CUSTOMER_TYPES).optional(),
+    name: z.string().trim().min(2, "Name must be at least 2 characters").max(120, "Name is too long").optional(),
+    email: z.union([z.email("Enter a valid email address").trim().toLowerCase().max(200), z.literal("")]).optional(),
+    customerType: z.enum(CUSTOMER_TYPES, { error: "Choose who you are buying for" }).optional(),
+    qualification: optionalText(120, "Qualification"),
+    registrationNumber: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .max(40, "Registration number must be at most 40 characters")
+      .regex(/^$|^[A-Z0-9][A-Z0-9/.\- ]{1,39}$/, "Use letters, numbers, / . or - only")
+      .optional()
+      .transform((v) => (v === undefined ? undefined : v || null)),
   })
-  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to update" });
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Nothing to update" });
+
+export const sessionIdParams = z.object({ id: queryId });
 
 export const addMobileSchema = z.object({ mobile });
 export const verifyMobileSchema = z.object({ mobile, otp });

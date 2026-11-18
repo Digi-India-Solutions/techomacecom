@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Product, Variant, CartItem, User, Address, GstDetails, Coupon, Rental, RentalPlan, RentalPayment } from '@/types';
+import { Product, Variant, CartItem, User, Address, Coupon, Rental, RentalPlan, RentalPayment } from '@/types';
 import { MOCK_RENTALS } from '@/lib/mock/data';
 
 // =======================
@@ -264,12 +264,8 @@ interface UserState {
   /** Records a signed-in user without closing the auth modal (profile step, session sync). */
   setUser: (user: User) => void;
   logout: () => void;
-  updateUser: (updates: Partial<User>) => void;
-  addAddress: (address: Address) => void;
-  updateAddress: (id: string, updates: Partial<Address>) => void;
-  removeAddress: (id: string) => void;
-  setDefaultAddress: (id: string) => void;
-  updateGst: (gst: GstDetails) => void;
+  // Profile, addresses and GST details are saved through the API (lib/api/account.ts);
+  // pass the user it returns to setUser — there are no local-only edits.
 }
 
 export const useUserStore = create<UserState>()(
@@ -285,59 +281,6 @@ export const useUserStore = create<UserState>()(
       login: (user, token = null) => set({ user, token, isAuthenticated: true, isAuthModalOpen: false }),
       setUser: (user) => set({ user, isAuthenticated: true }),
       logout: () => set({ user: null, token: null, isAuthenticated: false }),
-      updateUser: (updates) =>
-        set((state) => ({
-          user: state.user ? { ...state.user, ...updates } : null
-        })),
-      addAddress: (address) =>
-        set((state) => {
-          if (!state.user) return state;
-          const addresses = address.isDefault
-            ? state.user.addresses.map((a) => ({ ...a, isDefault: false })).concat(address)
-            : [...state.user.addresses, address];
-          return { user: { ...state.user, addresses } };
-        }),
-      updateAddress: (id, updates) =>
-        set((state) => {
-          if (!state.user) return state;
-          const addresses = state.user.addresses.map((a) => {
-            if (a.id === id) return { ...a, ...updates };
-            // Only one default address at a time
-            return updates.isDefault ? { ...a, isDefault: false } : a;
-          });
-          return { user: { ...state.user, addresses } };
-        }),
-      removeAddress: (id) =>
-        set((state) => {
-          if (!state.user) return state;
-          const removed = state.user.addresses.find((a) => a.id === id);
-          let addresses = state.user.addresses.filter((a) => a.id !== id);
-          // Keep a default address if the default one was deleted
-          if (removed?.isDefault && addresses.length > 0 && !addresses.some((a) => a.isDefault)) {
-            addresses = addresses.map((a, i) => (i === 0 ? { ...a, isDefault: true } : a));
-          }
-          return { user: { ...state.user, addresses } };
-        }),
-      setDefaultAddress: (id) =>
-        set((state) => {
-          if (!state.user) return state;
-          return {
-            user: {
-              ...state.user,
-              addresses: state.user.addresses.map((a) => ({
-                ...a,
-                isDefault: a.id === id
-              }))
-            }
-          };
-        }),
-      updateGst: (gst) =>
-        set((state) => {
-          if (!state.user) return state;
-          return {
-            user: { ...state.user, gstDetails: gst }
-          };
-        })
     }),
     {
       name: 'buydenmed-user-storage',

@@ -5,7 +5,7 @@
  *
  *   npm run db:seed
  */
-import "dotenv/config";
+import "../config/load-env.js";
 import crypto from "node:crypto";
 import prisma from "../db/db.js";
 import { MODULES, ACTIONS, SYSTEM_ROLES, SUPER_ADMIN_SLUG } from "../src/rbac/catalog.js";

@@ -15,11 +15,15 @@ export interface CustomerDto {
   mobile: string | null;
   email: string | null;
   customerType: CustomerType;
+  qualification: string | null;
+  registrationNumber: string | null;
   avatarUrl: string | null;
   mobileVerified: boolean;
   emailVerified: boolean;
   hasGoogle: boolean;
   profileComplete: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
   addresses: {
     id: string;
     name: string;
@@ -34,7 +38,16 @@ export interface CustomerDto {
     type: 'home' | 'clinic' | 'hospital' | 'other';
     isDefault: boolean;
   }[];
-  gstDetails: { id: string; gstin: string; companyName: string; isDefault: boolean }[];
+  gstDetails: {
+    id: string;
+    gstin: string;
+    companyName: string;
+    billingAddress: string | null;
+    stateCode: string;
+    stateName: string | null;
+    pan: string;
+    isDefault: boolean;
+  }[];
 }
 
 export interface AuthResult {
@@ -58,19 +71,42 @@ const ADDRESS_TYPE: Record<CustomerDto['addresses'][number]['type'], Address['ty
   other: 'Office',
 };
 
+/** Storefront address type → API value (addresses_type_chk). */
+export const ADDRESS_TYPE_API: Record<Address['type'], CustomerDto['addresses'][number]['type']> = {
+  Home: 'home',
+  Clinic: 'clinic',
+  Hospital: 'hospital',
+  Office: 'other',
+};
+
 /** API customer → the storefront's User shape used by the stores and pages. */
 export function toUser(dto: CustomerDto): User {
-  const gst = dto.gstDetails.find((g) => g.isDefault) || dto.gstDetails[0];
+  const gstProfiles = (dto.gstDetails || []).map((g) => ({
+    id: g.id,
+    gstin: g.gstin,
+    legalBusinessName: g.companyName,
+    billingAddress: g.billingAddress || undefined,
+    stateCode: g.stateCode,
+    stateName: g.stateName || undefined,
+    pan: g.pan,
+    isDefault: g.isDefault,
+  }));
+  const gst = gstProfiles.find((g) => g.isDefault) || gstProfiles[0];
   return {
     id: dto.id,
     name: dto.name,
     email: dto.email || '',
     phone: dto.mobile || '',
     role: dto.customerType,
+    degree: dto.qualification || undefined,
+    registrationNumber: dto.registrationNumber || undefined,
     avatarUrl: dto.avatarUrl || undefined,
     mobileVerified: dto.mobileVerified,
+    emailVerified: dto.emailVerified,
     hasGoogle: dto.hasGoogle,
     profileComplete: dto.profileComplete,
+    createdAt: dto.createdAt,
+    lastLoginAt: dto.lastLoginAt || undefined,
     addresses: dto.addresses.map((a) => ({
       id: a.id,
       type: ADDRESS_TYPE[a.type],
@@ -85,7 +121,8 @@ export function toUser(dto: CustomerDto): User {
       state: a.state,
       isDefault: a.isDefault,
     })),
-    gstDetails: gst ? { gstin: gst.gstin, legalBusinessName: gst.companyName, isVerified: true } : undefined,
+    gstDetails: gst ? { gstin: gst.gstin, legalBusinessName: gst.legalBusinessName, panNumber: gst.pan, isVerified: true } : undefined,
+    gstProfiles,
   };
 }
 
@@ -125,7 +162,13 @@ export async function fetchCurrentCustomer(): Promise<User | null> {
   }
 }
 
-export async function updateCustomerProfile(input: { name?: string; email?: string; customerType?: CustomerType }): Promise<User> {
+export async function updateCustomerProfile(input: {
+  name?: string;
+  email?: string;
+  customerType?: CustomerType;
+  qualification?: string;
+  registrationNumber?: string;
+}): Promise<User> {
   const data = await apiPut<{ user: CustomerDto }>('/auth/me', input);
   return toUser(data.user);
 }

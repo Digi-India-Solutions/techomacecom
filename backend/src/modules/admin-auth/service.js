@@ -6,6 +6,10 @@ import { randomToken, sha256 } from "../../lib/tokens.js";
 import { sendMail, actionEmail } from "../../lib/mailer.js";
 import { getRolePermissions } from "../../rbac/permission.service.js";
 import { revokeAllSessions } from "../../services/session.service.js";
+import { storeAvatar, discardAvatar } from "../../services/avatar.service.js";
+import { publicUrl } from "../../lib/storage.js";
+import { paginate } from "../../lib/list.js";
+import { SUPER_ADMIN_SLUG } from "../../rbac/catalog.js";
 
 export function initials(name = "") {
   return name
@@ -31,7 +35,13 @@ export async function toAdminDto(admin) {
       roleId: String(admin.role.id),
       roleLabel: admin.role.name,
       avatarInitials: initials(admin.name),
+      avatarUrl: publicUrl(admin.avatar_url),
+      status: admin.status,
+      isSuperAdmin: admin.role.slug === SUPER_ADMIN_SLUG,
       lastLoginAt: admin.last_login_at,
+      passwordChangedAt: admin.password_changed_at,
+      createdAt: admin.created_at,
+      updatedAt: admin.updated_at,
     },
     permissions: [...permissions].sort(),
   };
@@ -85,16 +95,58 @@ export async function loadActiveAdmin(id) {
   return admin && admin.status === "active" ? admin : null;
 }
 
-export async function updateMe(admin, { name, mobile, department }) {
-  return prisma.adminUser.update({
-    where: { id: admin.id },
-    data: {
-      ...(name !== undefined ? { name } : {}),
-      ...(mobile !== undefined ? { mobile: mobile || null } : {}),
-      ...(department !== undefined ? { department: department || null } : {}),
-    },
-    include: { role: true },
+const PROFILE_FIELDS = { name: "Name", mobile: "Mobile", department: "Department" };
+
+/** Updates own name / mobile / department. Returns the admin and what changed (for the audit log). */
+export async function updateMe(admin, input) {
+  const data = {};
+  for (const key of Object.keys(PROFILE_FIELDS)) {
+    if (input[key] === undefined) continue;
+    const next = input[key] === "" ? null : input[key];
+    if (next !== (admin[key] ?? null)) data[key] = next;
+  }
+  if (!Object.keys(data).length) return { admin, changes: [] };
+
+  const updated = await prisma.adminUser.update({ where: { id: admin.id }, data, include: { role: true } });
+  const changes = Object.keys(data).map((key) => ({ field: PROFILE_FIELDS[key], from: admin[key] ?? null, to: data[key] }));
+  return { admin: updated, changes };
+}
+
+/** Replaces the profile photo (old file deleted). */
+export async function setAvatar(admin, file) {
+  const path = await storeAvatar(file);
+  const updated = await prisma.adminUser.update({ where: { id: admin.id }, data: { avatar_url: path }, include: { role: true } });
+  await discardAvatar(admin.avatar_url);
+  return updated;
+}
+
+export async function removeAvatar(admin) {
+  if (!admin.avatar_url) return admin;
+  const updated = await prisma.adminUser.update({ where: { id: admin.id }, data: { avatar_url: null }, include: { role: true } });
+  await discardAvatar(admin.avatar_url);
+  return updated;
+}
+
+/** The signed-in staff member's own audit trail (no activity.view permission needed). */
+export async function listMyActivity(admin, { page, limit }) {
+  const { rows, meta } = await paginate(prisma.activityLog, {
+    where: { admin_user_id: admin.id },
+    orderBy: [{ created_at: "desc" }, { id: "desc" }],
+    page,
+    limit,
   });
+  return {
+    rows: rows.map((r) => ({
+      id: String(r.id),
+      timestamp: r.created_at,
+      module: r.module,
+      action: r.action,
+      recordLabel: r.entity_label || (r.entity_type ? `${r.entity_type} #${r.entity_id}` : ""),
+      summary: r.summary || "",
+      ipAddress: r.ip_address || null,
+    })),
+    meta,
+  };
 }
 
 export async function changePassword(admin, { currentPassword, newPassword }, currentJti) {
