@@ -23,7 +23,7 @@ export const TestimonialsSection: React.FC = () => {
         </div>
 
         {/* Testimonials — single-row carousel, capped so the page stays short */}
-        <CardCarousel ariaLabel="Customer testimonials" itemClassName={TESTIMONIAL_SLIDE}>
+        <CardCarousel ariaLabel="Customer testimonials" itemClassName={TESTIMONIAL_SLIDE} rows={1}>
           {MOCK_REVIEWS.slice(0, 12).map((review) => (
             <div
               key={review.id}

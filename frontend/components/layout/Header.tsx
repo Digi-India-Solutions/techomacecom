@@ -26,7 +26,8 @@ import {
   CheckCircle2,
   CircleUserRound,
   Truck,
-  X
+  X,
+  CreditCard
 } from 'lucide-react';
 import Logo from '@/components/common/Logo';
 import { useCartStore, useWishlistStore, usePincodeStore, useUserStore } from '@/lib/store';
@@ -36,6 +37,16 @@ import { MOCK_CATEGORIES } from '@/lib/mock/data';
 interface HeaderProps {
   onOpenMobileMenu?: () => void;
 }
+
+/** Notices scrolled in the top blue strip — edit this list to change the marquee. */
+const TOP_NOTICES: { icon: React.ElementType; text: string; highlight?: boolean }[] = [
+  { icon: ShieldCheck, text: '100% Genuine Clinical & Dental Equipment' },
+  { icon: Truck, text: 'Free Pan-India Delivery on orders above ₹5,000' },
+  { icon: CreditCard, text: 'Zero-Cost EMI on all major cards' },
+  { icon: FileText, text: 'GST Tax Credit Invoicing available', highlight: true },
+  { icon: Bed, text: 'Rent CPAP, BiPAP & Oxygen Concentrators from ₹1,999/month' },
+  { icon: Activity, text: 'Home Sleep Test — reports in 24–48 hrs' }
+];
 
 export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
   const router = useRouter();
@@ -112,45 +123,38 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full shadow-lg font-heading">
+    <header className="nav-compact sticky top-0 z-40 w-full shadow-lg font-heading">
       {/* ========================================================
           1. TOP UTILITY STRIP (MEDICAL BLUE #1D5FAF)
           ======================================================== */}
-      <div className="bg-[#1D5FAF] text-white text-xs sm:text-[10px] font-semibold py-1 px-4 sm:px-8 border-b border-white/10">
-        <div className="max-w-[1440px] mx-auto flex items-center justify-between gap-4">
-          {/* Left Guarantees */}
-          <div className="flex items-center gap-3 sm:gap-4 truncate">
-            <span className="flex items-center gap-1.5 text-white">
-              <ShieldCheck className="w-4 h-4 text-[#F28C38] shrink-0" />
-              <span className="truncate">100% Genuine Clinical &amp; Dental Equipment</span>
-            </span>
-            <span className="text-white/40 hidden md:inline">|</span>
-            <span className="hidden md:inline text-white/95">Pan-India Delivery</span>
-            <span className="text-white/40 hidden lg:inline">|</span>
-            <span className="hidden lg:inline text-white/95">Zero-Cost EMI</span>
-            <span className="text-white/40 hidden xl:inline">|</span>
-            <span className="hidden xl:inline text-[#93C5FD] font-bold">GST Tax Credit Invoicing</span>
+      <div className="bg-[#1D5FAF] text-white text-xs sm:text-[11px] font-semibold py-2 px-4 sm:px-8 border-b border-white/10">
+        <div className="max-w-[1440px] mx-auto flex items-center">
+          {/* Full-width scrolling notice marquee (pauses on hover) */}
+          <div
+            className="marquee relative flex-1 min-w-0 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)]"
+            aria-label="Store notices"
+          >
+            <div className="marquee-track flex w-max">
+              {[0, 1].map((copy) => (
+                <ul
+                  key={copy}
+                  className="flex shrink-0 items-center"
+                  aria-hidden={copy === 1 ? true : undefined}
+                >
+                  {TOP_NOTICES.map((notice, i) => (
+                    <li key={i} className="flex items-center gap-1.5 whitespace-nowrap px-5">
+                      <notice.icon className="w-3.5 h-3.5 text-[#F28C38] shrink-0" />
+                      <span className={notice.highlight ? 'text-[#BFDBFE] font-bold' : 'text-white'}>
+                        {notice.text}
+                      </span>
+                      <span className="ml-5 text-white/40">•</span>
+                    </li>
+                  ))}
+                </ul>
+              ))}
+            </div>
           </div>
 
-          {/* Right Links & Helpline */}
-          <div className="flex items-center gap-5 shrink-0 text-xs sm:text-[14px] font-medium">
-            <Link
-              href="/bulk-enquiry"
-              className="hover:text-[#93C5FD] hover:underline flex items-center gap-1.5 transition-colors"
-            >
-              <FileText className="w-4 h-4 text-[#93C5FD]" />
-              <span>Hospital &amp; Clinic Bulk Inquiry</span>
-            </Link>
-            <span className="text-white/40 hidden sm:inline">|</span>
-            <a
-              href="tel:+919811234567"
-              className="hover:text-[#93C5FD] hover:underline flex items-center gap-1.5 font-bold transition-colors"
-            >
-              <Phone className="w-4 h-4 text-[#F28C38]" />
-              <span>+91 98112 34567</span>
-              <span className="text-[12px] text-[#93C5FD] font-normal hidden lg:inline">(9 AM - 7:30 PM)</span>
-            </a>
-          </div>
         </div>
       </div>
 
@@ -183,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
               <span className="block text-sm font-semibold text-white truncate max-w-[170px]">
                 {pincode ? `Deliver to ${pincode}` : 'Location not set'}
               </span>
-              <span className="flex items-center gap-0.5 text-[13px] font-semibold text-[#93C5FD] group-hover:text-white transition-colors">
+              <span className="flex items-center gap-0.5 text-[11px] font-semibold text-[#93C5FD] group-hover:text-white transition-colors">
                 {pincode ? (city || 'Change location') : 'Select delivery location'}
                 <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
               </span>
@@ -301,7 +305,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                 className="flex items-center gap-2 px-2 py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors"
               >
                 <CircleUserRound className="w-6 h-6" />
-                <span className="hidden sm:inline text-[15px] font-medium truncate max-w-[120px]">
+                <span className="hidden sm:inline text-[13px] font-medium truncate max-w-[120px]">
                   Hi, {user.name.split(' ')[0]}
                 </span>
               </Link>
@@ -312,7 +316,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                 className="flex items-center gap-2 px-2 py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors cursor-pointer"
               >
                 <CircleUserRound className="w-6 h-6" />
-                <span className="hidden sm:inline text-[15px] font-medium">Login Now</span>
+                <span className="hidden sm:inline text-[13px] font-medium">Login Now</span>
               </button>
             )}
 
@@ -321,7 +325,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
               className="hidden md:flex items-center gap-2 px-2 py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors"
             >
               <Truck className="w-6 h-6" />
-              <span className="hidden xl:inline text-[15px] font-medium whitespace-nowrap">Track Order</span>
+              <span className="hidden xl:inline text-[13px] font-medium whitespace-nowrap">Track Order</span>
             </Link>
 
             <Link
@@ -332,12 +336,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
               <span className="relative">
                 <Heart className="w-6 h-6" />
                 {wishlistItems.length > 0 && (
-                  <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F28C38] text-white text-[11px] font-bold flex items-center justify-center">
+                  <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F28C38] text-white text-[9px] font-bold flex items-center justify-center">
                     {wishlistItems.length}
                   </span>
                 )}
               </span>
-              <span className="hidden xl:inline text-[15px] font-medium">Wishlist</span>
+              <span className="hidden xl:inline text-[13px] font-medium">Wishlist</span>
             </Link>
 
             <button
@@ -349,12 +353,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
               <span className="relative">
                 <ShoppingBag className="w-6 h-6" />
                 {getItemCount() > 0 && (
-                  <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F28C38] text-white text-[11px] font-bold flex items-center justify-center">
+                  <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F28C38] text-white text-[9px] font-bold flex items-center justify-center">
                     {getItemCount()}
                   </span>
                 )}
               </span>
-              <span className="hidden sm:inline text-[15px] font-medium">Cart</span>
+              <span className="hidden sm:inline text-[13px] font-medium">Cart</span>
             </button>
           </div>
         </div>
@@ -406,7 +410,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                   if (pointerType === 'mouse') openMegaMenu();
                   else setIsMegaMenuOpen((open) => !open);
                 }}
-                className={`flex items-center gap-2 px-4 py-3.5 font-bold uppercase tracking-wider text-white transition-colors cursor-pointer rounded-t-xl text-sm sm:text-[15px] shrink-0 whitespace-nowrap ${
+                className={`flex items-center gap-2 px-4 py-3.5 font-bold uppercase tracking-wider text-white transition-colors cursor-pointer rounded-t-xl text-sm sm:text-[13px] shrink-0 whitespace-nowrap ${
                   isMegaMenuOpen ? 'bg-[#1D5FAF]' : 'bg-[#13335E] hover:bg-[#1D5FAF]'
                 }`}
               >
@@ -417,7 +421,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
 
               {/* 3-Level Mega Menu Overlay */}
               {isMegaMenuOpen && (
-                <div className="absolute top-full left-0 w-[1040px] max-w-[calc(100vw-32px)] bg-white rounded-b-2xl shadow-2xl border border-[#DCE6F2] text-[#12263F] z-50 flex overflow-hidden animate-in fade-in duration-150 font-body">
+                <div className="absolute top-full left-0 w-[940px] max-w-[calc(100vw-32px)] bg-white rounded-b-2xl shadow-2xl border border-[#DCE6F2] text-[#12263F] z-50 flex overflow-hidden animate-in fade-in duration-150 font-body">
                   {/* Column 1: Main Categories */}
                   <div className="w-72 bg-[#F6F9FD] border-r border-[#DCE6F2] py-2 max-h-[520px] overflow-y-auto shrink-0">
                     {categories.map((cat, idx) => (
@@ -428,7 +432,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                           setIsMegaMenuOpen(false);
                           router.push(`/category/${cat.slug}`);
                         }}
-                        className={`w-full text-left px-5 py-3.5 text-sm font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                        className={`w-full text-left px-5 py-3 text-[13px] font-semibold flex items-center justify-between transition-colors cursor-pointer ${
                           activeCategoryIndex === idx
                             ? 'bg-white text-[#1D5FAF] border-l-4 border-[#1D5FAF] shadow-xs font-bold'
                             : 'text-[#12263F] hover:bg-[#EAF2FC] hover:text-[#174E90]'
@@ -441,32 +445,32 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                   </div>
 
                   {/* Column 2 & 3: Subcategories & Items */}
-                  <div className="flex-1 p-6 sm:p-8 max-h-[520px] overflow-y-auto">
-                    <div className="flex items-center justify-between pb-3.5 border-b border-[#DCE6F2] mb-5 font-heading">
-                      <div>
-                        <h4 className="font-extrabold text-lg text-[#12263F]">{currentCategory.name}</h4>
-                        <p className="text-xs sm:text-sm text-[#5B6B82] mt-0.5 font-body">{currentCategory.description}</p>
+                  <div className="flex-1 min-w-0 p-6 max-h-[520px] overflow-y-auto">
+                    <div className="pb-3.5 border-b border-[#DCE6F2] mb-5 font-heading">
+                      <div className="flex items-center justify-between gap-4">
+                        <h4 className="font-extrabold text-base text-[#12263F] truncate">{currentCategory.name}</h4>
+                        <Link
+                          href={`/category/${currentCategory.slug}`}
+                          onClick={() => setIsMegaMenuOpen(false)}
+                          className="text-xs font-bold text-[#1D5FAF] hover:underline flex items-center gap-1 shrink-0 whitespace-nowrap"
+                        >
+                          View All {currentCategory.itemCount} Products
+                          <ChevronRight className="w-4 h-4" />
+                        </Link>
                       </div>
-                      <Link
-                        href={`/category/${currentCategory.slug}`}
-                        onClick={() => setIsMegaMenuOpen(false)}
-                        className="text-xs sm:text-sm font-bold text-[#1D5FAF] hover:underline flex items-center gap-1 shrink-0 whitespace-nowrap"
-                      >
-                        View All {currentCategory.itemCount} Products
-                        <ChevronRight className="w-4 h-4" />
-                      </Link>
+                      <p className="text-xs text-[#5B6B82] mt-1 font-body">{currentCategory.description}</p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-6 sm:gap-8">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-5">
                       {currentCategory.subCategories.map((sub) => (
                         <div key={sub.id} className="space-y-2">
                           <Link
                             href={`/category/${currentCategory.slug}?sub=${sub.slug}`}
                             onClick={() => setIsMegaMenuOpen(false)}
-                            className="font-bold text-sm sm:text-base text-[#12263F] hover:text-[#1D5FAF] flex items-center gap-1.5 group font-heading"
+                            className="font-bold text-[13px] text-[#12263F] hover:text-[#1D5FAF] flex items-center gap-1.5 group font-heading"
                           >
                             <span>{sub.name}</span>
-                            <span className="text-xs text-[#5B6B82] font-normal font-body">({sub.itemCount})</span>
+                            <span className="text-[11px] text-[#5B6B82] font-normal font-body">({sub.itemCount})</span>
                           </Link>
 
                           {/* Level 3 items */}
@@ -477,7 +481,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                                   <Link
                                     href={`/search?q=${encodeURIComponent(item)}`}
                                     onClick={() => setIsMegaMenuOpen(false)}
-                                    className="text-xs sm:text-sm text-[#5B6B82] hover:text-[#1D5FAF] block py-0.5 transition-colors"
+                                    className="text-xs text-[#5B6B82] hover:text-[#1D5FAF] block py-0.5 transition-colors"
                                   >
                                     {item}
                                   </Link>
@@ -496,25 +500,25 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
             {/* Direct Links (Larger font, comfortable padding, non-breaking) */}
             <Link
               href="/brands"
-              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[15px] hover:text-[#93C5FD] transition-colors rounded-lg hover:bg-[#13335E]/40"
+              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[13px] hover:text-[#93C5FD] transition-colors rounded-lg hover:bg-[#13335E]/40"
             >
               Brands
             </Link>
 
             <Link
               href="/rent"
-              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[15px] hover:text-[#93C5FD] transition-colors flex items-center gap-1.5 rounded-lg hover:bg-[#13335E]/40"
+              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[13px] hover:text-[#93C5FD] transition-colors flex items-center gap-1.5 rounded-lg hover:bg-[#13335E]/40"
             >
               <Bed className="w-4 h-4 text-[#93C5FD]" />
               <span>Rent Equipment</span>
-              <span className="text-[11px] bg-[#1D5FAF] text-white border border-white/20 px-2 py-0.5 rounded-full font-bold">
+              <span className="text-[9px] bg-[#1D5FAF] text-white border border-white/20 px-2 py-0.5 rounded-full font-bold">
                 POPULAR
               </span>
             </Link>
 
             <Link
               href="/sleep-test"
-              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[15px] hover:text-[#93C5FD] transition-colors flex items-center gap-1.5 rounded-lg hover:bg-[#13335E]/40"
+              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[13px] hover:text-[#93C5FD] transition-colors flex items-center gap-1.5 rounded-lg hover:bg-[#13335E]/40"
             >
               <Activity className="w-4 h-4 text-[#93C5FD]" />
               <span>Sleep Test</span>
@@ -522,7 +526,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
 
             <Link
               href="/offers"
-              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[15px] hover:text-[#93C5FD] transition-colors flex items-center gap-1.5 rounded-lg hover:bg-[#13335E]/40"
+              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[13px] hover:text-[#93C5FD] transition-colors flex items-center gap-1.5 rounded-lg hover:bg-[#13335E]/40"
             >
               <Percent className="w-4 h-4 text-[#F28C38]" />
               <span>Offers</span>
@@ -530,7 +534,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
 
             <Link
               href="/best-sellers"
-              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[15px] hover:text-[#93C5FD] transition-colors flex items-center gap-1.5 rounded-lg hover:bg-[#13335E]/40"
+              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[13px] hover:text-[#93C5FD] transition-colors flex items-center gap-1.5 rounded-lg hover:bg-[#13335E]/40"
             >
               <Flame className="w-4 h-4 text-[#F5B841]" />
               <span>Best Sellers</span>
@@ -538,7 +542,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
 
             <Link
               href="/new-arrivals"
-              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[15px] hover:text-[#93C5FD] transition-colors flex items-center gap-1.5 rounded-lg hover:bg-[#13335E]/40"
+              className="whitespace-nowrap shrink-0 px-3.5 py-3.5 text-sm sm:text-[13px] hover:text-[#93C5FD] transition-colors flex items-center gap-1.5 rounded-lg hover:bg-[#13335E]/40"
             >
               <Sparkles className="w-4 h-4 text-[#93C5FD]" />
               <span>New Arrivals</span>
@@ -549,7 +553,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
           <div className="flex items-center shrink-0">
             <Link
               href="/bulk-enquiry"
-              className="whitespace-nowrap shrink-0 px-4 py-2 bg-[#13335E] hover:bg-[#1D5FAF] text-[#93C5FD] hover:text-white rounded-full transition-all font-bold uppercase tracking-wider text-xs sm:text-[14px] flex items-center gap-1.5 border border-[#93C5FD]/30 shadow-xs"
+              className="whitespace-nowrap shrink-0 px-4 py-2 bg-[#13335E] hover:bg-[#1D5FAF] text-[#93C5FD] hover:text-white rounded-full transition-all font-bold uppercase tracking-wider text-xs sm:text-[12px] flex items-center gap-1.5 border border-[#93C5FD]/30 shadow-xs"
             >
               <FileText className="w-4 h-4" />
               <span>Bulk Inquiry →</span>

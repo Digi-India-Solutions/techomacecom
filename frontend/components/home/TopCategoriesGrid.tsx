@@ -70,35 +70,35 @@ export const TopCategoriesGrid: React.FC<TopCategoriesGridProps> = ({ categories
           </div>
         </div>
 
-        {/* Categories scroll track */}
+        {/* Categories scroll track — single row of vertical cards (image on top, text below) */}
         <div
           ref={scrollRef}
-          className="grid grid-flow-col grid-rows-2 auto-cols-max gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 scroll-smooth no-scrollbar"
+          className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 scroll-smooth snap-x no-scrollbar"
         >
           {categories.map((cat) => (
             <Link
               key={cat.id}
               href={`/category/${cat.slug}`}
-              className="group shrink-0 w-72 sm:w-80 bg-white rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-md transition-all duration-300 p-3 sm:p-3.5 flex items-center gap-3 shadow-2xs"
+              className="group snap-start shrink-0 w-36 sm:w-44 bg-white rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-3 flex flex-col items-center text-center shadow-2xs"
             >
-              {/* Icon tile */}
-              <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-[#EAF2FC] group-hover:bg-[#D6E6F8] overflow-hidden shrink-0 transition-colors shadow-2xs">
+              {/* Image tile */}
+              <div className="relative w-full aspect-square rounded-xl bg-[#EAF2FC] group-hover:bg-[#D6E6F8] overflow-hidden transition-colors">
                 <Image
                   src={cat.image}
                   alt={cat.name}
                   fill
-                  className="object-contain p-1 transition-transform duration-300 group-hover:scale-110"
-                  sizes="96px"
+                  className="object-contain p-2 transition-transform duration-300 group-hover:scale-110"
+                  sizes="176px"
                   referrerPolicy="no-referrer"
                 />
               </div>
 
               {/* Text */}
-              <div className="min-w-0">
-                <h3 className="font-heading font-bold text-xs sm:text-sm text-[#12263F] group-hover:text-[#1D5FAF] leading-tight truncate transition-colors">
+              <div className="w-full min-w-0 mt-3">
+                <h3 className="font-heading font-bold text-xs sm:text-sm text-[#12263F] group-hover:text-[#1D5FAF] leading-tight line-clamp-2 transition-colors">
                   {cat.name}
                 </h3>
-                <p className="font-body text-xs text-[#5B6B82] leading-tight mt-1 truncate">
+                <p className="font-body text-xs text-[#5B6B82] leading-tight mt-1 line-clamp-1">
                   {cat.description || `${cat.itemCount}+ Products`}
                 </p>
               </div>

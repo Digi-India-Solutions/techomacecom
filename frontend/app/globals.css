@@ -109,3 +109,39 @@ h1, h2, h3, h4, h5, h6, .font-heading, button, nav {
 .animate-fade-in {
   animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Home page: slightly smaller type (~7%) without touching spacing/layout or header/footer */
+.home-compact {
+  --text-xs: 11.5px;
+  --text-sm: 13.5px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 18.5px;
+  --text-2xl: 22px;
+  --text-3xl: 28px;
+  --text-4xl: 33px;
+  --text-5xl: 44px;
+}
+
+/* Navbar: slightly smaller type (~7%) */
+.nav-compact {
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+}
+
+/* Top-strip notice marquee: two identical copies slide left by one copy's width, so the loop is seamless */
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee-track {
+  animation: marquee-scroll 40s linear infinite;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none; }
+}

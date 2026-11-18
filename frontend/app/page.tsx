@@ -38,7 +38,7 @@ export default async function HomePage() {
   ]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F6F9FD]">
+    <div className="home-compact flex flex-col min-h-screen bg-[#F6F9FD]">
       {/* a) Full-width graphic hero banner slider */}
       <HeroSlider banners={heroBanners} />
 

@@ -79,10 +79,10 @@ export const ShopByBrandSlider: React.FC<ShopByBrandSliderProps> = ({ brands }) 
             <Link
               key={brand.id}
               href={`/brand/${brand.slug}`}
-              className="group shrink-0 w-44 sm:w-52 bg-white rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] p-3 flex flex-col items-center text-center shadow-xs hover:shadow-md transition-all duration-300 hover:-translate-y-1"
+              className="group shrink-0 w-36 sm:w-44 bg-white rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] p-3 flex flex-col items-center text-center shadow-xs hover:shadow-md transition-all duration-300 hover:-translate-y-1"
             >
               {/* Brand Logo surface */}
-              <div className="w-full h-28 sm:h-32 rounded-xl bg-[#F6F9FD] border border-[#DCE6F2] mb-2.5 flex items-center justify-center p-1.5 overflow-hidden group-hover:scale-105 transition-transform">
+              <div className="w-full h-24 sm:h-28 rounded-xl bg-white mb-2.5 flex items-center justify-center overflow-hidden group-hover:scale-105 transition-transform">
                 {brand.logo || brand.logoUrl ? (
                   <div className="relative w-full h-full flex items-center justify-center">
                     <Image

@@ -81,13 +81,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   return (
     <div
-      className={`group bg-white rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden relative p-3.5 hover:-translate-y-1 shadow-xs ${className}`}
+      className={`group bg-white rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden relative p-3 h-full hover:-translate-y-1 shadow-xs ${className}`}
     >
       <div>
         {/* ===================================================
             IMAGE CONTAINER: Clean Buy Denmed #F6F9FD surface
             =================================================== */}
-        <div className="relative w-full aspect-square bg-[#F6F9FD] rounded-xl overflow-hidden flex items-center justify-center p-3 mb-3 border border-[#EAF2FC]">
+        <div className="relative w-full h-40 sm:h-44 shrink-0 bg-white rounded-xl overflow-hidden flex items-center justify-center mb-2.5">
           {/* Top-Left Pill Badges */}
           <div className="absolute top-2 left-2 flex flex-col gap-1 items-start z-10 pointer-events-none">
             {/* {product.discountPercentage > 0 && (
@@ -133,7 +133,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               src={mainImage}
               alt={product.name}
               fill
-              className={`object-contain p-2 transition-all duration-300 ${
+              className={`object-contain transition-all duration-300 ${
                 hasSecondaryImage ? 'group-hover:opacity-0 group-hover:scale-105' : 'group-hover:scale-105'
               }`}
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
@@ -144,7 +144,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 src={hoverImage}
                 alt={`${product.name} alternate view`}
                 fill
-                className="object-contain p-2 opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:scale-105"
+                className="object-contain opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:scale-105"
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
                 referrerPolicy="no-referrer"
               />
@@ -203,7 +203,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* ===================================================
             PRODUCT DETAILS: High Readability & Sizing
             =================================================== */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           {/* Brand & Star Rating on same row */}
           <div className="flex items-center justify-between text-xs text-[#5B6B82] font-body">
             <Link
@@ -223,25 +223,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Product Name (14px, readable) */}
           <Link
             href={`/product/${product.slug}`}
-            className="block font-heading font-semibold text-sm text-[#12263F] group-hover:text-[#1D5FAF] transition-colors line-clamp-2 leading-snug min-h-[40px]"
+            className="block font-heading font-semibold text-sm text-[#12263F] group-hover:text-[#1D5FAF] transition-colors line-clamp-2 leading-snug h-[38px]"
             title={product.name}
           >
             {product.name}
           </Link>
 
           {/* Short Description (small, 2 lines) */}
-          {cardDescription && (
-            <p
-              className="font-body text-[12px] text-[#5B6B82] leading-snug line-clamp-2 min-h-[32px]"
-              title={cardDescription}
-            >
-              {cardDescription}
-            </p>
-          )}
+          <p
+            className="font-body text-[12px] text-[#5B6B82] leading-snug line-clamp-1 h-4"
+            title={cardDescription || undefined}
+          >
+            {cardDescription}
+          </p>
 
           {/* Price Row */}
           <div className="flex items-baseline gap-2 pt-0.5">
-            <span className="font-heading font-bold text-lg sm:text-xl text-[#12263F]">
+            <span className="font-heading font-bold text-lg text-[#12263F]">
               ₹{product.price.toLocaleString('en-IN')}
             </span>
             {product.mrp > product.price && (
@@ -257,31 +255,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
 
           {/* EMI or Rent Options */}
-          {(product.emiEnabled || product.rentEnabled) && (
-            <div className="flex flex-wrap gap-1.5 pt-1 font-body">
+          {/* Fixed-height row so cards line up even when a product has no EMI/Rent */}
+          <div className="flex flex-nowrap items-center gap-1 pt-0.5 font-body h-6 overflow-hidden">
               {product.emiEnabled && (
-                <span className="inline-flex items-center gap-1 text-[12px] font-medium text-[#5B6B82] bg-[#F6F9FD] border border-[#DCE6F2] px-2 py-0.5 rounded-md">
-                  <CreditCard className="w-3 h-3 text-[#1D5FAF]" />
-                  <span>EMI ₹{product.emiStartingFrom || Math.round(product.price / 12)}/mo</span>
+                <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap leading-none text-[11px] font-medium text-[#5B6B82] bg-[#F6F9FD] border border-[#DCE6F2] px-1.5 py-1 rounded-md">
+                  <CreditCard className="w-3 h-3 shrink-0 text-[#1D5FAF]" />
+                  <span>EMI ₹{(product.emiStartingFrom || Math.round(product.price / 12)).toLocaleString('en-IN')}/mo</span>
                 </span>
               )}
               {product.rentEnabled && (
                 <Link
                   href={`/rent/${product.slug}`}
-                  className="inline-flex items-center gap-1 text-[12px] font-bold text-[#174E90] bg-[#EAF2FC] hover:bg-[#DCE6F2] border border-[#1D5FAF]/20 px-2 py-0.5 rounded-md transition-colors"
+                  className="inline-flex min-w-0 items-center gap-0.5 whitespace-nowrap leading-none text-[11px] font-bold text-[#174E90] bg-[#EAF2FC] hover:bg-[#DCE6F2] border border-[#1D5FAF]/20 px-1.5 py-1 rounded-md transition-colors"
                 >
-                  <Bed className="w-3 h-3" />
-                  <span>Rent ₹{product.rentPricePerMonth || 3500}/mo</span>
+                  <Bed className="w-3 h-3 shrink-0" />
+                  <span className="truncate">Rent ₹{(product.rentPricePerMonth || 3500).toLocaleString('en-IN')}/mo</span>
                 </Link>
               )}
-            </div>
-          )}
+          </div>
         </div>
       </div>
 
       {/* Similar Products link at bottom */}
       {showSimilarStrip && (
-        <div className="pt-2.5 mt-3 border-t border-[#DCE6F2]">
+        <div className="pt-2 mt-2.5 border-t border-[#DCE6F2]">
           <Link
             href={`/category/${product.categoryId.replace('cat-', '')}`}
             className="flex items-center justify-between text-xs font-bold text-[#1D5FAF] hover:text-[#174E90] transition-colors py-0.5 px-1 rounded-md hover:bg-[#EAF2FC]"
