@@ -19,7 +19,10 @@ import type { ProductImage } from '@/types';
 
 /** Hover-zoom magnification and the image's inner padding (px) — both views use them so the lens and the zoom panel line up exactly. */
 const ZOOM = 2.5;
-const IMG_PAD = 12;
+const IMG_PAD = 0;
+/** Main image box follows the photo's own shape, kept within these width/height ratios. */
+const MIN_ASPECT = 0.75;
+const MAX_ASPECT = 1.6;
 
 interface BadgeItem {
   text: string;
@@ -69,10 +72,13 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
   }, [images, productName]);
 
   const [activeIndex, setActiveIndex] = useState(0);
+  // Natural width/height ratio of each loaded image, keyed by URL
+  const [aspects, setAspects] = useState<Record<string, number>>({});
 
   // Compute safeIndex during render instead of cascading setState in useEffect
   const safeIndex = activeIndex < normalizedImages.length ? activeIndex : 0;
   const activeImage = normalizedImages[safeIndex] || normalizedImages[0];
+  const activeAspect = Math.min(MAX_ASPECT, Math.max(MIN_ASPECT, aspects[activeImage.url] ?? 1));
 
   // Desktop Zoom Lens state
   const [isHovering, setIsHovering] = useState(false);
@@ -84,6 +90,52 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
   // Lightbox state
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [lightboxZoom, setLightboxZoom] = useState(1);
+  // Pan offset (px) of the zoomed lightbox image, and drag tracking
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStart = useRef<{ px: number; py: number; x: number; y: number } | null>(null);
+  const lightboxImgRef = useRef<HTMLDivElement>(null);
+
+  /** Keep the zoomed image covering its frame — no dragging past the edges. */
+  const clampPan = useCallback((x: number, y: number, zoom: number) => {
+    const el = lightboxImgRef.current;
+    if (!el || zoom <= 1) return { x: 0, y: 0 };
+    const maxX = (el.offsetWidth * (zoom - 1)) / 2;
+    const maxY = (el.offsetHeight * (zoom - 1)) / 2;
+    return {
+      x: Math.max(-maxX, Math.min(maxX, x)),
+      y: Math.max(-maxY, Math.min(maxY, y))
+    };
+  }, []);
+
+  const changeZoom = (next: number) => {
+    setLightboxZoom(next);
+    setPan((p) => clampPan(p.x, p.y, next));
+  };
+
+  const resetZoom = () => {
+    setLightboxZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const handlePanStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (lightboxZoom <= 1) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    panStart.current = { px: e.clientX, py: e.clientY, x: pan.x, y: pan.y };
+    setIsPanning(true);
+  };
+
+  const handlePanMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const start = panStart.current;
+    if (!start) return;
+    setPan(clampPan(start.x + e.clientX - start.px, start.y + e.clientY - start.py, lightboxZoom));
+  };
+
+  const handlePanEnd = () => {
+    panStart.current = null;
+    setIsPanning(false);
+  };
 
   // Mobile touch swipe state
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -91,11 +143,15 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
 
   const prevImage = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation();
+    setLightboxZoom(1);
+    setPan({ x: 0, y: 0 });
     setActiveIndex((prev) => (prev === 0 ? normalizedImages.length - 1 : prev - 1));
   }, [normalizedImages.length]);
 
   const nextImage = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation();
+    setLightboxZoom(1);
+    setPan({ x: 0, y: 0 });
     setActiveIndex((prev) => (prev === normalizedImages.length - 1 ? 0 : prev + 1));
   }, [normalizedImages.length]);
 
@@ -268,11 +324,15 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
           onMouseEnter={() => setIsHovering(true)}
           onMouseLeave={() => setIsHovering(false)}
           onMouseMove={handleMouseMove}
-          onClick={() => setIsLightboxOpen(true)}
+          onClick={() => {
+            resetZoom();
+            setIsLightboxOpen(true);
+          }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          className="relative aspect-square w-full bg-white rounded-2xl border border-[#DCE6F2] overflow-hidden cursor-crosshair select-none group shadow-xs"
+          className="relative w-full bg-white rounded-2xl border border-[#DCE6F2] overflow-hidden cursor-crosshair select-none group shadow-xs transition-[aspect-ratio] duration-200"
+          style={{ aspectRatio: activeAspect }}
         >
           {/* Overlaid Badges on Top-Left */}
           <div className="absolute top-3 left-3 z-20 flex flex-col gap-1 pointer-events-none">
@@ -360,7 +420,7 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
             </div>
           )}
 
-          {/* Main Image with Object-Contain & Minimal Padding */}
+          {/* Main Image — box matches the photo's shape, so no empty bands */}
           <div className="relative w-full h-full flex items-center justify-center">
             <Image
               src={activeImage.url}
@@ -371,6 +431,11 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
               style={{ padding: IMG_PAD }}
               sizes="(max-width: 1024px) 100vw, 640px"
               referrerPolicy="no-referrer"
+              onLoad={(e) => {
+                const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
+                const url = activeImage.url;
+                if (w && h) setAspects((prev) => (prev[url] ? prev : { ...prev, [url]: w / h }));
+              }}
             />
           </div>
 
@@ -508,7 +573,7 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setLightboxZoom((z) => Math.min(3, z + 0.25))}
+                onClick={() => changeZoom(Math.min(3, lightboxZoom + 0.25))}
                 className="p-2 rounded-lg bg-black/45 hover:bg-black/70 border border-white/15 text-white backdrop-blur-sm transition-colors cursor-pointer"
                 title="Zoom In"
                 aria-label="Zoom in"
@@ -517,7 +582,7 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setLightboxZoom((z) => Math.max(1, z - 0.25))}
+                onClick={() => changeZoom(Math.max(1, lightboxZoom - 0.25))}
                 className="p-2 rounded-lg bg-black/45 hover:bg-black/70 border border-white/15 text-white backdrop-blur-sm transition-colors cursor-pointer"
                 title="Zoom Out"
                 aria-label="Zoom out"
@@ -527,7 +592,7 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
               {lightboxZoom > 1 && (
                 <button
                   type="button"
-                  onClick={() => setLightboxZoom(1)}
+                  onClick={resetZoom}
                   className="p-2 rounded-lg bg-black/45 hover:bg-black/70 border border-white/15 text-white backdrop-blur-sm transition-colors cursor-pointer"
                   title="Reset Zoom"
                   aria-label="Reset zoom"
@@ -538,7 +603,7 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setLightboxZoom(1);
+                  resetZoom();
                   setIsLightboxOpen(false);
                 }}
                 className="p-2 rounded-lg bg-black/45 hover:bg-red-600 border border-white/15 text-white backdrop-blur-sm transition-colors ml-2 cursor-pointer"
@@ -579,14 +644,25 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
 
             {/* Displayed Image */}
             <div
-              className="relative w-full h-full max-w-4xl max-h-[75vh] flex items-center justify-center transition-transform duration-200 drop-shadow-[0_20px_40px_rgba(0,0,0,0.35)]"
-              style={{ transform: `scale(${lightboxZoom})` }}
+              ref={lightboxImgRef}
+              onPointerDown={handlePanStart}
+              onPointerMove={handlePanMove}
+              onPointerUp={handlePanEnd}
+              onPointerCancel={handlePanEnd}
+              className={`relative w-full h-full max-w-4xl max-h-[75vh] flex items-center justify-center drop-shadow-[0_20px_40px_rgba(0,0,0,0.35)] ${
+                isPanning ? '' : 'transition-transform duration-200'
+              } ${lightboxZoom > 1 ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${lightboxZoom})`,
+                touchAction: lightboxZoom > 1 ? 'none' : 'auto'
+              }}
             >
               <Image
                 src={activeImage.url}
                 alt={activeImage.alt || productName}
                 fill
-                className="object-contain"
+                draggable={false}
+                className="object-contain pointer-events-none"
                 sizes="100vw"
                 referrerPolicy="no-referrer"
               />
@@ -604,7 +680,7 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
                 type="button"
                 onClick={() => {
                   setActiveIndex(i);
-                  setLightboxZoom(1);
+                  resetZoom();
                 }}
                 className={`relative w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-white/10 transition-all cursor-pointer ${
                   activeIndex === i

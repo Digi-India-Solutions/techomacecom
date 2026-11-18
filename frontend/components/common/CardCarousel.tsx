@@ -5,9 +5,11 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 /** Column widths (gap is a fixed 20px, so widths subtract the gaps on each row). */
 export const PRODUCT_SLIDE =
-  'auto-cols-[72%] sm:auto-cols-[calc((100%_-_20px)/2)] md:auto-cols-[calc((100%_-_40px)/3)] lg:auto-cols-[calc((100%_-_60px)/4)]';
+  'auto-cols-[72%] sm:auto-cols-[calc((100%_-_20px)/2)] md:auto-cols-[calc((100%_-_40px)/3)] lg:auto-cols-[calc((100%_-_80px)/5)]';
 export const TESTIMONIAL_SLIDE =
   'auto-cols-[86%] sm:auto-cols-[calc((100%_-_20px)/2)] lg:auto-cols-[calc((100%_-_40px)/3)]';
+
+const GAP = 20;
 
 interface CardCarouselProps {
   children: React.ReactNode;
@@ -35,6 +37,8 @@ export const CardCarousel: React.FC<CardCarouselProps> = ({
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(false);
   const [thumb, setThumb] = useState({ width: 100, left: 0 });
+  // Cards visible per row at the current breakpoint (measured; 5 = desktop default)
+  const [cols, setCols] = useState(5);
 
   const update = useCallback(() => {
     const el = trackRef.current;
@@ -45,6 +49,10 @@ export const CardCarousel: React.FC<CardCarouselProps> = ({
     const ratio = el.scrollWidth > 0 ? el.clientWidth / el.scrollWidth : 1;
     const progress = max > 0 ? el.scrollLeft / max : 0;
     setThumb({ width: ratio * 100, left: progress * (1 - ratio) * 100 });
+    const cell = el.querySelector<HTMLElement>('[data-cell]');
+    if (cell && cell.offsetWidth > 0) {
+      setCols(Math.max(1, Math.round((el.clientWidth + GAP) / (cell.offsetWidth + GAP))));
+    }
   }, []);
 
   useEffect(() => {
@@ -68,6 +76,24 @@ export const CardCarousel: React.FC<CardCarouselProps> = ({
 
   const scrollable = canPrev || canNext;
 
+  // The grid flows column-by-column. For 2 rows, lay each visible page out
+  // row-first: row 1 gets the first `cols` cards, row 2 the next `cols`.
+  // Empty slots (null) keep later cards from sliding into the gap.
+  const items = React.Children.toArray(children).filter(Boolean);
+  const orderedItems: React.ReactNode[] = [];
+  if (rows === 2) {
+    for (let start = 0; start < items.length; start += cols * 2) {
+      const page = items.slice(start, start + cols * 2);
+      for (let c = 0; c < cols && c < page.length; c++) {
+        orderedItems.push(page[c]);
+        orderedItems.push(page[cols + c] ?? null);
+      }
+    }
+    while (orderedItems.length && orderedItems[orderedItems.length - 1] === null) orderedItems.pop();
+  } else {
+    orderedItems.push(...items);
+  }
+
   return (
     <div className={`relative ${className}`}>
       <div
@@ -77,8 +103,14 @@ export const CardCarousel: React.FC<CardCarouselProps> = ({
         aria-label={ariaLabel}
         className={`grid grid-flow-col ${rows === 2 ? 'grid-rows-2' : 'grid-rows-1'} ${itemClassName} gap-[20px] overflow-x-auto snap-x snap-mandatory scroll-smooth scroll-px-1 no-scrollbar -mx-1 px-1 pt-1.5 pb-4`}
       >
-        {React.Children.map(children, (child) =>
-          child ? <div className="snap-start min-w-0">{child}</div> : null
+        {orderedItems.map((child, i) =>
+          child === null ? (
+            <div key={`empty-${i}`} data-cell aria-hidden="true" />
+          ) : (
+            <div key={(React.isValidElement(child) && child.key) || i} data-cell className="snap-start min-w-0">
+              {child}
+            </div>
+          )
         )}
       </div>
 
