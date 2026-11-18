@@ -1,0 +1,27 @@
+// Prisma schema
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider   = "prisma-client-js"
+  // Rust-free client: queries run through the pg driver adapter in db/db.js
+  engineType = "client"
+}
+
+// The app itself connects through the `pg` driver adapter (see db/db.js) using
+// DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME.
+// DATABASE_URL is NOT set by you in .env — prisma.config.js builds it from those
+// same variables, and the Prisma CLI uses it only for migrations / studio.
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Add your models below, then run: npm run db:migrate -- --name <migration_name>
+//
+// model User {
+//   id        Int      @id @default(autoincrement())
+//   email     String   @unique
+//   name      String?
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+// }
