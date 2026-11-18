@@ -14,6 +14,8 @@ import {
   ShoppingBag,
   Tag
 } from 'lucide-react';
+import { useHydrated } from '@/hooks/use-hydrated';
+import { CartSkeleton } from '@/components/skeletons/PageSkeletons';
 
 export default function CartPage() {
   const router = useRouter();
@@ -37,6 +39,7 @@ export default function CartPage() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState('');
   const [showPromoInput, setShowPromoInput] = useState(false);
+  const hydrated = useHydrated();
 
   const subtotal = getSubtotal();
   const discount = getDiscount();
@@ -63,6 +66,9 @@ export default function CartPage() {
       setCouponLoading(false);
     }
   };
+
+  // Cart lives in localStorage — show a skeleton until it's read, not an "empty bag" flash
+  if (!hydrated) return <CartSkeleton />;
 
   if (items.length === 0) {
     return (

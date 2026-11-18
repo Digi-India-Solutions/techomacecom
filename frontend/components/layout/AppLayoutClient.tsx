@@ -8,6 +8,7 @@ import MobileNav from '@/components/layout/MobileNav';
 import MobileDrawer from '@/components/layout/MobileDrawer';
 import CartDrawer from '@/components/cart/CartDrawer';
 import AuthModal from '@/components/auth/AuthModal';
+import SessionSync from '@/components/auth/SessionSync';
 import PincodeModal from '@/components/common/PincodeModal';
 import WhatsAppButton from '@/components/common/WhatsAppButton';
 import ToastContainer from '@/components/common/ToastContainer';
@@ -53,8 +54,9 @@ export const AppLayoutClient: React.FC<AppLayoutClientProps> = ({ children }) =>
       {/* Global Slideover Cart Drawer */}
       <CartDrawer />
 
-      {/* Global Auth Modal */}
+      {/* Global Auth Modal + session check against the API */}
       <AuthModal />
+      <SessionSync />
 
       {/* Global Pincode Check Modal */}
       <PincodeModal />

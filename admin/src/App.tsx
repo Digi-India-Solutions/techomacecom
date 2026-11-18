@@ -9,6 +9,7 @@ import { ToastProvider } from '@/components/admin/ToastProvider';
 import { AuthProvider, useAuth } from '@/components/admin/AuthContext';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { LoginPage } from '@/pages/admin/LoginPage';
+import { ResetPasswordPage } from '@/pages/admin/ResetPasswordPage';
 import { DashboardPage } from '@/pages/admin/DashboardPage';
 import { ProductsPage } from '@/pages/admin/ProductsPage';
 import { ProductFormPage } from '@/pages/admin/ProductFormPage';
@@ -43,7 +44,7 @@ function PermissionGate({
   permission,
   children,
 }: {
-  permission: AdminPermission;
+  permission: AdminPermission | string;
   children: React.ReactNode;
 }) {
   const { can } = useAuth();
@@ -52,7 +53,7 @@ function PermissionGate({
       <div className="rounded-xl border border-[#DCE6F2] bg-white p-8 max-w-lg">
         <h2 className="text-lg font-semibold text-[#12263F]">Permission Restricted</h2>
         <p className="mt-1.5 text-sm text-[#5B6B82]">
-          Your current role does not have permission to access this module. Contact a Super Admin or switch your demo role from the top-right profile menu.
+          Your role does not include access to this section. Ask a Super Admin to update your role under Staff &amp; Roles.
         </p>
       </div>
     );
@@ -68,6 +69,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/admin" replace />} />
             <Route path="/admin/login" element={<LoginPage />} />
+            <Route path="/admin/reset-password" element={<ResetPasswordPage />} />
 
             <Route path="/admin" element={<AdminLayout />}>
               <Route
@@ -175,7 +177,7 @@ export default function App() {
               <Route
                 path="returns"
                 element={
-                  <PermissionGate permission="orders.view">
+                  <PermissionGate permission="returns.view">
                     <ReturnsPage />
                   </PermissionGate>
                 }

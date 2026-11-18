@@ -68,7 +68,7 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({ banners }) => {
   if (!banners || slideCount === 0) {
     return (
       <div
-        className="w-full aspect-[16/9] md:aspect-[1920/480] bg-[#EBF4FB] animate-pulse"
+        className="skeleton w-full aspect-[16/9] md:aspect-[1920/480]"
         aria-label="Loading hero banners"
       />
     );

@@ -2,9 +2,9 @@
 
 import React, { useRef } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { Category } from '@/types';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import SkeletonImage from '@/components/common/SkeletonImage';
 
 interface TopCategoriesGridProps {
   categories: Category[];
@@ -83,7 +83,7 @@ export const TopCategoriesGrid: React.FC<TopCategoriesGridProps> = ({ categories
             >
               {/* Image tile */}
               <div className="relative w-full aspect-square rounded-xl bg-[#EAF2FC] group-hover:bg-[#D6E6F8] overflow-hidden transition-colors">
-                <Image
+                <SkeletonImage
                   src={cat.image}
                   alt={cat.name}
                   fill

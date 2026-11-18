@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Lock, Mail } from 'lucide-react';
 import { useAuth } from '@/components/admin/AuthContext';
 import { useToast } from '@/components/admin/ToastProvider';
-import { DEMO_USERS, requestPasswordReset } from '@/lib/api/admin/auth';
+import { requestPasswordReset } from '@/lib/api/admin/auth';
 import { FormField, inputClass } from '@/components/admin/FormField';
 
 export function LoginPage() {
@@ -13,8 +13,8 @@ export function LoginPage() {
   const location = useLocation();
 
   const [mode, setMode] = useState<'login' | 'forgot'>('login');
-  const [email, setEmail] = useState(DEMO_USERS.super_admin.email);
-  const [password, setPassword] = useState('denmed@2026');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -55,12 +55,6 @@ export function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillDemoUser = (userEmail: string) => {
-    setEmail(userEmail);
-    setPassword('denmed@2026');
-    setError('');
   };
 
   return (
@@ -107,6 +101,8 @@ export function LoginPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="name@buydenmed.in"
+                      autoComplete="username"
+                      autoFocus
                       className={`${inputClass} pl-9`}
                     />
                   </div>
@@ -122,6 +118,7 @@ export function LoginPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
+                      autoComplete="current-password"
                       className={`${inputClass} pl-9`}
                     />
                   </div>
@@ -135,7 +132,7 @@ export function LoginPage() {
                       onChange={(e) => setRememberMe(e.target.checked)}
                       className="rounded border-[#DCE6F2] text-[#1D5FAF] focus:ring-[#1D5FAF]"
                     />
-                    Remember me for 7 days
+                    Keep me signed in on this device
                   </label>
                   <button
                     type="button"
@@ -160,48 +157,6 @@ export function LoginPage() {
                 </button>
               </form>
 
-              {/* Quick Demo Role Fill */}
-              <div className="mt-6 border-t border-[#DCE6F2] pt-4">
-                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#5B6B82] mb-2.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-[#1D5FAF]" />
-                  Demo Accounts (Mock Auth)
-                </p>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fillDemoUser(DEMO_USERS.super_admin.email)}
-                    className={`rounded-lg border px-2 py-2 text-center text-xs font-medium transition-colors ${
-                      email === DEMO_USERS.super_admin.email
-                        ? 'border-[#1D5FAF] bg-[#EAF2FC] text-[#1D5FAF]'
-                        : 'border-[#DCE6F2] bg-[#F6F9FD] text-[#12263F] hover:bg-[#EAF2FC]'
-                    }`}
-                  >
-                    Super Admin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillDemoUser(DEMO_USERS.manager.email)}
-                    className={`rounded-lg border px-2 py-2 text-center text-xs font-medium transition-colors ${
-                      email === DEMO_USERS.manager.email
-                        ? 'border-[#1D5FAF] bg-[#EAF2FC] text-[#1D5FAF]'
-                        : 'border-[#DCE6F2] bg-[#F6F9FD] text-[#12263F] hover:bg-[#EAF2FC]'
-                    }`}
-                  >
-                    Manager
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillDemoUser(DEMO_USERS.staff.email)}
-                    className={`rounded-lg border px-2 py-2 text-center text-xs font-medium transition-colors ${
-                      email === DEMO_USERS.staff.email
-                        ? 'border-[#1D5FAF] bg-[#EAF2FC] text-[#1D5FAF]'
-                        : 'border-[#DCE6F2] bg-[#F6F9FD] text-[#12263F] hover:bg-[#EAF2FC]'
-                    }`}
-                  >
-                    Staff
-                  </button>
-                </div>
-              </div>
             </>
           ) : (
             <div>

@@ -7,6 +7,7 @@ import { Product } from '@/types';
 import { Heart, Plus, Minus, CreditCard, Bed, ChevronRight } from 'lucide-react';
 import { useCartStore, useWishlistStore, useToastStore } from '@/lib/store';
 import { getProductImageUrl } from '@/lib/utils';
+import SkeletonImage from '@/components/common/SkeletonImage';
 
 interface ProductCardProps {
   product: Product;
@@ -129,7 +130,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             href={`/product/${product.slug}`}
             className="relative w-full h-full flex items-center justify-center"
           >
-            <Image
+            <SkeletonImage
               src={mainImage}
               alt={product.name}
               fill

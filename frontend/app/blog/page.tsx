@@ -1,9 +1,9 @@
 import React from 'react';
 import { Metadata } from 'next';
 import Link from 'next/link';
-import Image from 'next/image';
 import { getBlogPosts } from '@/lib/api';
 import { BookOpen, Calendar, Clock, ChevronRight, User } from 'lucide-react';
+import SkeletonImage from '@/components/common/SkeletonImage';
 
 export const metadata: Metadata = {
   title: 'Clinical Knowledge Hub & Guides | Buy Denmed India',
@@ -38,7 +38,7 @@ export default async function BlogListPage() {
             className="group bg-white rounded-3xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden"
           >
             <div className="relative aspect-16/10 bg-[#F6F9FD] overflow-hidden">
-              <Image
+              <SkeletonImage
                 src={post.coverImage}
                 alt={post.title}
                 fill

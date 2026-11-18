@@ -33,6 +33,8 @@ import Logo from '@/components/common/Logo';
 import { useCartStore, useWishlistStore, usePincodeStore, useUserStore } from '@/lib/store';
 import { searchSuggestions } from '@/lib/api';
 import { MOCK_CATEGORIES } from '@/lib/mock/data';
+import { useHydrated } from '@/hooks/use-hydrated';
+import { Skeleton } from '@/components/common/Skeleton';
 
 interface HeaderProps {
   onOpenMobileMenu?: () => void;
@@ -54,6 +56,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
   const { items: wishlistItems } = useWishlistStore();
   const { pincode, city, setPincodeModalOpen } = usePincodeStore();
   const { user, isAuthenticated, setAuthModalOpen } = useUserStore();
+  // Login state and badge counts come from localStorage — wait for it before showing them
+  const hydrated = useHydrated();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -299,7 +303,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
 
           {/* Right: plain icon + label actions (Login · Track Order · Wishlist · Cart) */}
           <div className="flex items-center gap-1 sm:gap-2 xl:gap-4 shrink-0">
-            {isAuthenticated && user ? (
+            {!hydrated ? (
+              <div className="flex items-center gap-2 px-2 py-2" aria-hidden="true">
+                <Skeleton dark className="w-6 h-6 rounded-full" />
+                <Skeleton dark className="hidden sm:block h-3 w-16" />
+              </div>
+            ) : isAuthenticated && user ? (
               <Link
                 href="/account"
                 className="flex items-center gap-2 px-2 py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors"
@@ -335,7 +344,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
             >
               <span className="relative">
                 <Heart className="w-6 h-6" />
-                {wishlistItems.length > 0 && (
+                {hydrated && wishlistItems.length > 0 && (
                   <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F28C38] text-white text-[9px] font-bold flex items-center justify-center">
                     {wishlistItems.length}
                   </span>
@@ -352,7 +361,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
             >
               <span className="relative">
                 <ShoppingBag className="w-6 h-6" />
-                {getItemCount() > 0 && (
+                {hydrated && getItemCount() > 0 && (
                   <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F28C38] text-white text-[9px] font-bold flex items-center justify-center">
                     {getItemCount()}
                   </span>

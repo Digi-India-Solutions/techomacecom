@@ -526,6 +526,9 @@ export interface RoleDefinition {
   key: AdminRole | string;
   description: string;
   isDefault: boolean;
+  /** Super Admin: always every permission, matrix cannot be edited */
+  isLocked?: boolean;
+  staffCount?: number;
   matrix: RolePermissionMatrix;
 }
 
@@ -539,6 +542,10 @@ export interface StaffMember {
   department: string;
   status: 'active' | 'inactive';
   lastLoginAt: string;
+  roleKey?: string;
+  /** false until the invite link has been used */
+  passwordSet?: boolean;
+  lockedUntil?: string | null;
 }
 
 export interface ActivityLogEntry {

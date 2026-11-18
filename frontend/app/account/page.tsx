@@ -23,7 +23,6 @@ import {
   Pencil,
   Check,
   CheckCircle2,
-  Clock,
   ChevronDown,
   LogOut,
   Star,
@@ -33,6 +32,9 @@ import {
   X,
   Lock
 } from 'lucide-react';
+import { useHydrated } from '@/hooks/use-hydrated';
+import { AccountSkeleton, OrderListSkeleton } from '@/components/skeletons/PageSkeletons';
+import { logoutCustomer } from '@/lib/api/customerAuth';
 
 type Tab = 'orders' | 'rentals' | 'wishlist' | 'addresses' | 'gst' | 'profile';
 const TABS: Tab[] = ['orders', 'rentals', 'wishlist', 'addresses', 'gst', 'profile'];
@@ -493,6 +495,7 @@ function AccountInner() {
   const { items: wishlistItems } = useWishlistStore();
   const { rentals } = useRentalStore();
   const { addToast } = useToastStore();
+  const hydrated = useHydrated();
 
   const [activeTab, setActiveTab] = useState<Tab>(tabParam && TABS.includes(tabParam) ? tabParam : 'orders');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -562,6 +565,8 @@ function AccountInner() {
   }, [user?.id]);
 
   /* ── Signed-out state ── */
+  if (!hydrated) return <AccountSkeleton />;
+
   if (!isAuthenticated || !user) {
     return (
       <div className="max-w-md mx-auto px-4 py-20 text-center">
@@ -591,7 +596,8 @@ function AccountInner() {
     }
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    await logoutCustomer();
     logout();
     addToast({ type: 'info', title: 'Signed out', message: 'You have been signed out.' });
     router.push('/');
@@ -778,11 +784,7 @@ function AccountInner() {
             <>
               <SectionHeader title="Your orders" subtitle="Track shipments, download GST invoices and review products." />
               {ordersLoading ? (
-                <div className="space-y-4">
-                  {[0, 1].map((i) => (
-                    <div key={i} className="h-48 rounded-2xl bg-[#F3F6FA] animate-pulse" />
-                  ))}
-                </div>
+                <OrderListSkeleton />
               ) : orders.length === 0 ? (
                 <EmptyState
                   icon={Package}
@@ -1119,12 +1121,7 @@ function AccountInner() {
 export default function AccountPage() {
   return (
     <Suspense
-      fallback={
-        <div className="max-w-[1400px] mx-auto p-12 flex items-center justify-center gap-3 text-[#5B6B82]">
-          <Clock className="w-5 h-5 animate-spin text-[#1D5FAF]" />
-          Loading your account…
-        </div>
-      }
+      fallback={<AccountSkeleton />}
     >
       <AccountInner />
     </Suspense>

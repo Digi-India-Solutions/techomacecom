@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
-import { buildDatabaseUrl } from "../db/config.js";
+import { buildDatabaseUrl } from "./db/config.js";
 
 // The Prisma CLI (migrate, studio, db push) needs a connection string.
 // We build it here from the individual DB_* variables so you never have to
@@ -11,5 +11,6 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    seed: "node prisma/seed.js",
   },
 });
