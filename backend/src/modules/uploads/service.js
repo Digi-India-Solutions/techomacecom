@@ -6,8 +6,8 @@ import { ApiError } from "../../lib/http.js";
  * Saves one uploaded image as WebP (+ responsive sizes) and describes it.
  * Store `path` in the database; `url` / `srcSet` are for immediate display.
  */
-export async function saveImage(file, folder) {
-  const processed = await processImage(file.buffer);
+export async function saveImage(file, folder, imageOptions) {
+  const processed = await processImage(file.buffer, imageOptions);
   const dir = datedDir(folder);
   const id = newFileId();
 

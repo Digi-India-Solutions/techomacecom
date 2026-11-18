@@ -4,7 +4,7 @@
  *
  *   npm run admin:set-password
  */
-import "dotenv/config";
+import "../config/load-env.js";
 import prisma from "../db/db.js";
 import { hashPassword, PASSWORD_RULE } from "../src/lib/password.js";
 import { revokeAllSessions } from "../src/services/session.service.js";

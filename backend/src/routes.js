@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAdmin } from "./middlewares/auth.js";
 import customerAuthRoutes from "./modules/auth/routes.js";
+import accountRoutes from "./modules/account/routes.js";
 import adminAuthRoutes from "./modules/admin-auth/routes.js";
 import staffRoutes from "./modules/staff/routes.js";
 import uploadRoutes from "./modules/uploads/routes.js";
@@ -13,7 +14,8 @@ import uploadRoutes from "./modules/uploads/routes.js";
 const api = Router();
 
 // ---- Storefront ----
-api.use("/auth", customerAuthRoutes);
+api.use("/auth", customerAuthRoutes); // OTP / Google sign-in, profile, signed-in devices
+api.use("/account", accountRoutes); // addresses, GST details, profile photo
 
 // ---- Admin ----
 const admin = Router();

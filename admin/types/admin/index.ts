@@ -35,9 +35,42 @@ export interface AdminUser {
   roleId: string;
   roleLabel: string;
   avatarInitials: string;
+  /** Profile photo (256 × 256 WebP) or null */
+  avatarUrl?: string | null;
   phone: string;
   department: string;
+  status?: 'active' | 'inactive';
+  isSuperAdmin?: boolean;
   lastLoginAt: string;
+  passwordChangedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** A browser/app where this staff member is signed in (auth_sessions row). */
+export interface DeviceSession {
+  id: string;
+  browser: string;
+  os: string;
+  type: 'desktop' | 'mobile' | 'tablet';
+  label: string;
+  ipAddress: string | null;
+  lastActiveAt: string;
+  expiresAt: string;
+  rememberMe: boolean;
+  /** The browser making this request */
+  current: boolean;
+}
+
+/** One row of the signed-in staff member's own audit trail. */
+export interface MyActivityEntry {
+  id: string;
+  timestamp: string;
+  module: string;
+  action: string;
+  recordLabel: string;
+  summary: string;
+  ipAddress: string | null;
 }
 
 /** Signed-in staff member + the permission codes of their role (module.action). Tokens live in httpOnly cookies. */

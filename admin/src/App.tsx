@@ -39,6 +39,7 @@ import { BlogPage } from '@/pages/admin/BlogPage';
 import { SettingsPage } from '@/pages/admin/SettingsPage';
 import { StaffRolesPage } from '@/pages/admin/StaffRolesPage';
 import { ActivityLogPage } from '@/pages/admin/ActivityLogPage';
+import { ProfilePage } from '@/pages/admin/ProfilePage';
 
 function PermissionGate({
   permission,
@@ -339,6 +340,8 @@ export default function App() {
                 }
               />
               <Route path="activity-log" element={<Navigate to="/admin/activity" replace />} />
+              {/* Every signed-in staff member can manage their own profile */}
+              <Route path="profile" element={<ProfilePage />} />
 
               <Route path="*" element={<Navigate to="/admin" replace />} />
             </Route>

@@ -1,6 +1,15 @@
 import { ok } from "../../lib/http.js";
 import { setAuthCookies, clearAuthCookies, readRefreshToken, verifyRefreshToken } from "../../lib/tokens.js";
-import { issueTokens, rotateRefreshToken, revokeByRefreshToken } from "../../services/session.service.js";
+import {
+  issueTokens,
+  rotateRefreshToken,
+  revokeByRefreshToken,
+  currentSessionJti,
+  listActiveSessions,
+  revokeSessionById,
+  revokeOtherSessions,
+} from "../../services/session.service.js";
+import { ApiError } from "../../lib/http.js";
 import { logActivity } from "../../services/activity.service.js";
 import * as service from "./service.js";
 
@@ -48,10 +57,88 @@ export async function me(req, res) {
   return ok(res, await service.toAdminDto(req.admin));
 }
 
-/** PUT /admin/auth/me */
+/** PUT /admin/auth/me — name, mobile, department (email and role are changed by a Super Admin in Staff & Roles) */
 export async function updateMe(req, res) {
-  const admin = await service.updateMe(req.admin, req.body);
+  const { admin, changes } = await service.updateMe(req.admin, req.body);
+  if (changes.length) {
+    await logActivity(req, {
+      module: "auth",
+      action: "update",
+      entityType: "admin_user",
+      entityId: admin.id,
+      entityLabel: admin.name,
+      summary: `Updated own profile: ${changes.map((c) => c.field).join(", ")}`,
+      oldValues: Object.fromEntries(changes.map((c) => [c.field, c.from])),
+      newValues: Object.fromEntries(changes.map((c) => [c.field, c.to])),
+    });
+  }
   return ok(res, await service.toAdminDto(admin));
+}
+
+/** PUT /admin/auth/me/avatar (multipart field "file") */
+export async function uploadAvatar(req, res) {
+  const admin = await service.setAvatar(req.admin, req.file);
+  await logActivity(req, {
+    module: "auth",
+    action: "update",
+    entityType: "admin_user",
+    entityId: admin.id,
+    entityLabel: admin.name,
+    summary: "Changed profile photo",
+  });
+  return ok(res, await service.toAdminDto(admin));
+}
+
+/** DELETE /admin/auth/me/avatar */
+export async function deleteAvatar(req, res) {
+  const admin = await service.removeAvatar(req.admin);
+  return ok(res, await service.toAdminDto(admin));
+}
+
+/** GET /admin/auth/me/activity — own audit trail */
+export async function myActivity(req, res) {
+  const { rows, meta } = await service.listMyActivity(req.admin, req.validatedQuery);
+  return ok(res, rows, { meta });
+}
+
+/** GET /admin/auth/sessions — signed-in devices */
+export async function sessions(req, res) {
+  return ok(res, await listActiveSessions("admin", req.admin.id, currentSessionJti(req, "admin")));
+}
+
+/** DELETE /admin/auth/sessions/:id */
+export async function revokeSession(req, res) {
+  const device = await revokeSessionById("admin", req.admin.id, req.validatedParams.id, currentSessionJti(req, "admin"));
+  await logActivity(req, {
+    module: "auth",
+    action: "update",
+    entityType: "admin_user",
+    entityId: req.admin.id,
+    entityLabel: req.admin.name,
+    summary: `Signed out ${device.label}`,
+  });
+  return ok(res, { message: `${device.label} has been signed out.` });
+}
+
+/** POST /admin/auth/sessions/revoke-others */
+export async function revokeOthers(req, res) {
+  const jti = currentSessionJti(req, "admin");
+  if (!jti) throw ApiError.unauthorized("Please sign in again to manage your devices.", "NO_REFRESH_TOKEN");
+  const count = await revokeOtherSessions("admin", req.admin.id, jti);
+  if (count) {
+    await logActivity(req, {
+      module: "auth",
+      action: "update",
+      entityType: "admin_user",
+      entityId: req.admin.id,
+      entityLabel: req.admin.name,
+      summary: `Signed out ${count} other device${count === 1 ? "" : "s"}`,
+    });
+  }
+  return ok(res, {
+    count,
+    message: count ? `Signed out of ${count} other device${count === 1 ? "" : "s"}.` : "No other devices were signed in.",
+  });
 }
 
 /** PUT /admin/auth/me/password */

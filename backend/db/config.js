@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { envKeyHint } from "../config/load-env.js";
 
 const REQUIRED = ["DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME"];
 
@@ -10,7 +10,7 @@ export function getDbConfig() {
   const missing = REQUIRED.filter((key) => !process.env[key]);
   if (missing.length) {
     throw new Error(
-      `Missing database environment variables: ${missing.join(", ")}. ` +
+      `Missing database environment variables: ${missing.map(envKeyHint).join(", ")}. ` +
         "Set them in backend/.env (see .env.example)."
     );
   }
