@@ -145,3 +145,36 @@ h1, h2, h3, h4, h5, h6, .font-heading, button, nav {
 @media (prefers-reduced-motion: reduce) {
   .marquee-track { animation: none; }
 }
+
+/* ───────── Skeleton loading ─────────
+   .skeleton = soft blue-grey block with a light sweep across it.
+   Used by components/common/Skeleton.tsx and the route loading.tsx files. */
+/* In the components layer so utilities (absolute, rounded-*, bg-*) can override it */
+@layer components {
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: #E4ECF6;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.65) 50%, transparent 100%);
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+  /* Darker variant for skeletons that sit on navy/blue surfaces */
+  .skeleton-dark {
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+  .skeleton-dark::after {
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.18) 50%, transparent 100%);
+  }
+}
+@keyframes skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
+}

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Layers, Bed, ShoppingBag, User } from 'lucide-react';
 import { useCartStore, useUserStore } from '@/lib/store';
+import { useHydrated } from '@/hooks/use-hydrated';
 
 interface MobileNavProps {
   onOpenCategoriesDrawer: () => void;
@@ -15,7 +16,9 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenCategoriesDrawer }) 
   const { getItemCount, setIsCartOpen } = useCartStore();
   const { isAuthenticated, setAuthModalOpen } = useUserStore();
 
-  const cartCount = getItemCount();
+  const hydrated = useHydrated();
+  // Count comes from localStorage — hide the badge until it has been read
+  const cartCount = hydrated ? getItemCount() : 0;
 
   const navItems = [
     { label: 'Home', href: '/', icon: Home, isActive: pathname === '/' },
@@ -24,8 +27,8 @@ export const MobileNav: React.FC<MobileNavProps> = ({ onOpenCategoriesDrawer }) 
     { label: 'Cart', onClick: () => setIsCartOpen(true), icon: ShoppingBag, isActive: false, badge: cartCount },
     {
       label: 'Account',
-      href: isAuthenticated ? '/account' : undefined,
-      onClick: !isAuthenticated ? () => setAuthModalOpen(true) : undefined,
+      href: hydrated && isAuthenticated ? '/account' : undefined,
+      onClick: !(hydrated && isAuthenticated) ? () => setAuthModalOpen(true) : undefined,
       icon: User,
       isActive: pathname.startsWith('/account')
     }

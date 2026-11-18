@@ -21,19 +21,19 @@ import {
   Building2,
   AlertCircle
 } from 'lucide-react';
+import { useHydrated } from '@/hooks/use-hydrated';
+import CustomerAuthForm from '@/components/auth/CustomerAuthForm';
+import { logoutCustomer } from '@/lib/api/customerAuth';
+import { CheckoutSkeleton } from '@/components/skeletons/PageSkeletons';
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, getSubtotal, getDiscount, getShippingFee, getGstAmount, getTotal, clearCart } = useCartStore();
-  const { user, isAuthenticated, login, addAddress } = useUserStore();
+  const { user, isAuthenticated, logout, addAddress } = useUserStore();
   const { addToast } = useToastStore();
+  const hydrated = useHydrated();
 
-  // Step 1: Login / Phone Verification (if not logged in)
-  const [phone, setPhone] = useState(user?.phone || '9811234567');
-  const [doctorName, setDoctorName] = useState(user?.name || 'Dr. Vikram Malhotra');
-  const [email, setEmail] = useState(user?.email || 'dr.vikram@malhotraclinic.com');
-  const [otpStep, setOtpStep] = useState(!isAuthenticated);
-  const [otpCode, setOtpCode] = useState('123456');
+  // Step 1 is the real sign-in (CustomerAuthForm → API); details come from the signed-in user.
 
   // Step 2: Address Selection / Addition
   const defaultAddr = user?.addresses?.find((a) => a.isDefault) || user?.addresses?.[0];
@@ -43,21 +43,21 @@ export default function CheckoutPage() {
   const [newAddr, setNewAddr] = useState<Address>({
     id: 'addr-new-entry',
     type: 'Clinic',
-    name: 'Dr. Vikram Malhotra',
-    clinicHospitalName: 'Malhotra Multi-Speciality Dental Clinic',
-    phone: '9811234567',
-    addressLine1: 'Suite 204, Metro Plaza, Sector 18',
-    addressLine2: 'Near Sector 18 Metro Station',
-    pincode: '201301',
-    city: 'Noida',
-    state: 'Uttar Pradesh',
+    name: user?.name || '',
+    clinicHospitalName: '',
+    phone: user?.phone || '',
+    addressLine1: '',
+    addressLine2: '',
+    pincode: '',
+    city: '',
+    state: '',
     isDefault: true
   });
 
   // Step 3: Optional GSTIN business invoice
   const [includeGst, setIncludeGst] = useState<boolean>(Boolean(user?.gstDetails?.gstin));
-  const [gstin, setGstin] = useState<string>(user?.gstDetails?.gstin || '09AAACM1234F1Z8');
-  const [legalCompanyName, setLegalCompanyName] = useState<string>(user?.gstDetails?.legalBusinessName || 'Malhotra Healthcare Pvt Ltd');
+  const [gstin, setGstin] = useState<string>(user?.gstDetails?.gstin || '');
+  const [legalCompanyName, setLegalCompanyName] = useState<string>(user?.gstDetails?.legalBusinessName || '');
   const [gstError, setGstError] = useState<string>('');
 
   // Step 4: Payment Method
@@ -76,26 +76,18 @@ export default function CheckoutPage() {
     return regex.test(code.trim().toUpperCase());
   };
 
-  const handleVerifyOtp = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (otpCode.length < 4) return;
-    const dummyUser = {
-      id: 'usr-chkt',
-      name: doctorName,
-      email: email,
-      phone: phone,
-      role: 'doctor' as const,
-      addresses: [newAddr],
-      gstDetails: includeGst ? { gstin, legalBusinessName: legalCompanyName, isVerified: true } : undefined
-    };
-    login(dummyUser, 'token_xyz');
-    setOtpStep(false);
-    addToast({ type: 'success', title: 'Verified', message: 'Clinic details confirmed.' });
+  const handleSwitchAccount = async () => {
+    await logoutCustomer();
+    logout();
   };
 
   const handlePlaceOrder = async () => {
     if (items.length === 0) {
       router.push('/cart');
+      return;
+    }
+    if (!isAuthenticated || !user) {
+      addToast({ type: 'error', title: 'Sign in required', message: 'Verify your mobile number in step 1 to place the order.' });
       return;
     }
 
@@ -122,6 +114,8 @@ export default function CheckoutPage() {
       router.push(`/order-success/${generatedOrderId}`);
     }, 1200);
   };
+
+  if (!hydrated) return <CheckoutSkeleton />;
 
   if (items.length === 0) {
     return (
@@ -170,60 +164,28 @@ export default function CheckoutPage() {
               )}
             </div>
 
-            {otpStep ? (
-              <form onSubmit={handleVerifyOtp} className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-[#12263F] block mb-1">Doctor Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={doctorName}
-                      onChange={(e) => setDoctorName(e.target.value)}
-                      className="w-full text-xs px-3 py-2 border border-[#DCE6F2] rounded-lg focus:outline-none focus:border-[#1D5FAF] text-[#12263F]"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-[#12263F] block mb-1">Mobile Number (India)</label>
-                    <input
-                      type="tel"
-                      required
-                      maxLength={10}
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                      className="w-full text-xs px-3 py-2 border border-[#DCE6F2] rounded-lg focus:outline-none focus:border-[#1D5FAF] text-[#12263F]"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <input
-                    type="text"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                    placeholder="Enter OTP (Demo: 123456)"
-                    className="text-xs px-3 py-2 border border-[#DCE6F2] rounded-lg font-mono tracking-wider w-44 text-[#12263F]"
-                  />
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-[#0B2545] hover:bg-[#13335E] text-white text-xs font-bold rounded-lg"
-                  >
-                    Verify & Continue
-                  </button>
-                </div>
-              </form>
+            {!isAuthenticated || !user ? (
+              <div className="max-w-md">
+                <p className="text-xs text-[#5B6B82] mb-3">
+                  Sign in with your mobile number to continue. New customers get an account automatically.
+                </p>
+                <CustomerAuthForm />
+              </div>
             ) : (
               <div className="flex items-center justify-between text-xs text-[#5B6B82] bg-[#F6F9FD] p-3 rounded-xl">
                 <div>
-                  <div className="font-bold text-[#12263F]">{doctorName}</div>
-                  <div className="text-[#5B6B82]">+91 {phone} • {email}</div>
+                  <div className="font-bold text-[#12263F]">{user.name || 'Name not added yet'}</div>
+                  <div className="text-[#5B6B82]">
+                    {user.phone ? `+91 ${user.phone}` : 'No mobile added'}
+                    {user.email ? ` • ${user.email}` : ''}
+                  </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setOtpStep(true)}
-                  className="text-xs text-[#1D5FAF] hover:underline font-semibold"
+                  onClick={handleSwitchAccount}
+                  className="text-xs text-[#1D5FAF] hover:underline font-semibold cursor-pointer"
                 >
-                  Edit
+                  Not you? Switch account
                 </button>
               </div>
             )}

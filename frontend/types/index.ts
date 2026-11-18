@@ -215,6 +215,12 @@ export interface User {
   registrationNumber?: string; // Dental/Medical Council reg number
   addresses: Address[];
   gstDetails?: GstDetails;
+  // From the API (backend/src/modules/auth)
+  avatarUrl?: string;
+  mobileVerified?: boolean;
+  hasGoogle?: boolean;
+  /** false until the customer has both a name and a verified mobile */
+  profileComplete?: boolean;
 }
 
 export interface OrderItem {

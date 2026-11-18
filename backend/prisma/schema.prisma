@@ -1,5 +1,17 @@
-// Prisma schema
-// Docs: https://pris.ly/d/prisma-schema
+// =============================================================================
+// Buy Denmed — database schema
+// Source of truth: "Buy Denmed — Technical Documentation" §10–11 (57 tables).
+//
+// Conventions (from the document):
+//  • id BIGSERIAL, created_at / updated_at TIMESTAMPTZ on every table
+//  • money columns end in _paise and are BIGINT (₹48,999 = 4899900)
+//  • status columns are TEXT + CHECK constraint (CHECKs, partial unique
+//    indexes, the updated_at trigger and extensions live in the migration SQL —
+//    Prisma cannot express them)
+//  • column names are snake_case so the DB matches the document 1:1
+//
+// Additions beyond the document (needed for auth / RBAC) are marked  // + added
+// =============================================================================
 
 generator client {
   provider   = "prisma-client-js"
@@ -7,21 +19,1348 @@ generator client {
   engineType = "client"
 }
 
-// The app itself connects through the `pg` driver adapter (see db/db.js) using
-// DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME.
-// DATABASE_URL is NOT set by you in .env — prisma.config.js builds it from those
-// same variables, and the Prisma CLI uses it only for migrations / studio.
+// DATABASE_URL is built by prisma.config.js from DB_HOST / DB_PORT / … (CLI only)
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// Add your models below, then run: npm run db:migrate -- --name <migration_name>
-//
-// model User {
-//   id        Int      @id @default(autoincrement())
-//   email     String   @unique
-//   name      String?
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-// }
+// =============================================================================
+// 11.1 ACCESS AND AUDIT (9)
+// =============================================================================
+
+/// Staff who log in to admin.
+model AdminUser {
+  id                        BigInt    @id @default(autoincrement())
+  name                      String    @db.VarChar(120)
+  email                     String    @unique @db.Citext
+  mobile                    String?   @db.VarChar(15)
+  password_hash             String?
+  role_id                   BigInt
+  status                    String    @default("active") // active | inactive
+  last_login_at             DateTime? @db.Timestamptz(6)
+  department                String?   @db.VarChar(80) // + added (admin UI)
+  failed_login_attempts     Int       @default(0) @db.SmallInt // + added: lock after 5
+  locked_until              DateTime? @db.Timestamptz(6) // + added
+  password_reset_token_hash String?   @db.VarChar(64) // + added: invite / reset link
+  password_reset_expires_at DateTime? @db.Timestamptz(6) // + added
+  password_changed_at       DateTime? @db.Timestamptz(6) // + added
+  created_at                DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  role                 Role                   @relation(fields: [role_id], references: [id])
+  activity_logs        ActivityLog[]
+  notifications        AdminNotification[]
+  bulk_import_jobs     BulkImportJob[]
+  stock_movements      StockMovement[]
+  unit_service_logs    RentalUnitServiceLog[]
+  refunds              Refund[]
+  kyc_reviewed_rentals Rental[]               @relation("RentalKycReviewer")
+  rental_charges       RentalCharge[]
+  assigned_enquiries   Enquiry[]              @relation("EnquiryAssignee")
+  enquiry_notes        EnquiryNote[]
+  moderated_reviews    Review[]               @relation("ReviewModerator")
+  blog_posts           BlogPost[]
+  auth_sessions        AuthSession[]
+
+  @@index([role_id])
+  @@map("admin_users")
+}
+
+/// Super Admin, Manager, Staff and custom roles.
+model Role {
+  id          BigInt   @id @default(autoincrement())
+  name        String   @unique @db.VarChar(60)
+  slug        String   @unique @db.VarChar(60) // + added: stable key (super_admin, manager, …)
+  description String?
+  is_system   Boolean  @default(false) // system roles cannot be deleted
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  admin_users      AdminUser[]
+  role_permissions RolePermission[]
+
+  @@map("roles")
+}
+
+/// One row per module × action, e.g. orders.edit
+model Permission {
+  id         BigInt   @id @default(autoincrement())
+  module     String   @db.VarChar(40)
+  action     String   @db.VarChar(20) // view | create | edit | delete | export
+  code       String   @unique @db.VarChar(80) // module.action
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  role_permissions RolePermission[]
+
+  @@unique([module, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id            BigInt   @id @default(autoincrement())
+  role_id       BigInt
+  permission_id BigInt
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  role       Role       @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+
+  @@unique([role_id, permission_id])
+  @@map("role_permissions")
+}
+
+/// Login and review OTPs (hashed, 5-minute expiry, max 5 attempts).
+model OtpRequest {
+  id          BigInt    @id @default(autoincrement())
+  mobile      String    @db.VarChar(15)
+  purpose     String // login | review
+  otp_hash    String // never store the plain code
+  expires_at  DateTime  @db.Timestamptz(6)
+  attempts    Int       @default(0) @db.SmallInt
+  verified_at DateTime? @db.Timestamptz(6)
+  ip_address  String?   @db.Inet
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([mobile])
+  @@index([mobile, purpose, created_at])
+  @@map("otp_requests")
+}
+
+/// Who changed what in admin.
+model ActivityLog {
+  id            BigInt   @id @default(autoincrement())
+  admin_user_id BigInt?
+  module        String   @db.VarChar(40)
+  action        String   @db.VarChar(40) // create | update | delete | status_change | login
+  entity_type   String?  @db.VarChar(40)
+  entity_id     BigInt?
+  entity_label  String?  @db.VarChar(200) // + added: human label for the log UI
+  summary       String? // + added: "Status: Confirmed → Packed"
+  old_values    Json?
+  new_values    Json?
+  ip_address    String?  @db.Inet
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  admin_user AdminUser? @relation(fields: [admin_user_id], references: [id], onDelete: SetNull)
+
+  @@index([module])
+  @@index([entity_type, entity_id])
+  @@index([admin_user_id])
+  @@index([created_at])
+  @@map("activity_logs")
+}
+
+/// Bell-icon items.
+model AdminNotification {
+  id            BigInt    @id @default(autoincrement())
+  type          String    @db.VarChar(40)
+  title         String    @db.VarChar(200)
+  entity_type   String?   @db.VarChar(40)
+  entity_id     BigInt?
+  admin_user_id BigInt? // NULL = all staff
+  read_at       DateTime? @db.Timestamptz(6)
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  admin_user AdminUser? @relation(fields: [admin_user_id], references: [id], onDelete: Cascade)
+
+  @@index([admin_user_id, read_at])
+  @@map("admin_notifications")
+}
+
+/// Editable SMS / WhatsApp / email texts.
+model NotificationTemplate {
+  id                   BigInt   @id @default(autoincrement())
+  event                String   @db.VarChar(60)
+  channel              String // sms | whatsapp | email
+  subject              String?  @db.VarChar(200)
+  body                 String
+  provider_template_id String?  @db.VarChar(100)
+  is_active            Boolean  @default(true)
+  created_at           DateTime @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  logs NotificationLog[]
+
+  @@unique([event, channel])
+  @@map("notification_templates")
+}
+
+/// Every message sent.
+model NotificationLog {
+  id                  BigInt   @id @default(autoincrement())
+  template_id         BigInt?
+  channel             String
+  recipient           String   @db.VarChar(200)
+  entity_type         String?  @db.VarChar(40)
+  entity_id           BigInt?
+  status              String   @default("queued") // queued | sent | failed
+  provider_message_id String?  @db.VarChar(120)
+  error               String?
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  template NotificationTemplate? @relation(fields: [template_id], references: [id], onDelete: SetNull)
+
+  @@index([entity_type, entity_id])
+  @@map("notification_logs")
+}
+
+// =============================================================================
+// 11.2 CUSTOMERS (4)
+// =============================================================================
+
+model Customer {
+  id                 BigInt    @id @default(autoincrement())
+  name               String?   @db.VarChar(120)
+  // Document: NOT NULL. Nullable here so "Continue with Google" can create an
+  // account before a mobile is added; unique when present.
+  mobile             String?   @unique @db.VarChar(15)
+  email              String?   @unique @db.Citext
+  status             String    @default("active") // active | blocked
+  customer_type      String    @default("individual") // + added: doctor | clinic_admin | procurement | individual
+  google_id          String?   @unique @db.VarChar(64) // + added: Google "sub"
+  avatar_url         String? // + added
+  mobile_verified_at DateTime? @db.Timestamptz(6) // + added
+  email_verified_at  DateTime? @db.Timestamptz(6) // + added
+  last_login_at      DateTime? @db.Timestamptz(6)
+  deleted_at         DateTime? @db.Timestamptz(6)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  addresses          Address[]
+  gst_details        CustomerGstDetail[]
+  wishlists          Wishlist[]
+  carts              Cart[]
+  coupon_redemptions CouponRedemption[]
+  orders             Order[]
+  rentals            Rental[]
+  enquiries          Enquiry[]
+  reviews            Review[]
+  auth_sessions      AuthSession[]
+
+  @@map("customers")
+}
+
+model Address {
+  id                BigInt   @id @default(autoincrement())
+  customer_id       BigInt
+  name              String   @db.VarChar(120)
+  phone             String   @db.VarChar(15)
+  organisation_name String?  @db.VarChar(200) // + added: clinic / hospital name
+  line1             String   @db.VarChar(200)
+  line2             String?  @db.VarChar(200)
+  landmark          String?  @db.VarChar(200)
+  city              String   @db.VarChar(80)
+  state             String   @db.VarChar(80)
+  pincode           String   @db.Char(6)
+  type              String   @default("home") // home | clinic | hospital | other
+  is_default        Boolean  @default(false) // one default per customer (partial UQ)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  customer Customer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+
+  @@index([customer_id])
+  @@index([pincode])
+  @@map("addresses")
+}
+
+/// Optional business details.
+model CustomerGstDetail {
+  id              BigInt   @id @default(autoincrement())
+  customer_id     BigInt
+  gstin           String   @db.Char(15)
+  company_name    String   @db.VarChar(200)
+  billing_address String?
+  is_default      Boolean  @default(false)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  customer Customer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+
+  @@index([customer_id])
+  @@map("customer_gst_details")
+}
+
+model Wishlist {
+  id          BigInt   @id @default(autoincrement())
+  customer_id BigInt
+  product_id  BigInt
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  customer Customer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+
+  @@unique([customer_id, product_id])
+  @@map("wishlists")
+}
+
+// =============================================================================
+// 11.3 CATALOG (7)
+// =============================================================================
+
+/// 3-level tree.
+model Category {
+  id                 BigInt    @id @default(autoincrement())
+  parent_id          BigInt?
+  name               String    @db.VarChar(120)
+  slug               String    @unique @db.VarChar(140)
+  level              Int       @default(1) @db.SmallInt // 1–3
+  path               String? // materialised path e.g. /12/45/
+  icon_url           String?
+  image_url          String?
+  banner_desktop_url String?
+  banner_mobile_url  String?
+  description        String?
+  meta_title         String?   @db.VarChar(200)
+  meta_description   String?   @db.VarChar(320)
+  show_in_menu       Boolean   @default(true)
+  show_on_home       Boolean   @default(false)
+  sort_order         Int       @default(0)
+  status             String    @default("active") // active | inactive
+  deleted_at         DateTime? @db.Timestamptz(6)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  parent   Category?  @relation("CategoryTree", fields: [parent_id], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parent_id])
+  @@index([path])
+  @@map("categories")
+}
+
+model Brand {
+  id                 BigInt    @id @default(autoincrement())
+  name               String    @unique @db.VarChar(120)
+  slug               String    @unique @db.VarChar(140)
+  logo_url           String? // NULL → storefront shows text wordmark
+  banner_desktop_url String?
+  banner_mobile_url  String?
+  description        String?
+  is_featured        Boolean   @default(false)
+  meta_title         String?   @db.VarChar(200)
+  meta_description   String?   @db.VarChar(320)
+  status             String    @default("active")
+  deleted_at         DateTime? @db.Timestamptz(6)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  products Product[]
+
+  @@map("brands")
+}
+
+/// The sellable / rentable item; price and stock live on variants.
+model Product {
+  id                BigInt    @id @default(autoincrement())
+  name              String    @db.VarChar(250)
+  slug              String    @unique @db.VarChar(270)
+  sku               String    @unique @db.VarChar(60)
+  brand_id          BigInt
+  category_id       BigInt
+  short_description String?   @db.VarChar(400)
+  description       String? // sanitised HTML
+  hsn_code          String?   @db.VarChar(10)
+  gst_rate          Decimal   @default(18) @db.Decimal(4, 2) // 0 | 5 | 12 | 18 | 28
+  weight_grams      Int?
+  length_cm         Decimal?  @db.Decimal(6, 1)
+  width_cm          Decimal?  @db.Decimal(6, 1)
+  height_cm         Decimal?  @db.Decimal(6, 1)
+  emi_enabled       Boolean   @default(false)
+  cod_enabled       Boolean   @default(true)
+  rent_enabled      Boolean   @default(false)
+  sale_enabled      Boolean   @default(true) // false = rent only
+  is_featured       Boolean   @default(false)
+  is_best_seller    Boolean   @default(false)
+  is_new_arrival    Boolean   @default(false)
+  badge_text        String?   @db.VarChar(40)
+  rating_avg        Decimal   @default(0) @db.Decimal(2, 1)
+  rating_count      Int       @default(0)
+  sold_count        Int       @default(0)
+  meta_title        String?   @db.VarChar(200)
+  meta_description  String?   @db.VarChar(320)
+  status            String    @default("draft") // draft | active | inactive
+  published_at      DateTime? @db.Timestamptz(6)
+  deleted_at        DateTime? @db.Timestamptz(6)
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  brand        Brand            @relation(fields: [brand_id], references: [id])
+  category     Category         @relation(fields: [category_id], references: [id])
+  variants     ProductVariant[]
+  images       ProductImage[]
+  specs        ProductSpec[]
+  wishlists    Wishlist[]
+  rental_units RentalUnit[]
+  rental_plans RentalPlan[]
+  order_items  OrderItem[]
+  rentals      Rental[]
+  reviews      Review[]
+
+  @@index([brand_id])
+  @@index([category_id])
+  @@index([status])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_trgm_idx")
+  @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_sku_trgm_idx")
+  @@map("products")
+}
+
+/// Every product has at least one variant (the default).
+model ProductVariant {
+  id               BigInt   @id @default(autoincrement())
+  product_id       BigInt
+  option_type      String   @default("default") @db.VarChar(30) // size | pack | model | default
+  name             String   @db.VarChar(150)
+  sku              String   @unique @db.VarChar(60)
+  price_paise      BigInt
+  mrp_paise        BigInt
+  bulk_price_paise BigInt?
+  bulk_min_qty     Int?     @db.SmallInt
+  image_url        String?
+  is_default       Boolean  @default(false) // one per product (partial UQ)
+  is_active        Boolean  @default(true)
+  sort_order       Int      @default(0)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  product         Product         @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  inventory       Inventory[]
+  stock_movements StockMovement[]
+  cart_items      CartItem[]
+  deals           Deal[]
+  order_items     OrderItem[]
+
+  @@index([product_id])
+  @@map("product_variants")
+}
+
+model ProductImage {
+  id         BigInt   @id @default(autoincrement())
+  product_id BigInt
+  url        String
+  zoom_url   String? // high-res for hover zoom
+  alt_text   String?  @db.VarChar(200)
+  type       String   @default("main") // main | angle | detail | in_use | box_contents | infographic
+  sort_order Int      @default(0) // 0 = main image
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  product Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+
+  @@index([product_id])
+  @@map("product_images")
+}
+
+/// Key–value specification rows.
+model ProductSpec {
+  id         BigInt   @id @default(autoincrement())
+  product_id BigInt
+  spec_key   String   @db.VarChar(100)
+  spec_value String   @db.VarChar(300)
+  sort_order Int      @default(0)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  product Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+
+  @@index([product_id])
+  @@map("product_specs")
+}
+
+model BulkImportJob {
+  id               BigInt   @id @default(autoincrement())
+  admin_user_id    BigInt?
+  type             String // products | price_stock
+  file_url         String
+  status           String   @default("queued") // queued | processing | done | failed
+  total_rows       Int      @default(0)
+  created_rows     Int      @default(0)
+  updated_rows     Int      @default(0)
+  failed_rows      Int      @default(0)
+  error_report_url String?
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  admin_user AdminUser? @relation(fields: [admin_user_id], references: [id], onDelete: SetNull)
+
+  @@map("bulk_import_jobs")
+}
+
+// =============================================================================
+// 11.4 INVENTORY (5)
+// =============================================================================
+
+/// One now ("Main Warehouse"); ready for city warehouses.
+model Warehouse {
+  id                     BigInt   @id @default(autoincrement())
+  name                   String   @db.VarChar(120)
+  code                   String   @unique @db.VarChar(20)
+  address                String?
+  city                   String?  @db.VarChar(80)
+  state                  String?  @db.VarChar(80)
+  pincode                String?  @db.Char(6) // Shiprocket pickup location
+  shiprocket_pickup_name String?  @db.VarChar(100)
+  is_active              Boolean  @default(true)
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  inventory       Inventory[]
+  stock_movements StockMovement[]
+  rental_units    RentalUnit[]
+  shipments       Shipment[]
+
+  @@map("warehouses")
+}
+
+/// Saleable stock per variant per warehouse. available = quantity − reserved
+model Inventory {
+  id                  BigInt   @id @default(autoincrement())
+  variant_id          BigInt
+  warehouse_id        BigInt
+  quantity            Int      @default(0) // physical, ≥ 0
+  reserved            Int      @default(0) // in unpaid / unshipped orders, ≥ 0
+  low_stock_threshold Int      @default(5)
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  variant   ProductVariant @relation(fields: [variant_id], references: [id], onDelete: Cascade)
+  warehouse Warehouse      @relation(fields: [warehouse_id], references: [id])
+
+  @@unique([variant_id, warehouse_id])
+  @@map("inventory")
+}
+
+/// Every stock change, append-only.
+model StockMovement {
+  id             BigInt   @id @default(autoincrement())
+  variant_id     BigInt
+  warehouse_id   BigInt
+  change_qty     Int // + in / − out
+  reason         String // purchase | sale | return | damage | correction | reserve | release
+  reference_type String?  @db.VarChar(40)
+  reference_id   BigInt?
+  balance_after  Int
+  admin_user_id  BigInt?
+  note           String?
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  variant    ProductVariant @relation(fields: [variant_id], references: [id], onDelete: Cascade)
+  warehouse  Warehouse      @relation(fields: [warehouse_id], references: [id])
+  admin_user AdminUser?     @relation(fields: [admin_user_id], references: [id], onDelete: SetNull)
+
+  @@index([variant_id, created_at])
+  @@map("stock_movements")
+}
+
+/// Each physical rental machine.
+model RentalUnit {
+  id                  BigInt    @id @default(autoincrement())
+  product_id          BigInt
+  warehouse_id        BigInt
+  unit_code           String    @unique @db.VarChar(30) // e.g. RU-OC-0012
+  serial_number       String    @unique @db.VarChar(80)
+  purchase_date       DateTime? @db.Date
+  purchase_cost_paise BigInt?
+  condition           String    @default("new") // new | good | needs_service | damaged | retired
+  status              String    @default("available") // available | reserved | in_transit | with_customer | under_service | retired
+  current_rental_id   BigInt?
+  last_service_at     DateTime? @db.Date
+  next_service_due    DateTime? @db.Date
+  notes               String?
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  product        Product                @relation(fields: [product_id], references: [id])
+  warehouse      Warehouse              @relation(fields: [warehouse_id], references: [id])
+  current_rental Rental?                @relation("UnitCurrentRental", fields: [current_rental_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  rentals        Rental[]               @relation("RentalAssignedUnit")
+  service_logs   RentalUnitServiceLog[]
+  status_history RentalStatusHistory[]
+
+  @@index([product_id])
+  @@index([status])
+  @@index([next_service_due])
+  @@map("rental_units")
+}
+
+/// Service and sanitisation history.
+model RentalUnitServiceLog {
+  id             BigInt    @id @default(autoincrement())
+  rental_unit_id BigInt
+  type           String // service | repair | sanitisation | inspection
+  issue          String?
+  action_taken   String?
+  cost_paise     BigInt?
+  performed_on   DateTime? @db.Date
+  admin_user_id  BigInt?
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  rental_unit RentalUnit @relation(fields: [rental_unit_id], references: [id], onDelete: Cascade)
+  admin_user  AdminUser? @relation(fields: [admin_user_id], references: [id], onDelete: SetNull)
+
+  @@index([rental_unit_id])
+  @@map("rental_unit_service_logs")
+}
+
+// =============================================================================
+// 11.5 CART AND PROMOTIONS (5)
+// =============================================================================
+
+/// One open cart per customer (partial UQ where status = 'open').
+model Cart {
+  id          BigInt   @id @default(autoincrement())
+  customer_id BigInt
+  coupon_id   BigInt?
+  status      String   @default("open") // open | converted | abandoned
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  customer Customer   @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  coupon   Coupon?    @relation(fields: [coupon_id], references: [id], onDelete: SetNull)
+  items    CartItem[]
+
+  @@index([customer_id])
+  @@map("carts")
+}
+
+model CartItem {
+  id         BigInt   @id @default(autoincrement())
+  cart_id    BigInt
+  variant_id BigInt
+  quantity   Int // > 0
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  cart    Cart           @relation(fields: [cart_id], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variant_id], references: [id], onDelete: Cascade)
+
+  @@unique([cart_id, variant_id])
+  @@map("cart_items")
+}
+
+model Coupon {
+  id                       BigInt    @id @default(autoincrement())
+  code                     String    @unique @db.VarChar(30) // stored upper-case
+  type                     String // percent | flat
+  value                    Decimal   @db.Decimal(10, 2) // % or rupees
+  max_discount_paise       BigInt?
+  min_order_paise          BigInt?
+  applies_to               String    @default("all") // all | categories | products | brands
+  applies_to_ids           BigInt[]
+  usage_limit_total        Int?
+  usage_limit_per_customer Int?
+  used_count               Int       @default(0)
+  first_order_only         Boolean   @default(false)
+  starts_at                DateTime? @db.Timestamptz(6)
+  ends_at                  DateTime? @db.Timestamptz(6)
+  is_active                Boolean   @default(true)
+  deleted_at               DateTime? @db.Timestamptz(6)
+  created_at               DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  carts       Cart[]
+  redemptions CouponRedemption[]
+
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id             BigInt   @id @default(autoincrement())
+  coupon_id      BigInt
+  customer_id    BigInt
+  order_id       BigInt   @unique
+  discount_paise BigInt
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  coupon   Coupon   @relation(fields: [coupon_id], references: [id])
+  customer Customer @relation(fields: [customer_id], references: [id])
+  order    Order    @relation(fields: [order_id], references: [id], onDelete: Cascade)
+
+  @@index([coupon_id, customer_id])
+  @@map("coupon_redemptions")
+}
+
+/// Deal of the Day.
+model Deal {
+  id               BigInt   @id @default(autoincrement())
+  variant_id       BigInt
+  deal_price_paise BigInt
+  starts_at        DateTime @db.Timestamptz(6) // drives the countdown
+  ends_at          DateTime @db.Timestamptz(6)
+  sort_order       Int      @default(0)
+  is_active        Boolean  @default(true)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  variant ProductVariant @relation(fields: [variant_id], references: [id], onDelete: Cascade)
+
+  @@index([starts_at, ends_at])
+  @@map("deals")
+}
+
+// =============================================================================
+// 11.6 ORDERS, PAYMENTS AND SHIPPING (9)
+// =============================================================================
+
+model Order {
+  id                    BigInt    @id @default(autoincrement())
+  order_number          String    @unique @db.VarChar(20) // e.g. BDM2611-00042
+  customer_id           BigInt
+  status                String    @default("pending_payment")
+  payment_method        String // razorpay | emi | cod
+  payment_status        String    @default("pending") // pending | paid | failed | refunded | partially_refunded
+  shipping_address      Json // snapshot
+  billing_address       Json? // snapshot
+  gstin                 String?   @db.Char(15) // B2B invoice when set
+  company_name          String?   @db.VarChar(200)
+  subtotal_paise        BigInt
+  discount_paise        BigInt    @default(0) // product discounts
+  coupon_code           String?   @db.VarChar(30)
+  coupon_discount_paise BigInt    @default(0)
+  shipping_paise        BigInt    @default(0)
+  cod_charge_paise      BigInt    @default(0)
+  tax_paise             BigInt    @default(0) // total GST
+  total_paise           BigInt
+  placed_at             DateTime  @default(now()) @db.Timestamptz(6)
+  confirmed_at          DateTime? @db.Timestamptz(6)
+  delivered_at          DateTime? @db.Timestamptz(6)
+  cancelled_at          DateTime? @db.Timestamptz(6)
+  cancel_reason         String?
+  notes_internal        String? // admin only
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  customer          Customer             @relation(fields: [customer_id], references: [id])
+  items             OrderItem[]
+  status_history    OrderStatusHistory[]
+  payments          Payment[]
+  refunds           Refund[]
+  shipments         Shipment[]
+  returns           Return[]
+  coupon_redemption CouponRedemption?
+  invoices          Invoice[]
+
+  @@index([customer_id])
+  @@index([status])
+  @@index([placed_at])
+  @@map("orders")
+}
+
+/// Price and tax snapshot per line.
+model OrderItem {
+  id               BigInt   @id @default(autoincrement())
+  order_id         BigInt
+  product_id       BigInt
+  variant_id       BigInt
+  product_name     String   @db.VarChar(250)
+  variant_name     String?  @db.VarChar(150)
+  sku              String   @db.VarChar(60)
+  hsn_code         String?  @db.VarChar(10)
+  quantity         Int
+  unit_price_paise BigInt
+  mrp_paise        BigInt
+  gst_rate         Decimal  @db.Decimal(4, 2)
+  cgst_paise       BigInt   @default(0) // intra-state → CGST + SGST
+  sgst_paise       BigInt   @default(0)
+  igst_paise       BigInt   @default(0) // inter-state → IGST
+  line_total_paise BigInt
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  order        Order          @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  product      Product        @relation(fields: [product_id], references: [id])
+  variant      ProductVariant @relation(fields: [variant_id], references: [id])
+  return_items ReturnItem[]
+
+  @@index([order_id])
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id          BigInt   @id @default(autoincrement())
+  order_id    BigInt
+  from_status String?
+  to_status   String
+  actor_type  String // system | customer | admin | webhook
+  actor_id    BigInt?
+  note        String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  order Order @relation(fields: [order_id], references: [id], onDelete: Cascade)
+
+  @@index([order_id])
+  @@map("order_status_history")
+}
+
+/// One row per gateway attempt (orders and rentals). Exactly one of order_id / rental_id.
+model Payment {
+  id                 BigInt    @id @default(autoincrement())
+  order_id           BigInt?
+  rental_id          BigInt?
+  purpose            String // order | rental_booking | rental_extension | late_fee
+  gateway            String // razorpay | cod
+  gateway_order_id   String?   @unique @db.VarChar(60)
+  gateway_payment_id String?   @unique @db.VarChar(60)
+  method             String?   @db.VarChar(30) // upi | card | netbanking | emi | cardless_emi | paylater
+  emi_tenure_months  Int?      @db.SmallInt
+  amount_paise       BigInt
+  status             String    @default("created") // created | authorized | captured | failed
+  failure_reason     String?
+  raw_response       Json?
+  captured_at        DateTime? @db.Timestamptz(6)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  order          Order?            @relation(fields: [order_id], references: [id])
+  rental         Rental?           @relation(fields: [rental_id], references: [id])
+  refunds        Refund[]
+  extensions     RentalExtension[]
+  rental_charges RentalCharge[]
+
+  @@index([order_id])
+  @@index([rental_id])
+  @@map("payments")
+}
+
+model Refund {
+  id                BigInt    @id @default(autoincrement())
+  payment_id        BigInt?
+  order_id          BigInt?
+  rental_id         BigInt?
+  return_id         BigInt?
+  gateway_refund_id String?   @unique @db.VarChar(60)
+  amount_paise      BigInt
+  reason            String // cancel | return | deposit_refund | goodwill
+  method            String    @default("gateway") // gateway | bank_transfer (COD)
+  bank_details      Json? // encrypted, COD only
+  status            String    @default("processing") // processing | processed | failed
+  admin_user_id     BigInt?
+  processed_at      DateTime? @db.Timestamptz(6)
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  payment        Payment?       @relation(fields: [payment_id], references: [id])
+  order          Order?         @relation(fields: [order_id], references: [id])
+  rental         Rental?        @relation(fields: [rental_id], references: [id])
+  return         Return?        @relation(fields: [return_id], references: [id])
+  admin_user     AdminUser?     @relation(fields: [admin_user_id], references: [id], onDelete: SetNull)
+  rental_charges RentalCharge[]
+
+  @@map("refunds")
+}
+
+/// Forward and reverse, for orders and rentals.
+model Shipment {
+  id                     BigInt    @id @default(autoincrement())
+  order_id               BigInt?
+  rental_id              BigInt?
+  return_id              BigInt?
+  direction              String // forward | reverse
+  warehouse_id           BigInt?
+  shiprocket_order_id    String?   @db.VarChar(40)
+  shiprocket_shipment_id String?   @db.VarChar(40)
+  courier_name           String?   @db.VarChar(80)
+  awb_code               String?   @unique @db.VarChar(40)
+  tracking_url           String?
+  weight_grams           Int?
+  dimensions             Json?
+  status                 String    @default("created")
+  pickup_date            DateTime? @db.Date
+  delivered_at           DateTime? @db.Timestamptz(6)
+  created_at             DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  order     Order?          @relation(fields: [order_id], references: [id])
+  rental    Rental?         @relation(fields: [rental_id], references: [id])
+  return    Return?         @relation(fields: [return_id], references: [id])
+  warehouse Warehouse?      @relation(fields: [warehouse_id], references: [id])
+  events    ShipmentEvent[]
+
+  @@index([order_id])
+  @@index([rental_id])
+  @@map("shipments")
+}
+
+/// Tracking timeline.
+model ShipmentEvent {
+  id          BigInt    @id @default(autoincrement())
+  shipment_id BigInt
+  status      String    @db.VarChar(60) // courier status text
+  location    String?   @db.VarChar(120)
+  event_time  DateTime? @db.Timestamptz(6)
+  raw         Json?
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  shipment Shipment @relation(fields: [shipment_id], references: [id], onDelete: Cascade)
+
+  @@index([shipment_id])
+  @@map("shipment_events")
+}
+
+model Return {
+  id            BigInt   @id @default(autoincrement())
+  order_id      BigInt
+  return_number String   @unique @db.VarChar(20)
+  reason        String?
+  photos        String[] // URLs
+  status        String   @default("requested") // requested | approved | pickup_scheduled | received | refunded | rejected
+  admin_note    String?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  order     Order        @relation(fields: [order_id], references: [id])
+  items     ReturnItem[]
+  refunds   Refund[]
+  shipments Shipment[]
+
+  @@index([order_id])
+  @@map("returns")
+}
+
+model ReturnItem {
+  id                 BigInt   @id @default(autoincrement())
+  return_id          BigInt
+  order_item_id      BigInt
+  quantity           Int
+  condition_received String? // resellable | damaged
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  return     Return    @relation(fields: [return_id], references: [id], onDelete: Cascade)
+  order_item OrderItem @relation(fields: [order_item_id], references: [id])
+
+  @@map("return_items")
+}
+
+// =============================================================================
+// 11.7 RENTALS (6)
+// =============================================================================
+
+/// Plans offered per product.
+model RentalPlan {
+  id                     BigInt   @id @default(autoincrement())
+  product_id             BigInt
+  period                 String // daily | weekly | monthly
+  price_paise            BigInt // per period
+  min_periods            Int      @default(1)
+  max_periods            Int      @default(12)
+  security_deposit_paise BigInt   @default(0) // refundable
+  delivery_pickup_paise  BigInt   @default(0)
+  kyc_required           Boolean  @default(true)
+  prescription_required  Boolean  @default(false)
+  is_active              Boolean  @default(true)
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  product Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  rentals Rental[]
+
+  @@unique([product_id, period])
+  @@map("rental_plans")
+}
+
+model Rental {
+  id                   BigInt    @id @default(autoincrement())
+  rental_number        String    @unique @db.VarChar(20) // e.g. BDR2611-00017
+  customer_id          BigInt
+  product_id           BigInt
+  rental_plan_id       BigInt
+  rental_unit_id       BigInt? // partial UQ while the rental is open
+  product_name         String    @db.VarChar(250) // snapshot
+  period               String // snapshot
+  periods              Int // duration booked
+  rate_paise           BigInt // snapshot of plan price
+  rent_paise           BigInt
+  deposit_paise        BigInt
+  charges_paise        BigInt    @default(0)
+  tax_paise            BigInt    @default(0)
+  total_paid_paise     BigInt    @default(0)
+  requested_start_date DateTime? @db.Date
+  start_date           DateTime? @db.Date // fixed at delivery
+  end_date             DateTime? @db.Date
+  delivery_address     Json // snapshot
+  status               String    @default("pending_payment")
+  kyc_status           String    @default("pending") // pending | approved | rejected | reupload_requested
+  kyc_reviewed_by      BigInt?
+  return_condition     String? // good | needs_service | damaged
+  return_notes         String?
+  return_photos        String[]
+  deposit_refund_paise BigInt? // deposit − deductions
+  deposit_refunded_at  DateTime? @db.Timestamptz(6)
+  cancel_reason        String?
+  created_at           DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  customer       Customer              @relation(fields: [customer_id], references: [id])
+  product        Product               @relation(fields: [product_id], references: [id])
+  plan           RentalPlan            @relation(fields: [rental_plan_id], references: [id])
+  unit           RentalUnit?           @relation("RentalAssignedUnit", fields: [rental_unit_id], references: [id], onDelete: SetNull)
+  kyc_reviewer   AdminUser?            @relation("RentalKycReviewer", fields: [kyc_reviewed_by], references: [id], onDelete: SetNull)
+  current_for    RentalUnit[]          @relation("UnitCurrentRental")
+  kyc_documents  RentalKycDocument[]
+  extensions     RentalExtension[]
+  charges        RentalCharge[]
+  status_history RentalStatusHistory[]
+  payments       Payment[]
+  refunds        Refund[]
+  shipments      Shipment[]
+  invoices       Invoice[]
+
+  @@index([customer_id])
+  @@index([status])
+  @@index([rental_unit_id])
+  @@map("rentals")
+}
+
+model RentalKycDocument {
+  id            BigInt   @id @default(autoincrement())
+  rental_id     BigInt
+  doc_type      String // id_front | id_back | address_proof | prescription
+  storage_key   String // private bucket key, never a public URL
+  mime_type     String?  @db.VarChar(100)
+  size_bytes    Int?
+  status        String   @default("uploaded") // uploaded | approved | rejected
+  reject_reason String?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  rental Rental @relation(fields: [rental_id], references: [id], onDelete: Cascade)
+
+  @@index([rental_id])
+  @@map("rental_kyc_documents")
+}
+
+model RentalExtension {
+  id            BigInt    @id @default(autoincrement())
+  rental_id     BigInt
+  extra_periods Int
+  amount_paise  BigInt
+  old_end_date  DateTime? @db.Date
+  new_end_date  DateTime? @db.Date
+  status        String    @default("requested") // requested | approved | paid | rejected
+  payment_id    BigInt?
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  rental  Rental   @relation(fields: [rental_id], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [payment_id], references: [id])
+
+  @@index([rental_id])
+  @@map("rental_extensions")
+}
+
+/// The rental money ledger. Refund = deposit − sum(deductions).
+model RentalCharge {
+  id            BigInt   @id @default(autoincrement())
+  rental_id     BigInt
+  type          String // rent | deposit | delivery_pickup | extension | late_fee | damage | missing_accessory | deposit_refund
+  direction     String // debit (customer owes) | credit (paid or refunded)
+  amount_paise  BigInt
+  description   String?
+  payment_id    BigInt?
+  refund_id     BigInt?
+  admin_user_id BigInt?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  rental     Rental     @relation(fields: [rental_id], references: [id], onDelete: Cascade)
+  payment    Payment?   @relation(fields: [payment_id], references: [id])
+  refund     Refund?    @relation(fields: [refund_id], references: [id])
+  admin_user AdminUser? @relation(fields: [admin_user_id], references: [id], onDelete: SetNull)
+
+  @@index([rental_id])
+  @@map("rental_charges")
+}
+
+/// Same shape as order_status_history, keyed on rental_id; also records the unit.
+model RentalStatusHistory {
+  id             BigInt   @id @default(autoincrement())
+  rental_id      BigInt
+  from_status    String?
+  to_status      String
+  actor_type     String // system | customer | admin | webhook
+  actor_id       BigInt?
+  note           String?
+  rental_unit_id BigInt?
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  rental      Rental      @relation(fields: [rental_id], references: [id], onDelete: Cascade)
+  rental_unit RentalUnit? @relation(fields: [rental_unit_id], references: [id], onDelete: SetNull)
+
+  @@index([rental_id])
+  @@map("rental_status_history")
+}
+
+// =============================================================================
+// 11.8 LEADS AND REVIEWS (4)
+// =============================================================================
+
+model Enquiry {
+  id                BigInt    @id @default(autoincrement())
+  type              String // sleep_test | bulk | contact
+  name              String    @db.VarChar(120)
+  mobile            String    @db.VarChar(15)
+  email             String?   @db.Citext
+  city              String?   @db.VarChar(80)
+  details           Json? // test_type, preferred_date, products, quantity, organisation
+  message           String?
+  consent           Boolean   @default(false)
+  source_page       String?   @db.VarChar(200)
+  utm_source        String?   @db.VarChar(100)
+  utm_campaign      String?   @db.VarChar(100)
+  status            String    @default("new") // new | contacted | follow_up | converted | closed
+  assigned_to       BigInt?
+  next_follow_up_at DateTime? @db.Timestamptz(6)
+  customer_id       BigInt?
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  assignee AdminUser?    @relation("EnquiryAssignee", fields: [assigned_to], references: [id], onDelete: SetNull)
+  customer Customer?     @relation(fields: [customer_id], references: [id], onDelete: SetNull)
+  notes    EnquiryNote[]
+
+  @@index([type])
+  @@index([mobile])
+  @@index([status])
+  @@map("enquiries")
+}
+
+model EnquiryNote {
+  id            BigInt   @id @default(autoincrement())
+  enquiry_id    BigInt
+  admin_user_id BigInt?
+  note          String
+  status_after  String?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  enquiry    Enquiry    @relation(fields: [enquiry_id], references: [id], onDelete: Cascade)
+  admin_user AdminUser? @relation(fields: [admin_user_id], references: [id], onDelete: SetNull)
+
+  @@index([enquiry_id])
+  @@map("enquiry_notes")
+}
+
+model Review {
+  id                BigInt    @id @default(autoincrement())
+  product_id        BigInt
+  customer_id       BigInt? // nullable (guest)
+  name              String    @db.VarChar(80)
+  mobile            String?   @db.VarChar(15) // verified by OTP; never public
+  rating            Int       @db.SmallInt // 1–5
+  title             String?   @db.VarChar(150)
+  comment           String // 20–600 chars
+  is_verified_buyer Boolean   @default(false)
+  status            String    @default("pending") // pending | approved | rejected
+  reject_reason     String?
+  moderated_by      BigInt?
+  moderated_at      DateTime? @db.Timestamptz(6)
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  product   Product       @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  customer  Customer?     @relation(fields: [customer_id], references: [id], onDelete: SetNull)
+  moderator AdminUser?    @relation("ReviewModerator", fields: [moderated_by], references: [id], onDelete: SetNull)
+  images    ReviewImage[]
+
+  @@index([product_id, status])
+  @@map("reviews")
+}
+
+model ReviewImage {
+  id         BigInt   @id @default(autoincrement())
+  review_id  BigInt
+  url        String // max 3 per review (service check)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  review Review @relation(fields: [review_id], references: [id], onDelete: Cascade)
+
+  @@index([review_id])
+  @@map("review_images")
+}
+
+// =============================================================================
+// 11.9 CMS AND SYSTEM (8)
+// =============================================================================
+
+/// Hero and page banners in one table.
+model Banner {
+  id                BigInt    @id @default(autoincrement())
+  placement         String // hero | category | brand | best_sellers | new_arrivals | offers | hot_selling | deal_of_day | brands_page | rental | sleep_test
+  target_id         BigInt? // category or brand id when placement needs one
+  title             String?   @db.VarChar(150) // internal
+  image_desktop_url String // 1920×500 (hero)
+  image_mobile_url  String? // 800×600 (hero)
+  link_url          String?
+  alt_text          String?   @db.VarChar(200)
+  sort_order        Int       @default(0)
+  starts_at         DateTime? @db.Timestamptz(6)
+  ends_at           DateTime? @db.Timestamptz(6)
+  is_active         Boolean   @default(true)
+  deleted_at        DateTime? @db.Timestamptz(6)
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([placement, target_id])
+  @@map("banners")
+}
+
+model HomepageSection {
+  id         BigInt   @id @default(autoincrement())
+  key        String   @unique @db.VarChar(40)
+  title      String?  @db.VarChar(150)
+  config     Json? // selected product / category ids, limits
+  sort_order Int      @default(0)
+  is_visible Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("homepage_sections")
+}
+
+/// About, policies, Rental Terms.
+model Page {
+  id               BigInt   @id @default(autoincrement())
+  slug             String   @unique @db.VarChar(80)
+  title            String   @db.VarChar(150)
+  content          String? // sanitised HTML
+  meta_title       String?  @db.VarChar(200)
+  meta_description String?  @db.VarChar(320)
+  is_published     Boolean  @default(false)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("pages")
+}
+
+model Faq {
+  id         BigInt   @id @default(autoincrement())
+  group_key  String   @db.VarChar(30) // general | rental | sleep_test | product
+  question   String
+  answer     String
+  sort_order Int      @default(0)
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([group_key])
+  @@map("faqs")
+}
+
+model BlogPost {
+  id               BigInt    @id @default(autoincrement())
+  slug             String    @unique @db.VarChar(200)
+  title            String    @db.VarChar(200)
+  cover_image_url  String?
+  excerpt          String?   @db.VarChar(400)
+  content          String?
+  category         String?   @db.VarChar(60)
+  tags             String[]
+  author_id        BigInt?
+  status           String    @default("draft") // draft | scheduled | published
+  published_at     DateTime? @db.Timestamptz(6)
+  meta_title       String?   @db.VarChar(200)
+  meta_description String?   @db.VarChar(320)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  author AdminUser? @relation(fields: [author_id], references: [id], onDelete: SetNull)
+
+  @@index([status, published_at])
+  @@map("blog_posts")
+}
+
+/// Key–value store for admin Settings.
+model Setting {
+  id         BigInt   @id @default(autoincrement())
+  group_key  String   @db.VarChar(40) // store | shipping | payments | tax | rental | notifications
+  key        String   @db.VarChar(80)
+  value      Json?
+  is_secret  Boolean  @default(false) // encrypted at rest, masked in UI
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([group_key, key])
+  @@map("settings")
+}
+
+/// Idempotency and audit for Razorpay / Shiprocket.
+model WebhookEvent {
+  id           BigInt    @id @default(autoincrement())
+  provider     String // razorpay | shiprocket
+  event_id     String    @db.VarChar(100)
+  event_type   String?   @db.VarChar(60)
+  payload      Json
+  status       String    @default("received") // received | processed | failed | ignored
+  error        String?
+  processed_at DateTime? @db.Timestamptz(6)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([provider, event_id])
+  @@map("webhook_events")
+}
+
+model Invoice {
+  id             BigInt   @id @default(autoincrement())
+  invoice_number String   @unique @db.VarChar(30) // gap-free per financial year
+  order_id       BigInt?
+  rental_id      BigInt?
+  type           String // b2c | b2b
+  financial_year String   @db.Char(7) // e.g. 2026-27
+  total_paise    BigInt
+  tax_paise      BigInt
+  pdf_url        String?
+  issued_at      DateTime @default(now()) @db.Timestamptz(6)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  order  Order?  @relation(fields: [order_id], references: [id])
+  rental Rental? @relation(fields: [rental_id], references: [id])
+
+  @@map("invoices")
+}
+
+// =============================================================================
+// + ADDED: AUTH SESSIONS (refresh-token rotation / logout / reuse detection)
+// =============================================================================
+
+/// One row per refresh token. Rotated on every refresh; revoked on logout.
+model AuthSession {
+  id            BigInt    @id @default(autoincrement())
+  subject_type  String // customer | admin
+  customer_id   BigInt?
+  admin_user_id BigInt?
+  jti           String    @unique @db.VarChar(64) // refresh token id
+  remember      Boolean   @default(true) // false = browser-session cookie (admin "remember me" off)
+  user_agent    String?   @db.VarChar(300)
+  ip_address    String?   @db.Inet
+  expires_at    DateTime  @db.Timestamptz(6)
+  revoked_at    DateTime? @db.Timestamptz(6)
+  replaced_by   String?   @db.VarChar(64) // jti of the token that replaced this one
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  customer   Customer?  @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  admin_user AdminUser? @relation(fields: [admin_user_id], references: [id], onDelete: Cascade)
+
+  @@index([customer_id])
+  @@index([admin_user_id])
+  @@map("auth_sessions")
+}

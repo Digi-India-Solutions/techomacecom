@@ -38,3 +38,7 @@ Thumbs.db
 .vercel
 .turbo
 *.pem
+
+# Uploaded images live on the server's disk (backend/uploads) — back them up, don't commit them
+backend/uploads/*
+!backend/uploads/.gitkeep

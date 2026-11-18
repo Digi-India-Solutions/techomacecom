@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Edit3,
   KeyRound,
+  Lock,
   Plus,
   ShieldCheck,
+  Trash2,
   UserCheck,
   UserCog,
   UserX,
@@ -14,6 +16,7 @@ import type {
   StaffMember,
 } from '@/types/admin';
 import {
+  deleteRoleDefinition,
   listRoles,
   listStaff,
   MATRIX_ACTIONS,
@@ -23,7 +26,7 @@ import {
   saveStaffMember,
   toggleStaffActive,
 } from '@/lib/api/admin/staff';
-import { changeAdminPassword } from '@/lib/api/admin/auth';
+import { changeAdminPassword, PASSWORD_HINT } from '@/lib/api/admin/auth';
 import { formatDateTime } from '@/lib/api/admin/client';
 import { useAuth } from '@/components/admin/AuthContext';
 import { useToast } from '@/components/admin/ToastProvider';
@@ -43,7 +46,13 @@ function emptyMatrix(): RolePermissionMatrix {
 }
 
 export function StaffRolesPage() {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, can, reload } = useAuth();
+  const canCreate = can('staff.create');
+  const canEdit = can('staff.edit');
+  const canDelete = can('staff.delete');
+
+  const errorToast = (title: string, err: unknown) =>
+    showToast({ title, description: err instanceof Error ? err.message : 'Please try again', variant: 'error' });
   const { showToast } = useToast();
 
   const [tab, setTab] = useState<StaffTabKey>('staff');
@@ -57,7 +66,7 @@ export function StaffRolesPage() {
   const [staffName, setStaffName] = useState('');
   const [staffEmail, setStaffEmail] = useState('');
   const [staffMobile, setStaffMobile] = useState('');
-  const [staffRoleId, setStaffRoleId] = useState('role-staff');
+  const [staffRoleId, setStaffRoleId] = useState('');
   const [staffDept, setStaffDept] = useState('');
   const [staffStatus, setStaffStatus] = useState<'active' | 'inactive'>('active');
 
@@ -68,6 +77,8 @@ export function StaffRolesPage() {
   const [roleKey, setRoleKey] = useState('');
   const [roleDesc, setRoleDesc] = useState('');
   const [roleMatrix, setRoleMatrix] = useState<RolePermissionMatrix>(emptyMatrix());
+  const [roleLocked, setRoleLocked] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // My Profile tab state
   const [myName, setMyName] = useState(user?.name || '');
@@ -82,6 +93,8 @@ export function StaffRolesPage() {
       const [sRows, rRows] = await Promise.all([listStaff(), listRoles()]);
       setStaff(sRows);
       setRoles(rRows);
+    } catch (err) {
+      errorToast('Could not load staff & roles', err);
     } finally {
       setLoading(false);
     }
@@ -96,7 +109,7 @@ export function StaffRolesPage() {
     setStaffName('');
     setStaffEmail('');
     setStaffMobile('');
-    setStaffRoleId(roles[2]?.id || 'role-staff');
+    setStaffRoleId(roles.find((r) => r.key === 'staff')?.id || roles[0]?.id || '');
     setStaffDept('Operations');
     setStaffStatus('active');
     setStaffDrawerOpen(true);
@@ -115,21 +128,31 @@ export function StaffRolesPage() {
 
   const handleSaveStaff = async (e: React.FormEvent) => {
     e.preventDefault();
-    const next = await saveStaffMember({
-      id: editingStaffId,
-      name: staffName,
-      email: staffEmail,
-      mobile: staffMobile,
-      roleId: staffRoleId,
-      department: staffDept,
-      status: staffStatus,
-    });
-    setStaff(next);
-    setStaffDrawerOpen(false);
-    showToast({
-      title: editingStaffId ? 'Staff account updated' : 'Staff member added',
-      variant: 'success',
-    });
+    setSaving(true);
+    try {
+      const res = await saveStaffMember({
+        id: editingStaffId,
+        name: staffName,
+        email: staffEmail,
+        mobile: staffMobile,
+        roleId: staffRoleId,
+        department: staffDept,
+        status: staffStatus,
+      });
+      setStaff(res.list);
+      setStaffDrawerOpen(false);
+      showToast({
+        title: editingStaffId ? 'Staff account updated' : 'Staff member added',
+        // inviteUrl only comes back in development when the email could not be sent
+        description: res.inviteUrl ? `${res.message}. Invite link: ${res.inviteUrl}` : res.message,
+        variant: 'success',
+      });
+      if (editingStaffId === user?.id) await reload();
+    } catch (err) {
+      errorToast('Could not save staff member', err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openNewRole = () => {
@@ -138,6 +161,7 @@ export function StaffRolesPage() {
     setRoleKey('');
     setRoleDesc('');
     setRoleMatrix(emptyMatrix());
+    setRoleLocked(false);
     setRoleDrawerOpen(true);
   };
 
@@ -147,24 +171,45 @@ export function StaffRolesPage() {
     setRoleKey(r.key);
     setRoleDesc(r.description);
     setRoleMatrix(structuredClone(r.matrix));
+    setRoleLocked(Boolean(r.isLocked));
     setRoleDrawerOpen(true);
   };
 
   const handleSaveRole = async (e: React.FormEvent) => {
     e.preventDefault();
-    const next = await saveRoleDefinition({
-      id: editingRoleId,
-      name: roleName,
-      key: roleKey || roleName.toLowerCase().replace(/\s+/g, '_'),
-      description: roleDesc,
-      matrix: roleMatrix,
-    });
-    setRoles(next);
-    setRoleDrawerOpen(false);
-    showToast({
-      title: editingRoleId ? 'Role permissions updated' : 'Custom role created',
-      variant: 'success',
-    });
+    setSaving(true);
+    try {
+      const next = await saveRoleDefinition({
+        id: editingRoleId,
+        name: roleName,
+        key: roleKey || roleName.toLowerCase().replace(/\s+/g, '_'),
+        description: roleDesc,
+        matrix: roleMatrix,
+      });
+      setRoles(next);
+      setRoleDrawerOpen(false);
+      showToast({
+        title: editingRoleId ? 'Role permissions updated' : 'Custom role created',
+        description: 'Staff with this role get the new permissions on their next action.',
+        variant: 'success',
+      });
+      // If this is my own role, refresh what I can see
+      await reload();
+    } catch (err) {
+      errorToast('Could not save role', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteRole = async (r: RoleDefinition) => {
+    if (!window.confirm(`Delete the "${r.name}" role? This cannot be undone.`)) return;
+    try {
+      setRoles(await deleteRoleDefinition(r.id));
+      showToast({ title: `Role "${r.name}" deleted`, variant: 'success' });
+    } catch (err) {
+      errorToast('Could not delete role', err);
+    }
   };
 
   const staffColumns: DataTableColumn<StaffMember>[] = useMemo(
@@ -176,7 +221,16 @@ export function StaffRolesPage() {
         sortValue: (s) => s.name,
         render: (s) => (
           <div>
-            <p className="text-sm font-semibold text-[#12263F]">{s.name}</p>
+            <p className="text-sm font-semibold text-[#12263F] flex items-center gap-1.5 flex-wrap">
+              {s.name}
+              {s.id === user?.id && <span className="rounded bg-[#EAF2FC] px-1.5 py-0.5 text-[10px] font-semibold text-[#1D5FAF]">You</span>}
+              {s.passwordSet === false && (
+                <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">Invite pending</span>
+              )}
+              {s.lockedUntil && (
+                <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Locked</span>
+              )}
+            </p>
             <p className="text-xs text-[#5B6B82]">
               {s.email} · {s.mobile}
             </p>
@@ -220,10 +274,19 @@ export function StaffRolesPage() {
             <button
               type="button"
               onClick={async () => {
-                const msg = await resetStaffPassword(s.id);
-                showToast({ title: 'Password Reset', description: msg, variant: 'info' });
+                try {
+                  const res = await resetStaffPassword(s.id);
+                  showToast({
+                    title: s.passwordSet === false ? 'Invite re-sent' : 'Password reset sent',
+                    description: res.resetUrl ? `${res.message}. Link: ${res.resetUrl}` : res.message,
+                    variant: 'info',
+                  });
+                } catch (err) {
+                  errorToast('Could not send reset link', err);
+                }
               }}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#DCE6F2] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC]"
+              disabled={!canEdit}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#DCE6F2] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC] disabled:opacity-40 disabled:cursor-not-allowed"
               title="Send password reset"
             >
               <KeyRound className="h-3.5 w-3.5 text-[#5B6B82]" />
@@ -232,11 +295,19 @@ export function StaffRolesPage() {
             <button
               type="button"
               onClick={async () => {
-                const next = await toggleStaffActive(s.id);
-                setStaff(next);
-                showToast({ title: 'Staff status updated', variant: 'success' });
+                try {
+                  setStaff(await toggleStaffActive(s.id));
+                  showToast({
+                    title: s.status === 'active' ? `${s.name} deactivated` : `${s.name} activated`,
+                    description: s.status === 'active' ? 'They have been signed out of every device.' : undefined,
+                    variant: 'success',
+                  });
+                } catch (err) {
+                  errorToast('Could not change status', err);
+                }
               }}
-              className="rounded-lg border border-[#DCE6F2] bg-white p-1.5 text-[#5B6B82] hover:bg-[#EAF2FC]"
+              disabled={!canEdit || s.id === user?.id}
+              className="rounded-lg border border-[#DCE6F2] bg-white p-1.5 text-[#5B6B82] hover:bg-[#EAF2FC] disabled:opacity-40 disabled:cursor-not-allowed"
               title={s.status === 'active' ? 'Deactivate' : 'Activate'}
             >
               {s.status === 'active' ? (
@@ -248,7 +319,8 @@ export function StaffRolesPage() {
             <button
               type="button"
               onClick={() => openEditStaff(s)}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#DCE6F2] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#1D5FAF] hover:bg-[#EAF2FC]"
+              disabled={!canEdit}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#DCE6F2] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#1D5FAF] hover:bg-[#EAF2FC] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Edit3 className="h-3.5 w-3.5" />
               Edit
@@ -258,7 +330,7 @@ export function StaffRolesPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [canEdit, user?.id]
   );
 
   return (
@@ -273,7 +345,7 @@ export function StaffRolesPage() {
           </p>
         </div>
 
-        {tab === 'staff' && (
+        {tab === 'staff' && canCreate && (
           <button
             type="button"
             onClick={openNewStaff}
@@ -283,7 +355,7 @@ export function StaffRolesPage() {
             Add Staff Member
           </button>
         )}
-        {tab === 'roles' && (
+        {tab === 'roles' && canCreate && (
           <button
             type="button"
             onClick={openNewRole}
@@ -350,25 +422,49 @@ export function StaffRolesPage() {
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-base font-bold text-[#12263F]">{r.name}</h3>
-                    {r.isDefault && (
-                      <span className="rounded bg-[#EAF2FC] px-2 py-0.5 text-[10px] font-semibold text-[#1D5FAF]">
-                        Default
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {r.isLocked && (
+                        <span className="inline-flex items-center gap-1 rounded bg-[#0B2545] px-2 py-0.5 text-[10px] font-semibold text-white">
+                          <Lock className="h-3 w-3" /> Full access
+                        </span>
+                      )}
+                      {r.isDefault && (
+                        <span className="rounded bg-[#EAF2FC] px-2 py-0.5 text-[10px] font-semibold text-[#1D5FAF]">
+                          Default
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <p className="mt-1.5 text-xs text-[#5B6B82]">{r.description}</p>
                   <p className="mt-3 text-xs font-semibold text-[#12263F] tabular-nums">
                     {totalAllowed} / {MATRIX_MODULES.length * MATRIX_ACTIONS.length} permissions enabled
                   </p>
+                  <p className="mt-0.5 text-xs text-[#5B6B82] tabular-nums">
+                    {r.staffCount ?? 0} staff member{r.staffCount === 1 ? '' : 's'}
+                  </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => openEditRole(r)}
-                  className="w-full rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] px-3.5 py-2 text-xs font-semibold text-[#1D5FAF] hover:bg-[#EAF2FC]"
-                >
-                  Edit Permission Matrix
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openEditRole(r)}
+                    className="flex-1 rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] px-3.5 py-2 text-xs font-semibold text-[#1D5FAF] hover:bg-[#EAF2FC]"
+                  >
+                    {canEdit && !r.isLocked ? 'Edit Permission Matrix' : 'View Permissions'}
+                  </button>
+                  {canDelete && !r.isDefault && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRole(r)}
+                      disabled={(r.staffCount ?? 0) > 0}
+                      title={(r.staffCount ?? 0) > 0 ? 'Move its staff to another role first' : 'Delete role'}
+                      className="rounded-lg border border-[#DCE6F2] bg-white px-2.5 text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label={`Delete role ${r.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -380,8 +476,12 @@ export function StaffRolesPage() {
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              await updateProfile({ name: myName, phone: myPhone, department: myDept });
-              showToast({ title: 'My Profile updated', variant: 'success' });
+              try {
+                await updateProfile({ name: myName, phone: myPhone, department: myDept });
+                showToast({ title: 'My Profile updated', variant: 'success' });
+              } catch (err) {
+                errorToast('Could not update profile', err);
+              }
             }}
             className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-4"
           >
@@ -426,13 +526,13 @@ export function StaffRolesPage() {
             onSubmit={async (e) => {
               e.preventDefault();
               try {
-                await changeAdminPassword({
+                const res = await changeAdminPassword({
                   currentPassword: currPwd,
                   newPassword: newPwd,
                 });
                 setCurrPwd('');
                 setNewPwd('');
-                showToast({ title: 'Password updated', variant: 'success' });
+                showToast({ title: 'Password updated', description: res.message, variant: 'success' });
               } catch (err) {
                 showToast({
                   title: 'Failed to update password',
@@ -453,7 +553,7 @@ export function StaffRolesPage() {
                 className={inputClass}
               />
             </FormField>
-            <FormField label="New Password" required hint="Minimum 6 characters">
+            <FormField label="New Password" required hint={PASSWORD_HINT}>
               <input
                 type="password"
                 required
@@ -511,6 +611,8 @@ export function StaffRolesPage() {
               value={staffRoleId}
               onChange={(e) => setStaffRoleId(e.target.value)}
               className={selectClass}
+              disabled={editingStaffId === user?.id}
+              required
             >
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -538,6 +640,11 @@ export function StaffRolesPage() {
               <option value="inactive">Inactive</option>
             </select>
           </FormField>
+          {!editingStaffId && (
+            <p className="rounded-lg bg-[#F6F9FD] border border-[#DCE6F2] px-3 py-2 text-xs text-[#5B6B82]">
+              We email an invite link to this address so they can set their own password.
+            </p>
+          )}
           <div className="flex justify-end gap-2 pt-3 border-t border-[#DCE6F2]">
             <button
               type="button"
@@ -548,9 +655,10 @@ export function StaffRolesPage() {
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+              disabled={saving}
+              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F] disabled:opacity-60"
             >
-              Save Staff
+              {saving ? 'Saving…' : editingStaffId ? 'Save Staff' : 'Add & Send Invite'}
             </button>
           </div>
         </form>
@@ -585,6 +693,12 @@ export function StaffRolesPage() {
             </FormField>
           </div>
 
+          {roleLocked && (
+            <p className="flex items-center gap-2 rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] px-3 py-2 text-xs text-[#5B6B82]">
+              <Lock className="h-3.5 w-3.5 text-[#0B2545]" />
+              Super Admin always has every permission, including new modules. Only the name and description can change.
+            </p>
+          )}
           <div className="overflow-x-auto rounded-xl border border-[#DCE6F2]">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
@@ -618,6 +732,7 @@ export function StaffRolesPage() {
                               }))
                             }
                             aria-label={`${mod.label} ${act.label}`}
+                            disabled={roleLocked || (editingRoleId ? !canEdit : !canCreate)}
                             className="rounded border-[#DCE6F2] text-[#1D5FAF]"
                           />
                         </td>
@@ -637,12 +752,15 @@ export function StaffRolesPage() {
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
-            >
-              Save Role Matrix
-            </button>
+            {(editingRoleId ? canEdit : canCreate) && (
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F] disabled:opacity-60"
+              >
+                {saving ? 'Saving…' : 'Save Role Matrix'}
+              </button>
+            )}
           </div>
         </form>
       </Drawer>

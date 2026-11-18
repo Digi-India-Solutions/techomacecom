@@ -21,7 +21,6 @@ import {
   ArrowLeft, 
   User, 
   Phone, 
-  Clock, 
   Check, 
   AlertCircle,
   FileCheck,
@@ -30,6 +29,7 @@ import {
   Trash2,
   Calendar
 } from 'lucide-react';
+import { CheckoutSkeleton } from '@/components/skeletons/PageSkeletons';
 
 export default function RentalCheckoutClient() {
   const router = useRouter();
@@ -94,7 +94,7 @@ export default function RentalCheckoutClient() {
   }, [draft, setDraft]);
 
   // STEP 1: AUTH STATE
-  const [phoneInput, setPhoneInput] = useState(user?.phone || '9811234567');
+  const [phoneInput, setPhoneInput] = useState(user?.phone || '');
   const [otpSent, setOtpSent] = useState(false);
   const [otpInput, setOtpInput] = useState('');
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -107,14 +107,14 @@ export default function RentalCheckoutClient() {
   const [customAddress, setCustomAddress] = useState<Address>({
     id: 'addr-new',
     type: 'Clinic',
-    name: user?.name || 'Dr. Vikram Malhotra',
-    clinicHospitalName: 'Malhotra Clinic & Health Center',
-    phone: '+91 ' + (user?.phone || '9811234567'),
-    addressLine1: 'Suite 204, Metro Plaza, Sector 18',
-    addressLine2: 'Near Sector 18 Metro Station',
-    pincode: '201301',
-    city: 'Noida',
-    state: 'Uttar Pradesh',
+    name: user?.name || '',
+    clinicHospitalName: '',
+    phone: user?.phone ? '+91 ' + user.phone : '',
+    addressLine1: '',
+    addressLine2: '',
+    pincode: '',
+    city: '',
+    state: '',
     isDefault: true
   });
 
@@ -144,13 +144,18 @@ export default function RentalCheckoutClient() {
       return;
     }
     const res = await requestMobileOtp(phoneInput);
+    if (!res.success) {
+      addToast({ type: 'error', title: 'Could not send OTP', message: res.message });
+      return;
+    }
     setOtpSent(true);
     addToast({
       type: 'info',
       title: 'OTP Sent',
-      message: `Demo OTP is ${res.demoOtp} (instant test).`
+      // devOtp is only returned by the API in development (no SMS provider yet)
+      message: res.demoOtp ? `${res.message}. Development code: ${res.demoOtp}` : res.message
     });
-    setOtpInput(res.demoOtp);
+    setOtpInput('');
   };
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
@@ -159,7 +164,7 @@ export default function RentalCheckoutClient() {
     try {
       const res = await verifyMobileOtp(phoneInput, otpInput);
       if (res.success && res.user) {
-        login(res.user, res.token || 'demo-jwt-token');
+        login(res.user);
         addToast({
           type: 'success',
           title: 'Mobile Verified',
@@ -244,12 +249,8 @@ export default function RentalCheckoutClient() {
   };
 
   if (!draft) {
-    return (
-      <div className="py-16 text-center space-y-4">
-        <Clock className="w-8 h-8 text-[#1D5FAF] animate-spin mx-auto" />
-        <p className="text-sm font-bold text-[#12263F]">Loading rental configuration...</p>
-      </div>
-    );
+    // The page already provides the outer container, so render the skeleton without one
+    return <CheckoutSkeleton className="" />;
   }
 
   const steps = [

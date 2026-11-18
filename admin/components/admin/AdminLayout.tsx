@@ -32,13 +32,12 @@ import {
   Star,
   Stethoscope,
   Tag,
-  UserCheck,
   UserCog,
   Users,
   Warehouse,
   X,
 } from 'lucide-react';
-import type { AdminNotification, AdminPermission, AdminRole, GlobalSearchResult } from '@/types/admin';
+import type { AdminNotification, AdminPermission, GlobalSearchResult } from '@/types/admin';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastProvider';
 import {
@@ -47,14 +46,14 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from '@/lib/api/admin/dashboard';
-import { changeAdminPassword } from '@/lib/api/admin/auth';
+import { changeAdminPassword, PASSWORD_HINT } from '@/lib/api/admin/auth';
 import { FormField, inputClass } from './FormField';
 
 interface NavItem {
   label: string;
   to: string;
   icon: React.ComponentType<{ className?: string }>;
-  permission: AdminPermission;
+  permission: AdminPermission | string;
   exact?: boolean;
 }
 
@@ -90,7 +89,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Sales',
     items: [
       { label: 'Orders', to: '/admin/orders', icon: ShoppingBag, permission: 'orders.view' },
-      { label: 'Returns & Refunds', to: '/admin/returns', icon: RotateCcw, permission: 'orders.view' },
+      { label: 'Returns & Refunds', to: '/admin/returns', icon: RotateCcw, permission: 'returns.view' },
     ],
   },
   {
@@ -131,7 +130,7 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 export function AdminLayout() {
-  const { user, isAuthenticated, can, logout, switchRole, updateProfile } = useAuth();
+  const { user, isAuthenticated, status, can, logout, updateProfile } = useAuth();
   const { showToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
@@ -190,6 +189,17 @@ export function AdminLayout() {
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
 
+  if (status === 'checking') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F6F9FD]" role="status" aria-live="polite">
+        <div className="flex items-center gap-3 text-sm text-[#5B6B82]">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-[#DCE6F2] border-t-[#1D5FAF]" />
+          Checking your session…
+        </div>
+      </div>
+    );
+  }
+
   if (!isAuthenticated || !user) {
     return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />;
   }
@@ -213,18 +223,6 @@ export function AdminLayout() {
     setNotifications(next);
   };
 
-  const handleSwitchRole = async (role: AdminRole) => {
-    await switchRole(role);
-    setProfileOpen(false);
-    showToast({
-      title: `Switched active role`,
-      description: `Now viewing admin console as ${
-        role === 'super_admin' ? 'Super Admin' : role === 'manager' ? 'Operations Manager' : 'Warehouse & Rental Staff'
-      }.`,
-      variant: 'info',
-    });
-  };
-
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     await updateProfile({
@@ -243,12 +241,12 @@ export function AdminLayout() {
       return;
     }
     try {
-      await changeAdminPassword({ currentPassword: currPwd, newPassword: newPwd });
+      const res = await changeAdminPassword({ currentPassword: currPwd, newPassword: newPwd });
       setPasswordModalOpen(false);
       setCurrPwd('');
       setNewPwd('');
       setConfirmPwd('');
-      showToast({ title: 'Password updated successfully', variant: 'success' });
+      showToast({ title: 'Password updated', description: res.message, variant: 'success' });
     } catch (err) {
       showToast({
         title: 'Unable to update password',
@@ -619,37 +617,6 @@ export function AdminLayout() {
                       </button>
                     </div>
 
-                    {/* Demo Role Switcher for testing RBAC */}
-                    <div className="border-t border-[#DCE6F2] p-2">
-                      <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[#5B6B82]">
-                        Preview Role Permissions
-                      </p>
-                      {(
-                        [
-                          { role: 'super_admin', label: 'Super Admin' },
-                          { role: 'manager', label: 'Operations Manager' },
-                          { role: 'staff', label: 'Warehouse Staff' },
-                        ] as { role: AdminRole; label: string }[]
-                      ).map((r) => (
-                        <button
-                          key={r.role}
-                          type="button"
-                          onClick={() => handleSwitchRole(r.role)}
-                          className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs transition-colors ${
-                            user.role === r.role
-                              ? 'bg-[#EAF2FC] font-semibold text-[#1D5FAF]'
-                              : 'text-[#5B6B82] hover:bg-[#F6F9FD] hover:text-[#12263F]'
-                          }`}
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <UserCheck className="h-3.5 w-3.5" />
-                            {r.label}
-                          </span>
-                          {user.role === r.role && <span className="text-[10px]">Active</span>}
-                        </button>
-                      ))}
-                    </div>
-
                     <div className="border-t border-[#DCE6F2] p-1.5">
                       <button
                         type="button"
@@ -763,7 +730,7 @@ export function AdminLayout() {
                   className={inputClass}
                 />
               </FormField>
-              <FormField label="New Password" required hint="Minimum 6 characters">
+              <FormField label="New Password" required hint={PASSWORD_HINT}>
                 <input
                   type="password"
                   required

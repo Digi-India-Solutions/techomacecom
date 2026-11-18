@@ -1,15 +1,28 @@
 import "dotenv/config";
+import "./src/lib/serialize.js"; // BigInt → JSON (must load before any response is sent)
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
+import env from "./config/env.js";
 import prisma, { connectDB, disconnectDB } from "./db/db.js";
 import { corsOptions, allowedOrigins } from "./config/cors.js";
+import { UPLOADS_ROOT, UPLOADS_URL_PREFIX } from "./src/lib/storage.js";
+import apiRoutes from "./src/routes.js";
+import { notFoundHandler, errorHandler } from "./src/middlewares/error.js";
 
 const app = express();
-const PORT = Number(process.env.PORT);
+const PORT = env.port;
 
+// Behind Nginx in production (document §13.3): trust X-Forwarded-For for req.ip
+if (env.isProduction) app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
+app.use(helmet());
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Health check — reports server uptime and database reachability
 app.get("/health", async (req, res) => {
@@ -33,16 +46,27 @@ app.get("/health", async (req, res) => {
   }
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ message: `Route ${req.method} ${req.originalUrl} not found` });
-});
+// Uploaded images (WebP). File names are random and never reused, so browsers and
+// CDNs may cache them forever. In production Nginx should serve this folder directly.
+app.use(
+  UPLOADS_URL_PREFIX,
+  express.static(UPLOADS_ROOT, {
+    immutable: true,
+    maxAge: "365d",
+    index: false,
+    dotfiles: "deny",
+    setHeaders(res) {
+      // helmet defaults to same-origin; the storefront (another origin) must be able to load these
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    },
+  })
+);
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(err.status || 500).json({ message: err.message || "Internal Server Error" });
-});
+// API — document §12: everything under /api/v1
+app.use("/api/v1", apiRoutes);
+
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 // Prisma adapter errors often have an empty message but a useful code (e.g. ECONNREFUSED)
 function describeError(error) {
@@ -58,8 +82,11 @@ async function start() {
   try {
     await connectDB();
     const server = app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT} (${process.env.NODE_ENV || "development"})`);
+      console.log(`Server running on http://localhost:${PORT} (${env.nodeEnv})`);
+      console.log(`API base: http://localhost:${PORT}/api/v1`);
       console.log(`CORS allowed origins: ${allowedOrigins.join(", ") || "none"}`);
+      if (!env.google.clientId) console.log("Google sign-in: off (set GOOGLE_CLIENT_ID to enable)");
+      if (env.sms.provider === "console") console.log("OTP SMS: printed to this console (SMS_PROVIDER=console)");
     });
 
     const shutdown = async (signal) => {
@@ -79,3 +106,5 @@ async function start() {
 }
 
 start();
+
+export default app;

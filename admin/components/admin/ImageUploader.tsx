@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import type { ProductImage, ProductImageType } from '@/types/admin';
 import { PRODUCT_IMAGES } from '@/lib/api/admin/mockData';
+import { uploadImages } from '@/lib/api/admin/client';
+import { useToast } from './ToastProvider';
 import { SafeImage } from './SafeImage';
 import { inputClass, selectClass } from './FormField';
 
@@ -38,6 +40,10 @@ export function ImageUploader({
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDraggingOverDropzone, setIsDraggingOverDropzone] = useState(false);
+  const { showToast } = useToast();
+  // Latest list, so async upload results never overwrite edits made meanwhile
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
 
   const normalizeOrder = (list: ProductImage[]): ProductImage[] =>
     list.map((img, i) => ({
@@ -46,18 +52,53 @@ export function ImageUploader({
       type: i === 0 ? 'main' : img.type === 'main' ? 'angle' : img.type,
     }));
 
-  const handleFiles = (files: FileList | null) => {
+  /**
+   * Shows a local preview immediately, uploads to the API (converted to WebP there),
+   * then swaps the preview for the server URL.
+   */
+  const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const remaining = maxImages - images.length;
     const selected = Array.from(files).slice(0, Math.max(0, remaining));
+    if (!selected.length) return;
+    const stamp = Date.now();
     const additions: ProductImage[] = selected.map((file, idx) => ({
-      id: `img-${Date.now()}-${idx}`,
+      id: `img-${stamp}-${idx}`,
       url: URL.createObjectURL(file),
+      uploading: true,
       type: images.length === 0 && idx === 0 ? 'main' : 'angle',
       altText: file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
       sortOrder: images.length + idx,
     }));
     onChange(normalizeOrder([...images, ...additions]));
+
+    const ids = new Set(additions.map((a) => a.id));
+    try {
+      const uploaded = await uploadImages(selected, 'products');
+      const byId = new Map(additions.map((a, i) => [a.id, uploaded[i]]));
+      onChange(
+        imagesRef.current.map((img) => {
+          const up = byId.get(img.id);
+          if (!up) return img;
+          URL.revokeObjectURL(img.url);
+          return { ...img, url: up.url, path: up.path, placeholder: up.placeholder, uploading: false };
+        })
+      );
+      const saved = uploaded.reduce((s, u) => s + (u.originalBytes - u.bytes), 0);
+      showToast({
+        title: `${uploaded.length} image${uploaded.length === 1 ? '' : 's'} uploaded as WebP`,
+        description: saved > 0 ? `${Math.round(saved / 1024)} KB smaller than the originals` : undefined,
+        variant: 'success',
+      });
+    } catch (err) {
+      additions.forEach((a) => URL.revokeObjectURL(a.url));
+      onChange(normalizeOrder(imagesRef.current.filter((img) => !ids.has(img.id))));
+      showToast({
+        title: 'Upload failed',
+        description: err instanceof Error ? err.message : 'Please try again',
+        variant: 'error',
+      });
+    }
   };
 
   const addSampleMedicalImage = () => {
@@ -119,7 +160,7 @@ export function ImageUploader({
           Drag &amp; drop product images here ({images.length}/{maxImages})
         </p>
         <p className="mt-1 text-xs text-[#5B6B82]">
-          Upload 5–6 high-resolution PNG or JPG images. Drag cards below to reorder — the first image is always the Main listing photo.
+          JPG, PNG, WebP, GIF or AVIF up to 10 MB each — converted to fast-loading WebP automatically. Drag cards below to reorder; the first image is the Main listing photo.
         </p>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
           <button
@@ -177,6 +218,12 @@ export function ImageUploader({
             >
               <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-[#DCE6F2] bg-[#F6F9FD]">
                 <SafeImage src={img.url} alt={img.altText || 'Product photo'} />
+                {img.uploading && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/75 text-xs font-semibold text-[#12263F]" role="status">
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-[#DCE6F2] border-t-[#1D5FAF]" />
+                    Converting to WebP…
+                  </div>
+                )}
 
                 <div className="absolute top-2 left-2 flex items-center gap-1">
                   <span

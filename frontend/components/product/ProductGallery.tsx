@@ -16,6 +16,7 @@ import {
   Maximize2 
 } from 'lucide-react';
 import type { ProductImage } from '@/types';
+import SkeletonImage from '@/components/common/SkeletonImage';
 
 /** Hover-zoom magnification and the image's inner padding (px) — both views use them so the lens and the zoom panel line up exactly. */
 const ZOOM = 2.5;
@@ -422,7 +423,7 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
 
           {/* Main Image — box matches the photo's shape, so no empty bands */}
           <div className="relative w-full h-full flex items-center justify-center">
-            <Image
+            <SkeletonImage
               src={activeImage.url}
               alt={activeImage.alt || `${productName} image ${activeIndex + 1}`}
               fill

@@ -260,7 +260,9 @@ interface UserState {
   isAuthenticated: boolean;
   isAuthModalOpen: boolean;
   setAuthModalOpen: (open: boolean) => void;
-  login: (user: User, token: string) => void;
+  login: (user: User, token?: string | null) => void;
+  /** Records a signed-in user without closing the auth modal (profile step, session sync). */
+  setUser: (user: User) => void;
   logout: () => void;
   updateUser: (updates: Partial<User>) => void;
   addAddress: (address: Address) => void;
@@ -273,40 +275,15 @@ interface UserState {
 export const useUserStore = create<UserState>()(
   persist(
     (set) => ({
-      user: {
-        id: 'usr-demo',
-        name: 'Dr. Vikram Malhotra',
-        email: 'dr.vikram@malhotraclinic.com',
-        phone: '9811234567',
-        role: 'doctor',
-        degree: 'BDS, MDS (Prosthodontics)',
-        registrationNumber: 'DCI-DEL-18920',
-        addresses: [
-          {
-            id: 'addr-1',
-            type: 'Clinic',
-            name: 'Dr. Vikram Malhotra',
-            clinicHospitalName: 'Malhotra Multi-Speciality Dental & Respiratory Center',
-            phone: '+91 9811234567',
-            addressLine1: 'Suite 204, Metro Plaza, Sector 18',
-            addressLine2: 'Near Metro Station',
-            pincode: '201301',
-            city: 'Noida',
-            state: 'Uttar Pradesh',
-            isDefault: true
-          }
-        ],
-        gstDetails: {
-          gstin: '09AAACM1234F1Z8',
-          legalBusinessName: 'Malhotra Healthcare Pvt Ltd',
-          isVerified: true
-        }
-      },
-      token: 'bdm_jwt_sample_token',
-      isAuthenticated: true,
+      // Signed out until the API confirms a session (see SessionSync in AppLayoutClient).
+      // Auth tokens live in httpOnly cookies set by the API — never in this store.
+      user: null,
+      token: null,
+      isAuthenticated: false,
       isAuthModalOpen: false,
       setAuthModalOpen: (open) => set({ isAuthModalOpen: open }),
-      login: (user, token) => set({ user, token, isAuthenticated: true, isAuthModalOpen: false }),
+      login: (user, token = null) => set({ user, token, isAuthenticated: true, isAuthModalOpen: false }),
+      setUser: (user) => set({ user, isAuthenticated: true }),
       logout: () => set({ user: null, token: null, isAuthenticated: false }),
       updateUser: (updates) =>
         set((state) => ({
@@ -364,6 +341,9 @@ export const useUserStore = create<UserState>()(
     }),
     {
       name: 'buydenmed-user-storage',
+      // v1: real API auth. Drops the old built-in demo user from browsers that saved it.
+      version: 1,
+      migrate: () => ({ user: null, token: null, isAuthenticated: false, isAuthModalOpen: false }) as unknown as UserState,
       storage: createJSONStorage(() => (typeof window !== 'undefined' ? localStorage : {
         getItem: () => null,
         setItem: () => null,

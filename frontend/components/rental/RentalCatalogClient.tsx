@@ -27,6 +27,7 @@ import {
   FileCheck
 } from 'lucide-react';
 import { useToastStore } from '@/lib/store';
+import SkeletonImage from '@/components/common/SkeletonImage';
 
 interface RentalCatalogClientProps {
   products: Product[];
@@ -321,7 +322,7 @@ export default function RentalCatalogClient({ products }: RentalCatalogClientPro
                     </div>
 
                     <div className="relative w-full h-full">
-                      <Image
+                      <SkeletonImage
                         src={getProductImageUrl(product)}
                         alt={product.name}
                         fill

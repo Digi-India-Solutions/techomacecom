@@ -30,7 +30,9 @@ export interface AdminUser {
   id: string;
   name: string;
   email: string;
-  role: AdminRole;
+  /** Role slug from the API: super_admin, manager, staff or a custom role key */
+  role: AdminRole | string;
+  roleId: string;
   roleLabel: string;
   avatarInitials: string;
   phone: string;
@@ -38,11 +40,10 @@ export interface AdminUser {
   lastLoginAt: string;
 }
 
+/** Signed-in staff member + the permission codes of their role (module.action). Tokens live in httpOnly cookies. */
 export interface AuthSession {
   user: AdminUser;
-  token: string;
-  rememberMe: boolean;
-  expiresAt: string;
+  permissions: string[];
 }
 
 export type DateRangePreset = 'today' | '7d' | '30d' | 'custom';
@@ -146,6 +147,12 @@ export type ProductImageType =
 export interface ProductImage {
   id: string;
   url: string;
+  /** Server path from the upload API (/uploads/…webp) — what the product API will store */
+  path?: string;
+  /** Tiny blurred preview from the upload API */
+  placeholder?: string;
+  /** true while the file is being converted / uploaded */
+  uploading?: boolean;
   type: ProductImageType;
   altText: string;
   sortOrder: number;

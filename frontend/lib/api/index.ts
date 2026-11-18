@@ -1,5 +1,6 @@
 import { 
   Product, 
+  User,
   Category, 
   Brand, 
   Coupon, 
@@ -26,6 +27,8 @@ import {
   MOCK_RENTALS,
   MOCK_REVIEWS
 } from '@/lib/mock/data';
+import { sendLoginOtp, verifyLoginOtp } from './customerAuth';
+import { errorMessage } from './backend';
 
 // Read base URL from NEXT_PUBLIC_API_URL if configured for real REST backend
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
@@ -488,69 +491,29 @@ export async function submitEnquiry(data: {
 /**
  * Mobile OTP Authentication UI helpers
  */
-export async function requestMobileOtp(phone: string): Promise<{ success: boolean; message: string; demoOtp: string }> {
-  return fetchOrMock('/api/auth/otp/request', () => {
-    return {
-      success: true,
-      message: `OTP sent successfully to +91 ${phone}`,
-      demoOtp: '123456' // For instant testing
-    };
-  }, {
-    method: 'POST',
-    body: JSON.stringify({ phone })
-  });
-}
-
-export async function verifyMobileOtp(phone: string, otp: string): Promise<{ success: boolean; token?: string; user?: any; message: string }> {
-  return fetchOrMock('/api/auth/otp/verify', () => {
-    if (otp === '123456' || otp.length === 6) {
-      return {
-        success: true,
-        token: 'bdm_jwt_sample_token_' + Date.now(),
-        user: {
-          id: 'usr-1',
-          name: 'Dr. Vikram Malhotra',
-          email: 'dr.vikram@malhotraclinic.com',
-          phone: phone,
-          role: 'doctor' as const,
-          degree: 'BDS, MDS (Prosthodontics)',
-          registrationNumber: 'DCI-DEL-18920',
-          addresses: [
-            {
-              id: 'addr-1',
-              type: 'Clinic' as const,
-              name: 'Dr. Vikram Malhotra',
-              clinicHospitalName: 'Malhotra Multi-Speciality Dental & Respiratory Center',
-              phone: '+91 ' + phone,
-              addressLine1: 'Suite 204, Metro Plaza, Sector 18',
-              pincode: '201301',
-              city: 'Noida',
-              state: 'Uttar Pradesh',
-              isDefault: true
-            }
-          ],
-          gstDetails: {
-            gstin: '09AAACM1234F1Z8',
-            legalBusinessName: 'Malhotra Healthcare Pvt Ltd',
-            isVerified: true
-          }
-        },
-        message: 'Welcome back, Dr. Malhotra!'
-      };
-    }
-    return {
-      success: false,
-      message: 'Invalid verification code. Please enter 123456.'
-    };
-  }, {
-    method: 'POST',
-    body: JSON.stringify({ phone, otp })
-  });
-}
-
 /**
- * Orders
+ * Mobile OTP sign-in — now served by the real API (backend/src/modules/auth).
+ * Kept with the old signatures for existing callers (e.g. rental checkout);
+ * new code should use lib/api/customerAuth directly.
  */
+export async function requestMobileOtp(phone: string): Promise<{ success: boolean; message: string; demoOtp: string }> {
+  try {
+    const res = await sendLoginOtp(phone);
+    return { success: true, message: res.message, demoOtp: res.devOtp || '' };
+  } catch (error) {
+    return { success: false, message: errorMessage(error), demoOtp: '' };
+  }
+}
+
+export async function verifyMobileOtp(phone: string, otp: string): Promise<{ success: boolean; token?: string; user?: User; message: string }> {
+  try {
+    const { user, isNewUser } = await verifyLoginOtp({ mobile: phone, otp });
+    return { success: true, user, message: isNewUser ? 'Account created' : 'Signed in' };
+  } catch (error) {
+    return { success: false, message: errorMessage(error) };
+  }
+}
+
 export async function getOrders(): Promise<Order[]> {
   return fetchOrMock('/api/orders', () => [...MOCK_ORDERS]);
 }

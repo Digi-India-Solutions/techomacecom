@@ -1,8 +1,8 @@
 import React from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { BlogPost } from '@/types';
 import { ArrowRight, Clock, Calendar } from 'lucide-react';
+import SkeletonImage from '@/components/common/SkeletonImage';
 
 interface BlogPreviewSectionProps {
   posts: BlogPost[];
@@ -38,7 +38,7 @@ export const BlogPreviewSection: React.FC<BlogPreviewSectionProps> = ({ posts })
               className="group bg-white rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-lg transition-all duration-300 flex flex-col overflow-hidden hover:-translate-y-1"
             >
               <div className="relative aspect-16/10 bg-[#F6F9FD] overflow-hidden">
-                <Image
+                <SkeletonImage
                   src={post.coverImage}
                   alt={post.title}
                   fill
