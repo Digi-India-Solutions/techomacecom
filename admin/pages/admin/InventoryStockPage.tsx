@@ -18,6 +18,8 @@ import {
   adjustStockItem,
   getStockMovements,
   listStockItems,
+  listWarehouses,
+  type WarehouseOption,
 } from '@/lib/api/admin/inventory';
 import { formatDateTime } from '@/lib/api/admin/client';
 import { useAuth } from '@/components/admin/AuthContext';
@@ -36,14 +38,23 @@ export function InventoryStockPage() {
   const { showToast } = useToast();
 
   const [items, setItems] = useState<StockItem[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | StockStatus | 'low_or_out'>(initialFilter);
   const [warehouseFilter, setWarehouseFilter] = useState('all');
 
+  useEffect(() => {
+    listWarehouses()
+      .then(setWarehouses)
+      .catch((err) => console.error('Failed to load warehouses:', err));
+  }, []);
+
   // Inline adjust modal
   const [adjustTarget, setAdjustTarget] = useState<StockItem | null>(null);
-  const [delta, setDelta] = useState<number>(1);
+  const [targetAvailable, setTargetAvailable] = useState<number>(0);
+  const [targetReserved, setTargetReserved] = useState<number>(0);
+  const [targetThreshold, setTargetThreshold] = useState<number>(5);
+  const [delta, setDelta] = useState<number>(0);
   const [reason, setReason] = useState<StockAdjustmentReason>('purchase');
   const [note, setNote] = useState('');
   const [adjusting, setAdjusting] = useState(false);
@@ -58,7 +69,6 @@ export function InventoryStockPage() {
     try {
       setItems(
         await listStockItems({
-          search,
           status: statusFilter,
           warehouseId: warehouseFilter,
         })
@@ -71,7 +81,32 @@ export function InventoryStockPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusFilter, warehouseFilter]);
+  }, [statusFilter, warehouseFilter]);
+
+  const openAdjustModal = (item: StockItem) => {
+    setAdjustTarget(item);
+    setTargetAvailable(item.availableStock);
+    setTargetReserved(item.reservedStock);
+    setTargetThreshold(item.lowStockThreshold);
+    setDelta(0);
+    setReason('purchase');
+    setNote('');
+  };
+
+  const handleAvailableInput = (val: number) => {
+    const nextVal = Math.max(0, val);
+    setTargetAvailable(nextVal);
+    if (adjustTarget) {
+      setDelta(nextVal - adjustTarget.availableStock);
+    }
+  };
+
+  const handleDeltaStep = (step: number) => {
+    if (!adjustTarget) return;
+    const nextVal = Math.max(0, targetAvailable + step);
+    setTargetAvailable(nextVal);
+    setDelta(nextVal - adjustTarget.availableStock);
+  };
 
   const openMovementHistory = async (item: StockItem) => {
     setHistoryItem(item);
@@ -85,31 +120,45 @@ export function InventoryStockPage() {
 
   const handleAdjustSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adjustTarget || delta === 0) return;
+    if (!adjustTarget) return;
     setAdjusting(true);
     try {
       const updated = await adjustStockItem({
         id: adjustTarget.id,
+        availableStock: targetAvailable,
         delta,
+        reservedStock: targetReserved,
+        lowStockThreshold: targetThreshold,
         reason,
         note,
         performedBy: user?.name || 'Admin',
       });
       showToast({
         title: `Stock updated for ${updated.sku}`,
-        description: `Available stock is now ${updated.availableStock} units.`,
+        description: `Available: ${updated.availableStock} | Reserved: ${updated.reservedStock} | Low Threshold: ${updated.lowStockThreshold} (${updated.status})`,
         variant: 'success',
       });
       setAdjustTarget(null);
-      setDelta(1);
-      setNote('');
       load();
+    } catch (err) {
+      showToast({
+        title: 'Adjustment failed',
+        description: err instanceof Error ? err.message : 'Unable to adjust stock',
+        variant: 'error',
+      });
     } finally {
       setAdjusting(false);
     }
   };
 
-  const canAdjust = can('inventory.adjust');
+  const computedStatus: StockStatus =
+    targetAvailable <= 0
+      ? 'out_of_stock'
+      : targetAvailable <= targetThreshold
+        ? 'low_stock'
+        : 'in_stock';
+
+  const canAdjust = can('inventory.adjust') || can('inventory.edit');
 
   const columns: DataTableColumn<StockItem>[] = useMemo(
     () => [
@@ -217,12 +266,7 @@ export function InventoryStockPage() {
             {canAdjust && (
               <button
                 type="button"
-                onClick={() => {
-                  setAdjustTarget(s);
-                  setDelta(1);
-                  setReason('purchase');
-                  setNote('');
-                }}
+                onClick={() => openAdjustModal(s)}
                 className="inline-flex items-center gap-1 rounded-lg border border-[#DCE6F2] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#1D5FAF] hover:bg-[#EAF2FC] whitespace-nowrap"
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -288,7 +332,11 @@ export function InventoryStockPage() {
           aria-label="Warehouse filter"
         >
           <option value="all">All Warehouses</option>
-          <option value="wh-main">Main Warehouse (Okhla, Delhi)</option>
+          {warehouses.map((wh) => (
+            <option key={wh.id} value={wh.id}>
+              {wh.name}
+            </option>
+          ))}
         </select>
 
         <div className="inline-flex items-center rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] p-1">
@@ -321,8 +369,9 @@ export function InventoryStockPage() {
         columns={columns}
         getRowId={(s) => s.id}
         loading={loading}
-        searchValue={search}
-        onSearchChange={setSearch}
+        searchKeys={(s) =>
+          `${s.productName} ${s.variantName || ''} ${s.sku} ${s.sku.replace(/[-_]/g, ' ')} ${s.brandName || ''} ${s.categoryName || ''} ${s.warehouseName}`
+        }
         searchPlaceholder="Search by product, variant, or SKU..."
         exportFilename="buydenmed-warehouse-stock.csv"
         emptyTitle="No stock records match"
@@ -332,10 +381,10 @@ export function InventoryStockPage() {
       {/* Inline Stock Adjustment Modal */}
       {adjustTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/45 p-4">
-          <div className="w-full max-w-md rounded-xl border border-[#DCE6F2] bg-white shadow-xl">
+          <div className="w-full max-w-lg rounded-xl border border-[#DCE6F2] bg-white shadow-xl max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-[#DCE6F2] px-5 py-4">
               <div className="min-w-0">
-                <h3 className="text-base font-semibold text-[#12263F]">Adjust Stock</h3>
+                <h3 className="text-base font-semibold text-[#12263F]">Adjust Inventory Stock</h3>
                 <p className="text-xs font-mono text-[#5B6B82] truncate">{adjustTarget.sku}</p>
               </div>
               <button
@@ -347,26 +396,47 @@ export function InventoryStockPage() {
               </button>
             </div>
 
-            <form onSubmit={handleAdjustSubmit} className="p-5 space-y-4">
-              <div className="rounded-xl border border-[#DCE6F2] bg-[#F6F9FD] p-3.5 flex items-center justify-between text-xs">
-                <div>
-                  <p className="font-semibold text-[#12263F]">{adjustTarget.productName}</p>
-                  <p className="text-[#5B6B82]">{adjustTarget.warehouseName}</p>
+            <form onSubmit={handleAdjustSubmit} className="p-5 space-y-4 overflow-y-auto">
+              {/* Product and Current Metrics Summary */}
+              <div className="rounded-xl border border-[#DCE6F2] bg-[#F6F9FD] p-3.5 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0 pr-2">
+                    <p className="font-semibold text-[#12263F] truncate">{adjustTarget.productName}</p>
+                    <p className="text-[#5B6B82] truncate">
+                      {adjustTarget.variantName || 'Default Variant'} • {adjustTarget.warehouseName}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-mono text-[11px] font-semibold text-[#1D5FAF] bg-white border border-[#DCE6F2] px-2 py-0.5 rounded">
+                    {adjustTarget.sku}
+                  </span>
                 </div>
-                <div className="text-right tabular-nums">
-                  <p className="text-[#5B6B82]">Current</p>
-                  <p className="text-base font-bold text-[#12263F]">
-                    {adjustTarget.availableStock}
-                  </p>
+                <div className="grid grid-cols-4 gap-2 pt-2 border-t border-[#DCE6F2]/70 text-center">
+                  <div className="rounded-lg bg-white p-1.5 border border-[#E2EAF4]">
+                    <p className="text-[10px] text-[#5B6B82]">Current Avail</p>
+                    <p className="text-sm font-bold text-[#12263F]">{adjustTarget.availableStock}</p>
+                  </div>
+                  <div className="rounded-lg bg-white p-1.5 border border-[#E2EAF4]">
+                    <p className="text-[10px] text-[#5B6B82]">Reserved</p>
+                    <p className="text-sm font-bold text-[#12263F]">{adjustTarget.reservedStock}</p>
+                  </div>
+                  <div className="rounded-lg bg-white p-1.5 border border-[#E2EAF4]">
+                    <p className="text-[10px] text-[#5B6B82]">Threshold</p>
+                    <p className="text-sm font-bold text-[#12263F]">{adjustTarget.lowStockThreshold}</p>
+                  </div>
+                  <div className="rounded-lg bg-white p-1.5 border border-[#E2EAF4] flex flex-col items-center justify-center">
+                    <p className="text-[10px] text-[#5B6B82] mb-0.5">Status</p>
+                    <StatusBadge status={adjustTarget.status} />
+                  </div>
                 </div>
               </div>
 
-              <FormField label="Quantity Delta (+ add / - deduct)" required>
+              {/* Available Stock Field with Stepper & Delta */}
+              <FormField label="Available Stock" required>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setDelta((d) => d - 1)}
-                    className="rounded-lg border border-[#DCE6F2] bg-white p-2.5 text-[#12263F] hover:bg-[#EAF2FC]"
+                    onClick={() => handleDeltaStep(-1)}
+                    className="rounded-lg border border-[#DCE6F2] bg-white p-2.5 text-[#12263F] hover:bg-[#EAF2FC] shrink-0"
                     aria-label="Decrease"
                   >
                     <Minus className="h-4 w-4" />
@@ -374,27 +444,76 @@ export function InventoryStockPage() {
                   <input
                     type="number"
                     required
-                    value={delta}
-                    onChange={(e) => setDelta(Number(e.target.value))}
-                    className={`${inputClass} text-center font-semibold tabular-nums`}
+                    min={0}
+                    value={targetAvailable}
+                    onChange={(e) => handleAvailableInput(Number(e.target.value))}
+                    className={`${inputClass} text-center font-bold text-base tabular-nums`}
                   />
                   <button
                     type="button"
-                    onClick={() => setDelta((d) => d + 1)}
-                    className="rounded-lg border border-[#DCE6F2] bg-white p-2.5 text-[#12263F] hover:bg-[#EAF2FC]"
+                    onClick={() => handleDeltaStep(1)}
+                    className="rounded-lg border border-[#DCE6F2] bg-white p-2.5 text-[#12263F] hover:bg-[#EAF2FC] shrink-0"
                     aria-label="Increase"
                   >
                     <Plus className="h-4 w-4" />
                   </button>
                 </div>
-                <p className="text-xs text-[#5B6B82] tabular-nums">
-                  Resulting available stock:{' '}
-                  <strong className="text-[#1D5FAF]">
-                    {Math.max(0, adjustTarget.availableStock + delta)}
-                  </strong>
-                </p>
+                <div className="flex items-center justify-between text-xs text-[#5B6B82] pt-1">
+                  <span>Current: <strong>{adjustTarget.availableStock}</strong></span>
+                  <span>
+                    Delta:{' '}
+                    <strong className={delta > 0 ? 'text-emerald-600' : delta < 0 ? 'text-red-600' : 'text-[#5B6B82]'}>
+                      {delta > 0 ? `+${delta}` : delta}
+                    </strong>
+                  </span>
+                </div>
               </FormField>
 
+              {/* Reserved and Low Threshold side-by-side */}
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Reserved Stock" required>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={targetReserved}
+                    onChange={(e) => setTargetReserved(Math.max(0, Number(e.target.value)))}
+                    className={`${inputClass} font-semibold tabular-nums`}
+                  />
+                  <p className="text-[11px] text-[#5B6B82]">Locked in pending orders</p>
+                </FormField>
+
+                <FormField label="Low Threshold" required>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={targetThreshold}
+                    onChange={(e) => setTargetThreshold(Math.max(0, Number(e.target.value)))}
+                    className={`${inputClass} font-semibold tabular-nums`}
+                  />
+                  <p className="text-[11px] text-[#5B6B82]">Alert when stock ≤ threshold</p>
+                </FormField>
+              </div>
+
+              {/* Dynamic Status Preview & Calculation */}
+              <div className="rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] p-3 text-xs flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-[#12263F] mb-0.5">Calculated Status</p>
+                  <p className="text-[#5B6B82]">
+                    {targetAvailable <= 0 ? (
+                      <span className="text-red-600 font-medium">Available is 0 → Out of Stock</span>
+                    ) : targetAvailable <= targetThreshold ? (
+                      <span className="text-amber-600 font-medium">Available ({targetAvailable}) ≤ Threshold ({targetThreshold}) → Low Stock</span>
+                    ) : (
+                      <span className="text-emerald-600 font-medium">Available ({targetAvailable}) &gt; Threshold ({targetThreshold}) → In Stock</span>
+                    )}
+                  </p>
+                </div>
+                <StatusBadge status={computedStatus} />
+              </div>
+
+              {/* Adjustment Reason */}
               <FormField label="Adjustment Reason" required>
                 <select
                   value={reason}
@@ -402,12 +521,16 @@ export function InventoryStockPage() {
                   className={selectClass}
                 >
                   <option value="purchase">Purchase / Inbound PO</option>
+                  <option value="correction">Cycle Count / Correction</option>
+                  <option value="audit">Physical Inventory Audit</option>
                   <option value="return">Customer Return Restock</option>
                   <option value="damage">Damage / QC Rejection</option>
-                  <option value="correction">Cycle Count Correction</option>
+                  <option value="reserve">Reserve Stock Hold</option>
+                  <option value="release">Release Reserved Stock</option>
                 </select>
               </FormField>
 
+              {/* Reference Note */}
               <FormField label="Reference / Note">
                 <input
                   type="text"
@@ -418,7 +541,7 @@ export function InventoryStockPage() {
                 />
               </FormField>
 
-              <div className="flex justify-end gap-2.5 pt-2">
+              <div className="flex justify-end gap-2.5 pt-2 border-t border-[#DCE6F2]">
                 <button
                   type="button"
                   onClick={() => setAdjustTarget(null)}
@@ -428,10 +551,10 @@ export function InventoryStockPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={adjusting || delta === 0}
+                  disabled={adjusting}
                   className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F] disabled:opacity-50"
                 >
-                  {adjusting ? 'Updating...' : 'Apply Adjustment'}
+                  {adjusting ? 'Saving...' : 'Apply Adjustment'}
                 </button>
               </div>
             </form>

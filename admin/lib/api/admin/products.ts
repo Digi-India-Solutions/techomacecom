@@ -1,9 +1,78 @@
-import type { Product, ProductFilters, ProductFormPayload } from '@/types/admin';
-import { mockDelay, slugify } from './client';
+import type { Product, ProductFilters, ProductFormPayload, StockItem } from '@/types/admin';
+import { adminDelete, adminGet, adminPost, adminPut, mockDelay, slugify } from './client';
 import { INITIAL_BRANDS, INITIAL_PRODUCTS } from './mockData';
 import { getCategoryPathById } from './categories';
+import {
+  adjustStockItem,
+  getStockItemsStore,
+  listStockItems,
+  onStockChange,
+} from './inventory';
 
 let productsStore: Product[] = structuredClone(INITIAL_PRODUCTS);
+
+export function syncProductsWithInventory(stockItems: StockItem[]): void {
+  if (!stockItems || stockItems.length === 0) return;
+
+  const stockMap = new Map<string, StockItem>();
+  for (const item of stockItems) {
+    if (item.sku) stockMap.set(item.sku.trim().toUpperCase(), item);
+  }
+
+  productsStore = productsStore.map((prod) => {
+    let hasChanges = false;
+    let threshold = prod.lowStockThreshold;
+
+    const updatedVariants = (prod.variants || []).map((v) => {
+      const matched = stockMap.get(v.sku.trim().toUpperCase());
+      if (matched) {
+        hasChanges = true;
+        threshold = matched.lowStockThreshold;
+        return {
+          ...v,
+          stock: matched.availableStock,
+        };
+      }
+      return v;
+    });
+
+    let totalStock = prod.stock;
+    let totalReserved = prod.reservedStock;
+
+    if (updatedVariants.length > 0) {
+      const anyMatched = updatedVariants.some((v) => stockMap.has(v.sku.trim().toUpperCase()));
+      if (anyMatched) {
+        hasChanges = true;
+        totalStock = updatedVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
+        totalReserved = updatedVariants.reduce((sum, v) => {
+          const m = stockMap.get(v.sku.trim().toUpperCase());
+          return sum + (m ? m.reservedStock : 0);
+        }, 0);
+      }
+    } else {
+      const matched = stockMap.get(prod.sku.trim().toUpperCase());
+      if (matched) {
+        hasChanges = true;
+        totalStock = matched.availableStock;
+        totalReserved = matched.reservedStock;
+        threshold = matched.lowStockThreshold;
+      }
+    }
+
+    if (!hasChanges) return prod;
+
+    return {
+      ...prod,
+      stock: totalStock,
+      reservedStock: totalReserved,
+      lowStockThreshold: threshold,
+      variants: updatedVariants,
+    };
+  });
+}
+
+// Automatically subscribe to inventory stock adjustments
+onStockChange(syncProductsWithInventory);
 
 export function getProductsStore(): Product[] {
   return productsStore;
@@ -14,7 +83,35 @@ export function setProductsStore(next: Product[]): void {
 }
 
 export async function listProducts(filters?: ProductFilters): Promise<Product[]> {
-  await mockDelay(140);
+  const params = new URLSearchParams();
+  if (filters?.search) params.set('search', filters.search);
+  if (filters?.categoryId && filters.categoryId !== 'all') params.set('categoryId', filters.categoryId);
+  if (filters?.brandId && filters.brandId !== 'all') params.set('brandId', filters.brandId);
+  if (filters?.status && filters.status !== 'all') params.set('status', filters.status);
+  if (filters?.stockLevel && filters.stockLevel !== 'all') params.set('stockLevel', filters.stockLevel);
+
+  try {
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const serverProducts = await adminGet<Product[]>(`/admin/products${query}`);
+    if (serverProducts && Array.isArray(serverProducts) && serverProducts.length > 0) {
+      const serverIds = new Set(serverProducts.map((p) => p.id));
+      const serverSkus = new Set(serverProducts.map((p) => p.sku));
+      const remaining = productsStore.filter((p) => !serverIds.has(p.id) && !serverSkus.has(p.sku));
+      productsStore = [...serverProducts, ...remaining];
+      return serverProducts;
+    }
+  } catch {
+    // Backend unreachable or returned empty, fallback to local store
+  }
+
+  try {
+    const cached = getStockItemsStore();
+    const stockItems = cached.length > 0 ? cached : await listStockItems();
+    if (stockItems && stockItems.length > 0) {
+      syncProductsWithInventory(stockItems);
+    }
+  } catch {}
+
   let list = [...productsStore];
 
   if (filters?.search) {
@@ -64,76 +161,102 @@ export async function listProducts(filters?: ProductFilters): Promise<Product[]>
 }
 
 export async function getProductById(id: string): Promise<Product | null> {
-  await mockDelay(120);
-  const found = productsStore.find((p) => p.id === id);
+  try {
+    const serverProduct = await adminGet<Product>(`/admin/products/${id}`);
+    if (serverProduct) {
+      productsStore = [serverProduct, ...productsStore.filter((p) => p.id !== serverProduct.id)];
+      return structuredClone(serverProduct);
+    }
+  } catch {
+    // fallback
+  }
+
+  const cached = getStockItemsStore();
+  if (cached.length > 0) {
+    syncProductsWithInventory(cached);
+  }
+  const found = productsStore.find((p) => p.id === id || p.slug === id);
   return found ? structuredClone(found) : null;
 }
 
 export async function createProduct(payload: ProductFormPayload): Promise<Product> {
-  await mockDelay(200);
-  const brand = INITIAL_BRANDS.find((b) => b.id === payload.brandId);
-  const categoryPath = getCategoryPathById(payload.categoryId) || 'Uncategorized';
+  try {
+    const created = await adminPost<Product>('/admin/products', payload);
+    productsStore = [created, ...productsStore.filter((p) => p.id !== created.id)];
+    listStockItems().catch(() => {});
+    return created;
+  } catch (err) {
+    console.warn('Backend createProduct failed, falling back to local store:', err);
+    const brand = INITIAL_BRANDS.find((b) => b.id === payload.brandId);
+    const categoryPath = getCategoryPathById(payload.categoryId) || 'Uncategorized';
 
-  const now = new Date().toISOString();
-  const created: Product = {
-    ...structuredClone(payload),
-    id: `prod-${Date.now()}`,
-    slug: payload.slug || slugify(payload.name),
-    brandName: brand?.name || 'Buy Denmed',
-    categoryPath,
-    createdAt: now,
-    updatedAt: now,
-  };
+    const now = new Date().toISOString();
+    const created: Product = {
+      ...structuredClone(payload),
+      id: `prod-${Date.now()}`,
+      slug: payload.slug || slugify(payload.name),
+      brandName: brand?.name || 'Buy Denmed',
+      categoryPath,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-  productsStore = [created, ...productsStore];
-  return structuredClone(created);
+    productsStore = [created, ...productsStore];
+    return structuredClone(created);
+  }
 }
 
 export async function updateProduct(id: string, payload: ProductFormPayload): Promise<Product> {
-  await mockDelay(200);
-  const idx = productsStore.findIndex((p) => p.id === id);
-  if (idx === -1) throw new Error('Product not found');
+  try {
+    const updated = await adminPut<Product>(`/admin/products/${id}`, payload);
+    productsStore = productsStore.map((p) => (p.id === id ? updated : p));
+    listStockItems().catch(() => {});
+    return updated;
+  } catch (err) {
+    console.warn('Backend updateProduct failed, updating local store:', err);
+    const idx = productsStore.findIndex((p) => p.id === id);
+    if (idx === -1) throw new Error('Product not found');
 
-  const brand = INITIAL_BRANDS.find((b) => b.id === payload.brandId);
-  const categoryPath = getCategoryPathById(payload.categoryId) || productsStore[idx].categoryPath;
+    const brand = INITIAL_BRANDS.find((b) => b.id === payload.brandId);
+    const categoryPath = getCategoryPathById(payload.categoryId) || productsStore[idx].categoryPath;
 
-  const updated: Product = {
-    ...productsStore[idx],
-    ...structuredClone(payload),
-    id,
-    brandName: brand?.name || productsStore[idx].brandName,
-    categoryPath,
-    updatedAt: new Date().toISOString(),
-  };
+    const updated: Product = {
+      ...productsStore[idx],
+      ...structuredClone(payload),
+      id,
+      brandName: brand?.name || productsStore[idx].brandName,
+      categoryPath,
+      updatedAt: new Date().toISOString(),
+    };
 
-  productsStore = productsStore.map((p) => (p.id === id ? updated : p));
-  return structuredClone(updated);
+    productsStore = productsStore.map((p) => (p.id === id ? updated : p));
+    return structuredClone(updated);
+  }
 }
 
 export async function duplicateProduct(id: string): Promise<Product> {
   await mockDelay(180);
-  const original = productsStore.find((p) => p.id === id);
+  const original = await getProductById(id);
   if (!original) throw new Error('Product not found');
 
-  const now = new Date().toISOString();
   const copySuffix = Math.floor(100 + Math.random() * 900);
-  const duplicated: Product = {
-    ...structuredClone(original),
-    id: `prod-${Date.now()}`,
+  const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = original;
+
+  return await createProduct({
+    ...rest,
     name: `${original.name} (Copy)`,
     slug: `${original.slug}-copy-${copySuffix}`,
     sku: `${original.sku}-COPY-${copySuffix}`,
     status: 'draft',
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  productsStore = [duplicated, ...productsStore];
-  return structuredClone(duplicated);
+  });
 }
 
 export async function deleteProduct(id: string): Promise<void> {
-  await mockDelay(150);
+  try {
+    await adminDelete(`/admin/products/${id}`);
+  } catch (err) {
+    console.warn('Backend deleteProduct failed, removing from local store:', err);
+  }
   productsStore = productsStore.filter((p) => p.id !== id);
 }
 

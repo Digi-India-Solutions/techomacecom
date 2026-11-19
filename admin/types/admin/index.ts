@@ -120,6 +120,8 @@ export interface TopSellingProduct {
   unitsSold: number;
   revenue: number;
   imageUrl: string;
+  brandName?: string;
+  categoryName?: string;
 }
 
 export interface ActionNeededItem {
@@ -202,6 +204,8 @@ export interface ProductVariant {
   mrp: number;
   stock: number;
   imageUrl: string;
+  brandName?: string;
+  categoryName?: string;
   isDefault: boolean;
   isActive: boolean;
   sortOrder: number;
@@ -380,7 +384,15 @@ export interface BulkImportHistoryItem {
   createdAt: string;
 }
 
-export type StockAdjustmentReason = 'purchase' | 'damage' | 'correction' | 'return';
+export type StockAdjustmentReason =
+  | 'purchase'
+  | 'sale'
+  | 'return'
+  | 'damage'
+  | 'correction'
+  | 'audit'
+  | 'reserve'
+  | 'release';
 export type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
 
 export interface StockItem {
@@ -391,6 +403,8 @@ export interface StockItem {
   variantName?: string;
   sku: string;
   imageUrl: string;
+  brandName?: string;
+  categoryName?: string;
   warehouseId: string;
   warehouseName: string;
   availableStock: number;

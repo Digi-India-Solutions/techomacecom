@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+:root {
+  --font-poppins: 'Poppins', sans-serif;
+}
+
 @theme {
   /* Single e-commerce font family across the whole store */
   --font-sans: var(--font-poppins), 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;

@@ -5,7 +5,7 @@ import type {
   HomepageSection,
   PageBanner,
 } from '@/types/admin';
-import { mockDelay } from './client';
+import { adminDelete, adminGet, adminPost, adminPut, mockDelay } from './client';
 import { PRODUCT_IMAGES } from './mockData';
 
 let heroBannersStore: HeroBanner[] = [
@@ -147,69 +147,171 @@ let dealsStore: DealOfTheDayItem[] = [
   },
 ];
 
-// Hero Banners
+// Hero Banners (backed by PostgreSQL banners table where placement = 'hero')
 export async function listHeroBanners(): Promise<HeroBanner[]> {
-  await mockDelay(100);
+  try {
+    const data = await adminGet<HeroBanner[]>('/admin/banners/hero');
+    if (Array.isArray(data)) {
+      heroBannersStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local hero banners store:', err);
+  }
   return structuredClone([...heroBannersStore].sort((a, b) => a.sortOrder - b.sortOrder));
 }
-export async function saveHeroBanner(banner: Omit<HeroBanner, 'id' | 'sortOrder'> & { id?: string }): Promise<HeroBanner[]> {
-  await mockDelay(130);
-  if (banner.id) {
-    heroBannersStore = heroBannersStore.map((b) => (b.id === banner.id ? { ...b, ...banner } : b));
-  } else {
-    heroBannersStore.push({ ...banner, id: `hb-${Date.now()}`, sortOrder: heroBannersStore.length + 1 });
+
+export async function saveHeroBanner(
+  banner: Omit<HeroBanner, 'id' | 'sortOrder'> & { id?: string }
+): Promise<HeroBanner[]> {
+  try {
+    let data: HeroBanner[];
+    if (banner.id && !banner.id.startsWith('hb-')) {
+      data = await adminPut<HeroBanner[]>(`/admin/banners/hero/${banner.id}`, banner);
+    } else {
+      data = await adminPost<HeroBanner[]>('/admin/banners/hero', banner);
+    }
+    if (Array.isArray(data)) {
+      heroBannersStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local save for hero banner:', err);
+    if (banner.id) {
+      heroBannersStore = heroBannersStore.map((b) => (b.id === banner.id ? { ...b, ...banner } : b));
+    } else {
+      heroBannersStore.push({ ...banner, id: `hb-${Date.now()}`, sortOrder: heroBannersStore.length + 1 });
+    }
   }
   return listHeroBanners();
 }
+
 export async function reorderHeroBanners(ordered: HeroBanner[]): Promise<HeroBanner[]> {
-  await mockDelay(100);
-  heroBannersStore = ordered.map((b, i) => ({ ...b, sortOrder: i + 1 }));
-  return listHeroBanners();
-}
-export async function deleteHeroBanner(id: string): Promise<HeroBanner[]> {
-  await mockDelay(100);
-  heroBannersStore = heroBannersStore.filter((b) => b.id !== id);
+  try {
+    const data = await adminPut<HeroBanner[]>('/admin/banners/hero/reorder', {
+      ordered: ordered.map((b, i) => ({ id: b.id, sortOrder: i + 1 })),
+    });
+    if (Array.isArray(data)) {
+      heroBannersStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local reorder for hero banners:', err);
+    heroBannersStore = ordered.map((b, i) => ({ ...b, sortOrder: i + 1 }));
+  }
   return listHeroBanners();
 }
 
-// Page Banners
-export async function listPageBanners(): Promise<PageBanner[]> {
-  await mockDelay(100);
+export async function deleteHeroBanner(id: string): Promise<HeroBanner[]> {
+  try {
+    const data = await adminDelete<HeroBanner[]>(`/admin/banners/hero/${id}`);
+    if (Array.isArray(data)) {
+      heroBannersStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local delete for hero banner:', err);
+    heroBannersStore = heroBannersStore.filter((b) => b.id !== id);
+  }
+  return listHeroBanners();
+}
+
+// Page Banners (backed by PostgreSQL banners table where placement != 'hero')
+export async function listPageBanners(pageType?: string): Promise<PageBanner[]> {
+  try {
+    const query = pageType && pageType !== 'all' ? `?pageType=${encodeURIComponent(pageType)}` : '';
+    const data = await adminGet<PageBanner[]>(`/admin/banners/page${query}`);
+    if (Array.isArray(data)) {
+      pageBannersStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local page banners store:', err);
+  }
   return structuredClone([...pageBannersStore].sort((a, b) => a.sortOrder - b.sortOrder));
 }
-export async function savePageBanner(banner: Omit<PageBanner, 'id' | 'sortOrder'> & { id?: string }): Promise<PageBanner[]> {
-  await mockDelay(130);
-  if (banner.id) {
-    pageBannersStore = pageBannersStore.map((b) => (b.id === banner.id ? { ...b, ...banner } : b));
-  } else {
-    pageBannersStore.push({ ...banner, id: `pb-${Date.now()}`, sortOrder: pageBannersStore.length + 1 });
+
+export async function savePageBanner(
+  banner: Omit<PageBanner, 'id' | 'sortOrder'> & { id?: string }
+): Promise<PageBanner[]> {
+  try {
+    let data: PageBanner[];
+    if (banner.id && !banner.id.startsWith('pb-')) {
+      data = await adminPut<PageBanner[]>(`/admin/banners/page/${banner.id}`, banner);
+    } else {
+      data = await adminPost<PageBanner[]>('/admin/banners/page', banner);
+    }
+    if (Array.isArray(data)) {
+      pageBannersStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local save for page banner:', err);
+    if (banner.id) {
+      pageBannersStore = pageBannersStore.map((b) => (b.id === banner.id ? { ...b, ...banner } : b));
+    } else {
+      pageBannersStore.push({ ...banner, id: `pb-${Date.now()}`, sortOrder: pageBannersStore.length + 1 });
+    }
   }
   return listPageBanners();
 }
+
 export async function deletePageBanner(id: string): Promise<PageBanner[]> {
-  await mockDelay(100);
-  pageBannersStore = pageBannersStore.filter((b) => b.id !== id);
+  try {
+    const data = await adminDelete<PageBanner[]>(`/admin/banners/page/${id}`);
+    if (Array.isArray(data)) {
+      pageBannersStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local delete for page banner:', err);
+    pageBannersStore = pageBannersStore.filter((b) => b.id !== id);
+  }
   return listPageBanners();
 }
 
-// Homepage Sections
+// Homepage Sections (backed by PostgreSQL homepage_sections and settings tables)
 export async function getHomepageConfig(): Promise<{
   announcementStrip: string;
   sections: HomepageSection[];
 }> {
-  await mockDelay(110);
+  try {
+    const data = await adminGet<{ announcementStrip: string; sections: HomepageSection[] }>(
+      '/admin/banners/homepage-config'
+    );
+    if (data && Array.isArray(data.sections)) {
+      announcementStrip = data.announcementStrip ?? announcementStrip;
+      homepageSectionsStore = data.sections;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local homepage config store:', err);
+  }
   return {
     announcementStrip,
     sections: structuredClone([...homepageSectionsStore].sort((a, b) => a.sortOrder - b.sortOrder)),
   };
 }
+
 export async function saveHomepageConfig(params: {
   announcementStrip: string;
   sections: HomepageSection[];
 }): Promise<void> {
-  await mockDelay(140);
-  announcementStrip = params.announcementStrip;
-  homepageSectionsStore = params.sections.map((s, idx) => ({ ...s, sortOrder: idx + 1 }));
+  try {
+    const data = await adminPut<{ announcementStrip: string; sections: HomepageSection[] }>(
+      '/admin/banners/homepage-config',
+      params
+    );
+    if (data && Array.isArray(data.sections)) {
+      announcementStrip = data.announcementStrip ?? params.announcementStrip;
+      homepageSectionsStore = data.sections;
+      return;
+    }
+  } catch (err) {
+    console.warn('Falling back to local save for homepage config:', err);
+    announcementStrip = params.announcementStrip;
+    homepageSectionsStore = params.sections.map((s, idx) => ({ ...s, sortOrder: idx + 1 }));
+  }
 }
 
 // Coupons
