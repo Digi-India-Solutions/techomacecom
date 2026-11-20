@@ -1,27 +1,43 @@
 import React from 'react';
 import { Metadata } from 'next';
-import Image from 'next/image';
-import Link from 'next/link';
-import { ShieldCheck, Truck, Award, Users, CheckCircle2, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Truck, Award, Users } from 'lucide-react';
+import { getCmsPage } from '@/lib/api/cms';
 
-export const metadata: Metadata = {
-  title: 'About Buy Denmed - India\'s Medical & Dental Equipment Store',
-  description: 'Buy Denmed connects over 15,000 healthcare professionals with certified manufacturers, official warranties, and transparent B2B pricing.'
-};
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-export default function AboutPage() {
+export async function generateMetadata(): Promise<Metadata> {
+  const page = await getCmsPage('about');
+  return {
+    title: page?.seoTitle || "About Buy Denmed - India's Medical & Dental Equipment Store",
+    description:
+      page?.seoDescription ||
+      'Buy Denmed connects over 15,000 healthcare professionals with certified manufacturers, official warranties, and transparent B2B pricing.',
+  };
+}
+
+export default async function AboutPage() {
+  const page = await getCmsPage('about');
+
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-10 space-y-12">
       <div className="bg-[#0B2545] text-white p-8 sm:p-12 rounded-3xl shadow-xl space-y-4">
         <span className="text-xs font-bold text-[#93C5FD] uppercase tracking-wider">
-          Our Mission & Healthcare Heritage
+          Our Mission &amp; Healthcare Heritage
         </span>
         <h1 className="text-3xl sm:text-5xl font-black tracking-tight">
-          Empowering Indian Clinics with Genuine Medical & Dental Technology.
+          {page?.title || 'Empowering Indian Clinics with Genuine Medical & Dental Technology.'}
         </h1>
-        <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-2xl">
-          Founded to bridge the trust and accessibility gap for healthcare practitioners across Tier 1, 2, and 3 Indian cities, Buy Denmed delivers authorized equipment with verified GST invoices, calibrated warranties, and doorstep biomedical engineer support.
-        </p>
+        {page?.contentHtml ? (
+          <div
+            className="text-xs sm:text-sm text-slate-200 leading-relaxed max-w-3xl prose prose-invert prose-headings:text-white prose-p:text-slate-200"
+            dangerouslySetInnerHTML={{ __html: page.contentHtml }}
+          />
+        ) : (
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-2xl">
+            Founded to bridge the trust and accessibility gap for healthcare practitioners across Tier 1, 2, and 3 Indian cities, Buy Denmed delivers authorized equipment with verified GST invoices, calibrated warranties, and doorstep biomedical engineer support.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
@@ -29,7 +45,7 @@ export default function AboutPage() {
           { num: '15,000+', label: 'Registered Doctors & Clinics' },
           { num: '25,000+', label: 'Indian Pincodes Served' },
           { num: '100%', label: 'Genuine Brand Warranties' },
-          { num: '48 Hours', label: 'Average Air-Cargo Dispatch' }
+          { num: '48 Hours', label: 'Average Air-Cargo Dispatch' },
         ].map((stat, i) => (
           <div key={i} className="bg-white p-6 rounded-2xl border border-[#DCE6F2] shadow-xs space-y-1">
             <div className="text-2xl sm:text-3xl font-black text-[#1D5FAF]">{stat.num}</div>
@@ -47,7 +63,7 @@ export default function AboutPage() {
               Authorized Distributor Channel
             </h3>
             <p>
-              We bypass gray-market importers. Every batch of 3M composites, Dentsply files, Philips oxygen concentrators, and W&H turbines comes directly from certified regional channels with intact holographic authentication.
+              We bypass gray-market importers. Every batch of 3M composites, Dentsply files, Philips oxygen concentrators, and W&amp;H turbines comes directly from certified regional channels with intact holographic authentication.
             </p>
           </div>
           <div className="space-y-2">

@@ -44,9 +44,14 @@ export const WhatsAppButton: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setOnline(isSupportOnline());
+    const timer = setTimeout(() => {
+      setOnline(isSupportOnline());
+    }, 0);
     const t = setInterval(() => setOnline(isSupportOnline()), 60_000);
-    return () => clearInterval(t);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(t);
+    };
   }, []);
 
   // Close on Escape / outside click; focus the input when opened

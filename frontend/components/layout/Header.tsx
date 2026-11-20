@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import Logo from '@/components/common/Logo';
 import { useCartStore, useWishlistStore, usePincodeStore, useUserStore } from '@/lib/store';
-import { searchSuggestions } from '@/lib/api';
+import { searchSuggestions, getHomepageConfig } from '@/lib/api';
 import { useCatalogCategories } from '@/lib/hooks/useCatalogCategories';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { Skeleton } from '@/components/common/Skeleton';
@@ -69,6 +69,34 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
 
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false);
   const [activeCategoryIndex, setActiveCategoryIndex] = useState(0);
+  const [marqueeNotices, setMarqueeNotices] = useState(TOP_NOTICES);
+
+  useEffect(() => {
+    let active = true;
+    getHomepageConfig()
+      .then((cfg) => {
+        if (!active || !cfg?.announcementStrip) return;
+        const text = cfg.announcementStrip.trim();
+        if (!text) return;
+        const parts = text
+          .split(/[·•|]/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (parts.length > 0) {
+          const icons = [Truck, ShieldCheck, FileText, CreditCard, Sparkles, Activity];
+          const dynamicList = parts.map((partText, idx) => ({
+            icon: icons[idx % icons.length],
+            text: partText,
+            highlight: idx === 1 || partText.toLowerCase().includes('gst')
+          }));
+          setMarqueeNotices(dynamicList);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const categories = useCatalogCategories({ menuOnly: true });
   const currentCategory = categories[activeCategoryIndex] || categories[0];
@@ -145,7 +173,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                   className="flex shrink-0 items-center"
                   aria-hidden={copy === 1 ? true : undefined}
                 >
-                  {TOP_NOTICES.map((notice, i) => (
+                  {marqueeNotices.map((notice, i) => (
                     <li key={i} className="flex items-center gap-1.5 whitespace-nowrap px-5">
                       <notice.icon className="w-3.5 h-3.5 text-[#F28C38] shrink-0" />
                       <span className={notice.highlight ? 'text-[#BFDBFE] font-bold' : 'text-white'}>
@@ -173,6 +201,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
               onClick={onOpenMobileMenu}
               className="lg:hidden p-2 text-slate-200 hover:text-white rounded-xl hover:bg-[#13335E] transition-colors cursor-pointer"
               aria-label="Open Navigation Menu"
+              suppressHydrationWarning
             >
               <Menu className="w-6 h-6" />
             </button>
@@ -185,14 +214,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
             onClick={() => setPincodeModalOpen(true)}
             className="group hidden lg:flex items-start gap-2 shrink-0 text-left cursor-pointer"
             title="Change Delivery Location"
+            suppressHydrationWarning
           >
             <MapPin className="w-5 h-5 mt-0.5 text-[#F28C38] shrink-0" />
-            <span className="leading-tight">
-              <span className="block text-sm font-semibold text-white truncate max-w-[170px]">
-                {pincode ? `Deliver to ${pincode}` : 'Location not set'}
+            <span className="leading-tight" suppressHydrationWarning>
+              <span className="block text-sm font-semibold text-white truncate max-w-[170px]" suppressHydrationWarning>
+                {hydrated && pincode ? `Deliver to ${pincode}` : 'Deliver to 110001'}
               </span>
-              <span className="flex items-center gap-0.5 text-[11px] font-semibold text-[#93C5FD] group-hover:text-white transition-colors">
-                {pincode ? (city || 'Change location') : 'Select delivery location'}
+              <span className="flex items-center gap-0.5 text-[11px] font-semibold text-[#93C5FD] group-hover:text-white transition-colors" suppressHydrationWarning>
+                {hydrated && pincode ? (city || 'Change location') : 'New Delhi'}
                 <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
               </span>
             </span>
@@ -211,11 +241,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                 onFocus={() => setIsSearchFocused(true)}
                 placeholder="Search Product, Category, Brand..."
                 className="flex-1 min-w-0 bg-white text-[#12263F] text-sm sm:text-base px-4 py-2.5 sm:py-3 focus:outline-none placeholder-[#5B6B82] font-body"
+                suppressHydrationWarning
               />
               <button
                 type="submit"
                 className="w-14 sm:w-16 shrink-0 bg-[#1D5FAF] hover:bg-[#174E90] text-white flex items-center justify-center transition-colors cursor-pointer"
                 aria-label="Search"
+                suppressHydrationWarning
               >
                 <Search className="w-5 h-5" />
               </button>
@@ -323,9 +355,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                 type="button"
                 onClick={() => setAuthModalOpen(true)}
                 className="flex items-center gap-2 px-2 py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors cursor-pointer"
+                suppressHydrationWarning
               >
                 <CircleUserRound className="w-6 h-6" />
-                <span className="hidden sm:inline text-[13px] font-medium">Login Now</span>
+                <span className="hidden sm:inline text-[13px] font-medium" suppressHydrationWarning>Login Now</span>
               </button>
             )}
 
@@ -358,6 +391,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
               onClick={() => setIsCartOpen(true)}
               className="flex items-center gap-2 px-2 py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors cursor-pointer"
               aria-label="Shopping Cart"
+              suppressHydrationWarning
             >
               <span className="relative">
                 <ShoppingBag className="w-6 h-6" />
@@ -367,7 +401,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                   </span>
                 )}
               </span>
-              <span className="hidden sm:inline text-[13px] font-medium">Cart</span>
+              <span className="hidden sm:inline text-[13px] font-medium" suppressHydrationWarning>Cart</span>
             </button>
           </div>
         </div>
@@ -384,10 +418,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search equipment, brands, SKU..."
               className="w-full bg-white text-[#12263F] text-sm pl-3.5 pr-10 py-2 rounded-xl border border-[#DCE6F2] focus:outline-none focus:ring-2 focus:ring-[#1D5FAF] placeholder-[#5B6B82] font-medium font-body"
+              suppressHydrationWarning
             />
             <button
               type="submit"
               className="absolute right-1 w-7 h-7 rounded-lg bg-[#1D5FAF] text-white flex items-center justify-center cursor-pointer shadow-xs"
+              suppressHydrationWarning
             >
               <Search className="w-4 h-4" />
             </button>
@@ -412,6 +448,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                 type="button"
                 aria-haspopup="true"
                 aria-expanded={isMegaMenuOpen}
+                suppressHydrationWarning
                 onClick={(e) => {
                   // Mouse users already opened it by hovering — a click shouldn't close it.
                   // Touch / keyboard still toggle.

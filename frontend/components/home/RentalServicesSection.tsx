@@ -10,9 +10,10 @@ import { ArrowRight, ChevronRight, CheckCircle2 } from 'lucide-react';
 
 interface RentalServicesSectionProps {
   rentalProducts: Product[];
+  title?: string;
 }
 
-export const RentalServicesSection: React.FC<RentalServicesSectionProps> = ({ rentalProducts }) => {
+export const RentalServicesSection: React.FC<RentalServicesSectionProps> = ({ rentalProducts, title = 'Popular Rental Equipment' }) => {
 
   const highlights = [
     {
@@ -113,7 +114,7 @@ export const RentalServicesSection: React.FC<RentalServicesSectionProps> = ({ re
           <div className="flex items-end justify-between mb-5 sm:mb-6">
             <div>
               <h3 className="text-xl sm:text-2xl font-bold text-[#12263F] font-heading relative inline-block">
-                Popular Rental Equipment
+                {title || 'Popular Rental Equipment'}
                 <span className="absolute bottom-[-4px] left-0 w-10 h-[3px] bg-[#1D5FAF] rounded-full" />
               </h3>
               <p className="text-xs sm:text-sm text-[#5B6B82] font-body mt-2">

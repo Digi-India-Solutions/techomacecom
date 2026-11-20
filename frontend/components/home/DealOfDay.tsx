@@ -9,31 +9,46 @@ import { Zap, Clock } from 'lucide-react';
 
 interface DealOfDayProps {
   deals: Product[];
+  title?: string;
 }
 
-export const DealOfDay: React.FC<DealOfDayProps> = ({ deals }) => {
+export const DealOfDay: React.FC<DealOfDayProps> = ({ deals, title = "Deals of the Day" }) => {
   const [timeLeft, setTimeLeft] = useState({
     hours: 14,
     minutes: 32,
     seconds: 45
   });
 
-
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev.seconds > 0) {
-          return { ...prev, seconds: prev.seconds - 1 };
-        } else if (prev.minutes > 0) {
-          return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
-        } else if (prev.hours > 0) {
-          return { ...prev, hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        }
-        return { hours: 23, minutes: 59, seconds: 59 };
-      });
-    }, 1000);
+    const expiryStr = deals?.find((d) => d.dealExpiresAt)?.dealExpiresAt;
+    const targetMs = expiryStr ? new Date(expiryStr).getTime() : 0;
+
+    const updateTimer = () => {
+      if (targetMs > 0) {
+        const diff = Math.max(0, targetMs - Date.now());
+        const totalSec = Math.floor(diff / 1000);
+        const hours = Math.floor(totalSec / 3600);
+        const minutes = Math.floor((totalSec % 3600) / 60);
+        const seconds = totalSec % 60;
+        setTimeLeft({ hours, minutes, seconds });
+      } else {
+        setTimeLeft((prev) => {
+          if (prev.seconds > 0) {
+            return { ...prev, seconds: prev.seconds - 1 };
+          } else if (prev.minutes > 0) {
+            return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
+          } else if (prev.hours > 0) {
+            return { ...prev, hours: prev.hours - 1, minutes: 59, seconds: 59 };
+          }
+          return { hours: 23, minutes: 59, seconds: 59 };
+        });
+      }
+    };
+
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [deals]);
 
   if (!deals || deals.length === 0) return null;
 
@@ -54,12 +69,12 @@ export const DealOfDay: React.FC<DealOfDayProps> = ({ deals }) => {
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-[#0F172A] font-heading relative inline-block">
-              Deals of the Day
+              {title || "Deals of the Day"}
               <span className="absolute bottom-[-4px] left-0 w-10 h-[3px] bg-[#1D5FAF] rounded-full" />
             </h2>
           </div>
 
-          <div className="flex items-center justify-between sm:justify-end gap-3">
+          <div className="flex items-center justify-between sm:justify-end gap-3 flex-wrap">
             {/* Live Timer Countdown */}
             <div className="flex items-center gap-2 bg-[#0B2545] text-white px-4 py-2 rounded-xl text-xs sm:text-sm font-mono shadow-sm">
               <Clock className="w-4 h-4 text-[#EA580C] shrink-0" />
@@ -77,6 +92,12 @@ export const DealOfDay: React.FC<DealOfDayProps> = ({ deals }) => {
               </span>
             </div>
 
+            <Link
+              href="/deals"
+              className="inline-flex items-center gap-1 text-xs font-bold text-[#1D5FAF] hover:text-[#174D8F] bg-[#EAF2FC] hover:bg-[#DCE6F2] px-3.5 py-2 rounded-xl transition-colors font-heading"
+            >
+              View All Deals &rarr;
+            </Link>
           </div>
         </div>
 

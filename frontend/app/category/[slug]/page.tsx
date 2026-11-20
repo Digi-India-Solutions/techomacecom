@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import { getCategoryBySlug, getCategories, getProducts, getBrands } from '@/lib/api';
+import { getCategoryBySlug, getCategories, getProducts, getBrands, getBestSellers, getPageBanners } from '@/lib/api';
 import CategoryListingClient from '@/components/category/CategoryListingClient';
+import CategoryNotFoundView from '@/components/category/CategoryNotFoundView';
 
 interface CategoryPageProps {
   params: Promise<{ slug: string }>;
@@ -39,12 +39,23 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
 
   const category = await getCategoryBySlug(slug);
   if (!category) {
-    notFound();
+    const [allCategories, bestSellers] = await Promise.all([
+      getCategories(),
+      getBestSellers()
+    ]);
+    return (
+      <CategoryNotFoundView
+        slug={slug}
+        categories={allCategories}
+        suggestedProducts={bestSellers}
+      />
+    );
   }
 
-  const [productsData, brands] = await Promise.all([
+  const [productsData, brands, pageBanners] = await Promise.all([
     getProducts({ categoryId: category.id, limit: 100 }),
-    getBrands()
+    getBrands(),
+    getPageBanners('category', category.slug, category.id).catch(() => [])
   ]);
 
   return (
@@ -53,6 +64,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
       initialProducts={productsData.products}
       brands={brands}
       initialSubCategory={sub}
+      banners={pageBanners}
     />
   );
 }
