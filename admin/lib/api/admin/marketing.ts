@@ -314,49 +314,113 @@ export async function saveHomepageConfig(params: {
   }
 }
 
-// Coupons
+// Coupons (backed by PostgreSQL coupons & coupon_redemptions tables)
 export async function listCoupons(): Promise<Coupon[]> {
-  await mockDelay(110);
+  try {
+    const data = await adminGet<Coupon[]>('/admin/coupons');
+    if (Array.isArray(data)) {
+      couponsStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local coupons store:', err);
+  }
   return structuredClone(couponsStore);
 }
+
 export async function saveCoupon(
   coupon: Omit<Coupon, 'id' | 'usedCount' | 'totalDiscountGiven'> & { id?: string }
 ): Promise<Coupon[]> {
-  await mockDelay(140);
-  if (coupon.id) {
-    couponsStore = couponsStore.map((c) => (c.id === coupon.id ? { ...c, ...coupon } : c));
-  } else {
-    couponsStore.unshift({
-      ...coupon,
-      id: `cpn-${Date.now()}`,
-      usedCount: 0,
-      totalDiscountGiven: 0,
-    });
+  try {
+    let data: Coupon[];
+    if (coupon.id && !coupon.id.startsWith('cpn-')) {
+      data = await adminPut<Coupon[]>(`/admin/coupons/${coupon.id}`, coupon);
+    } else {
+      data = await adminPost<Coupon[]>('/admin/coupons', coupon);
+    }
+    if (Array.isArray(data)) {
+      couponsStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local save for coupon:', err);
+    if (coupon.id) {
+      couponsStore = couponsStore.map((c) => (c.id === coupon.id ? { ...c, ...coupon } : c));
+    } else {
+      couponsStore.unshift({
+        ...coupon,
+        id: `cpn-${Date.now()}`,
+        usedCount: 0,
+        totalDiscountGiven: 0,
+      });
+    }
   }
-  return listCoupons();
-}
-export async function deleteCoupon(id: string): Promise<Coupon[]> {
-  await mockDelay(100);
-  couponsStore = couponsStore.filter((c) => c.id !== id);
   return listCoupons();
 }
 
-// Deals of the Day
+export async function deleteCoupon(id: string): Promise<Coupon[]> {
+  try {
+    const data = await adminDelete<Coupon[]>(`/admin/coupons/${id}`);
+    if (Array.isArray(data)) {
+      couponsStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local delete for coupon:', err);
+    couponsStore = couponsStore.filter((c) => c.id !== id);
+  }
+  return listCoupons();
+}
+
+// Deals of the Day (backed by PostgreSQL deals & product_variants tables)
 export async function listDeals(): Promise<DealOfTheDayItem[]> {
-  await mockDelay(100);
+  try {
+    const data = await adminGet<DealOfTheDayItem[]>('/admin/deals');
+    if (Array.isArray(data)) {
+      dealsStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local deals store:', err);
+  }
   return structuredClone(dealsStore);
 }
-export async function saveDeal(deal: Omit<DealOfTheDayItem, 'id'> & { id?: string }): Promise<DealOfTheDayItem[]> {
-  await mockDelay(130);
-  if (deal.id) {
-    dealsStore = dealsStore.map((d) => (d.id === deal.id ? { ...d, ...deal } : d));
-  } else {
-    dealsStore.unshift({ ...deal, id: `deal-${Date.now()}` });
+
+export async function saveDeal(
+  deal: Omit<DealOfTheDayItem, 'id'> & { id?: string }
+): Promise<DealOfTheDayItem[]> {
+  try {
+    let data: DealOfTheDayItem[];
+    if (deal.id && !deal.id.startsWith('deal-')) {
+      data = await adminPut<DealOfTheDayItem[]>(`/admin/deals/${deal.id}`, deal);
+    } else {
+      data = await adminPost<DealOfTheDayItem[]>('/admin/deals', deal);
+    }
+    if (Array.isArray(data)) {
+      dealsStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local save for deal:', err);
+    if (deal.id) {
+      dealsStore = dealsStore.map((d) => (d.id === deal.id ? { ...d, ...deal } : d));
+    } else {
+      dealsStore.unshift({ ...deal, id: `deal-${Date.now()}` });
+    }
   }
   return listDeals();
 }
+
 export async function deleteDeal(id: string): Promise<DealOfTheDayItem[]> {
-  await mockDelay(100);
-  dealsStore = dealsStore.filter((d) => d.id !== id);
+  try {
+    const data = await adminDelete<DealOfTheDayItem[]>(`/admin/deals/${id}`);
+    if (Array.isArray(data)) {
+      dealsStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local delete for deal:', err);
+    dealsStore = dealsStore.filter((d) => d.id !== id);
+  }
   return listDeals();
 }

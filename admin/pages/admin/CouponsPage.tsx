@@ -21,6 +21,8 @@ export function CouponsPage() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [targetSearch, setTargetSearch] = useState('');
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | undefined>(undefined);
@@ -37,11 +39,21 @@ export function CouponsPage() {
     applicableTargetIds: [],
     usageLimitTotal: 100,
     usageLimitPerCustomer: 1,
-    startDate: '2026-11-17',
-    endDate: '2026-12-31',
+    startDate: new Date().toISOString().slice(0, 10),
+    endDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
     active: true,
     firstOrderOnly: false,
   });
+
+  const refreshCatalog = () => {
+    Promise.all([listCategories(), listBrands(), listProducts()])
+      .then(([cats, brs, prods]) => {
+        setCategories(cats);
+        setBrands(brs);
+        setProducts(prods);
+      })
+      .catch((err) => console.warn('Could not refresh catalog data:', err));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +77,9 @@ export function CouponsPage() {
   const flatCategories = useMemo(() => flattenCategories(categories), [categories]);
 
   const openNew = () => {
+    refreshCatalog();
     setEditingId(undefined);
+    setTargetSearch('');
     setForm({
       code: '',
       type: 'percentage',
@@ -76,8 +90,8 @@ export function CouponsPage() {
       applicableTargetIds: [],
       usageLimitTotal: 100,
       usageLimitPerCustomer: 1,
-      startDate: '2026-11-17',
-      endDate: '2026-12-31',
+      startDate: new Date().toISOString().slice(0, 10),
+      endDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
       active: true,
       firstOrderOnly: false,
     });
@@ -85,7 +99,9 @@ export function CouponsPage() {
   };
 
   const openEdit = (c: Coupon) => {
+    refreshCatalog();
     setEditingId(c.id);
+    setTargetSearch('');
     setForm({
       code: c.code,
       type: c.type,
@@ -93,7 +109,7 @@ export function CouponsPage() {
       maxDiscount: c.maxDiscount,
       minOrderValue: c.minOrderValue,
       applicableTo: c.applicableTo,
-      applicableTargetIds: c.applicableTargetIds,
+      applicableTargetIds: c.applicableTargetIds || [],
       usageLimitTotal: c.usageLimitTotal,
       usageLimitPerCustomer: c.usageLimitPerCustomer,
       startDate: c.startDate,
@@ -106,39 +122,72 @@ export function CouponsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const next = await saveCoupon({
-      ...form,
-      code: form.code.trim().toUpperCase(),
-      id: editingId,
-    });
-    setCoupons(next);
-    setDrawerOpen(false);
-    showToast({
-      title: editingId ? 'Coupon updated' : 'Coupon created',
-      variant: 'success',
-    });
+    setSaving(true);
+    try {
+      const next = await saveCoupon({
+        ...form,
+        code: form.code.trim().toUpperCase(),
+        id: editingId,
+      });
+      setCoupons(next);
+      setDrawerOpen(false);
+      showToast({
+        title: editingId ? 'Coupon updated' : 'Coupon created',
+        variant: 'success',
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Check coupon fields and try again';
+      showToast({
+        title: 'Failed to save coupon',
+        description: msg,
+        variant: 'error',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    const next = await deleteCoupon(deleteTarget.id);
-    setCoupons(next);
-    setDeleteTarget(null);
-    showToast({ title: 'Coupon deleted', variant: 'success' });
+    try {
+      const next = await deleteCoupon(deleteTarget.id);
+      setCoupons(next);
+      setDeleteTarget(null);
+      showToast({ title: 'Coupon deleted', variant: 'success' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not delete coupon';
+      showToast({
+        title: 'Failed to delete coupon',
+        description: msg,
+        variant: 'error',
+      });
+    }
   };
 
   const targetChoices = useMemo(() => {
     if (form.applicableTo === 'categories') {
-      return flatCategories.map((c) => ({ id: c.node.id, label: c.path }));
+      return flatCategories
+        .map((c) => ({ id: c.node.id, label: c.path }))
+        .sort((a, b) => a.label.localeCompare(b.label));
     }
     if (form.applicableTo === 'brands') {
-      return brands.map((b) => ({ id: b.id, label: b.name }));
+      return brands
+        .map((b) => ({ id: b.id, label: b.name }))
+        .sort((a, b) => a.label.localeCompare(b.label));
     }
     if (form.applicableTo === 'products') {
-      return products.map((p) => ({ id: p.id, label: `${p.name} (${p.sku})` }));
+      return products
+        .map((p) => ({ id: p.id, label: `${p.name} (${p.sku})` }))
+        .sort((a, b) => a.label.localeCompare(b.label));
     }
     return [];
   }, [form.applicableTo, flatCategories, brands, products]);
+
+  const filteredTargetChoices = useMemo(() => {
+    const q = targetSearch.trim().toLowerCase();
+    if (!q) return targetChoices;
+    return targetChoices.filter((opt) => opt.label.toLowerCase().includes(q));
+  }, [targetChoices, targetSearch]);
 
   const columns: DataTableColumn<Coupon>[] = useMemo(
     () => [
@@ -161,17 +210,55 @@ export function CouponsPage() {
       {
         key: 'discount',
         header: 'Discount & Rules',
-        render: (c) => (
-          <div className="text-xs">
-            <p className="font-semibold text-[#12263F]">
-              {c.type === 'percentage' ? `${c.value}% OFF` : `${formatINR(c.value)} FLAT`}
-              {c.maxDiscount ? ` (Up to ${formatINR(c.maxDiscount)})` : ''}
-            </p>
-            <p className="text-[#5B6B82]">
-              Min order {formatINR(c.minOrderValue)} · Scope: {c.applicableTo}
-            </p>
-          </div>
-        ),
+        render: (c) => {
+          let scopeText = 'All Products & Categories';
+          if (c.applicableTo === 'products') {
+            const matched = products.filter((p) => c.applicableTargetIds?.includes(p.id));
+            if (matched.length === 1) {
+              scopeText = `${matched[0].name} (${matched[0].sku})`;
+            } else if (matched.length > 1) {
+              scopeText = `${matched.length} Products (${matched.map((p) => p.name).slice(0, 2).join(', ')}${matched.length > 2 ? '...' : ''})`;
+            } else if (c.applicableTargetIds?.length) {
+              scopeText = `${c.applicableTargetIds.length} Products`;
+            } else {
+              scopeText = 'Specific Products (None selected)';
+            }
+          } else if (c.applicableTo === 'categories') {
+            const matched = flatCategories.filter((cat) => c.applicableTargetIds?.includes(cat.node.id));
+            if (matched.length === 1) {
+              scopeText = matched[0].node.name;
+            } else if (matched.length > 1) {
+              scopeText = `${matched.length} Categories (${matched.map((m) => m.node.name).slice(0, 2).join(', ')}${matched.length > 2 ? '...' : ''})`;
+            } else if (c.applicableTargetIds?.length) {
+              scopeText = `${c.applicableTargetIds.length} Categories`;
+            } else {
+              scopeText = 'Specific Categories (None selected)';
+            }
+          } else if (c.applicableTo === 'brands') {
+            const matched = brands.filter((b) => c.applicableTargetIds?.includes(b.id));
+            if (matched.length === 1) {
+              scopeText = matched[0].name;
+            } else if (matched.length > 1) {
+              scopeText = `${matched.length} Brands (${matched.map((b) => b.name).slice(0, 2).join(', ')}${matched.length > 2 ? '...' : ''})`;
+            } else if (c.applicableTargetIds?.length) {
+              scopeText = `${c.applicableTargetIds.length} Brands`;
+            } else {
+              scopeText = 'Specific Brands (None selected)';
+            }
+          }
+
+          return (
+            <div className="text-xs">
+              <p className="font-semibold text-[#12263F]">
+                {c.type === 'percentage' ? `${c.value}% OFF` : `${formatINR(c.value)} FLAT`}
+                {c.maxDiscount ? ` (Up to ${formatINR(c.maxDiscount)})` : ''}
+              </p>
+              <p className="text-[#5B6B82]" title={scopeText}>
+                Min order {formatINR(c.minOrderValue)} · <span className="font-medium text-[#1D5FAF]">{scopeText}</span>
+              </p>
+            </div>
+          );
+        },
       },
       {
         key: 'usage',
@@ -346,13 +433,14 @@ export function CouponsPage() {
           <FormField label="Applicable To">
             <select
               value={form.applicableTo}
-              onChange={(e) =>
+              onChange={(e) => {
+                setTargetSearch('');
                 setForm((f) => ({
                   ...f,
                   applicableTo: e.target.value as Coupon['applicableTo'],
                   applicableTargetIds: [],
-                }))
-              }
+                }));
+              }}
               className={selectClass}
             >
               <option value="all">All Products &amp; Categories</option>
@@ -362,32 +450,101 @@ export function CouponsPage() {
             </select>
           </FormField>
 
-          {targetChoices.length > 0 && (
-            <div className="max-h-40 overflow-y-auto rounded-lg border border-[#DCE6F2] p-2 space-y-1">
-              {targetChoices.map((opt) => {
-                const checked = form.applicableTargetIds.includes(opt.id);
-                return (
-                  <label
-                    key={opt.id}
-                    className="flex items-center gap-2 rounded px-2 py-1 text-xs hover:bg-[#F6F9FD] cursor-pointer"
+          {form.applicableTo !== 'all' && (
+            <div className="space-y-2.5 rounded-lg border border-[#DCE6F2] bg-[#FAFCFF] p-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-[#12263F]">
+                  Select {form.applicableTo === 'products' ? 'Products' : form.applicableTo === 'categories' ? 'Categories' : 'Brands'} from Catalog
+                  <span className="ml-1.5 rounded-full bg-[#EAF2FC] px-2 py-0.5 text-[10px] font-semibold text-[#1D5FAF]">
+                    {targetChoices.length} in database
+                  </span>
+                </span>
+                <span className="text-[11px] font-medium text-[#5B6B82]">
+                  {form.applicableTargetIds.length} selected
+                </span>
+              </div>
+
+              {/* Search input */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder={`Search ${form.applicableTo} by name or SKU...`}
+                  value={targetSearch}
+                  onChange={(e) => setTargetSearch(e.target.value)}
+                  className="w-full rounded-md border border-[#DCE6F2] bg-white px-2.5 py-1.5 text-xs text-[#12263F] placeholder-[#8A9BA8] focus:border-[#1D5FAF] focus:outline-none"
+                />
+                {targetSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setTargetSearch('')}
+                    className="absolute right-2 top-1.5 text-xs font-bold text-[#8A9BA8] hover:text-[#12263F]"
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() =>
-                        setForm((f) => ({
-                          ...f,
-                          applicableTargetIds: checked
-                            ? f.applicableTargetIds.filter((id) => id !== opt.id)
-                            : [...f.applicableTargetIds, opt.id],
-                        }))
-                      }
-                      className="rounded border-[#DCE6F2] text-[#1D5FAF]"
-                    />
-                    <span className="text-[#12263F]">{opt.label}</span>
-                  </label>
-                );
-              })}
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Quick actions: Select visible / Clear all */}
+              <div className="flex items-center justify-between text-[11px]">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allIds = Array.from(new Set([...form.applicableTargetIds, ...filteredTargetChoices.map((c) => c.id)]));
+                      setForm((f) => ({ ...f, applicableTargetIds: allIds }));
+                    }}
+                    className="text-[#1D5FAF] hover:underline font-medium"
+                  >
+                    Select visible ({filteredTargetChoices.length})
+                  </button>
+                  <span className="text-[#DCE6F2]">|</span>
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, applicableTargetIds: [] }))}
+                    className="text-[#E02424] hover:underline font-medium"
+                  >
+                    Clear selection
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable list */}
+              <div className="max-h-56 overflow-y-auto rounded-md border border-[#DCE6F2] bg-white p-1.5 space-y-0.5">
+                {filteredTargetChoices.length === 0 ? (
+                  <p className="py-4 text-center text-xs text-[#8A9BA8]">
+                    {targetSearch ? `No items match "${targetSearch}"` : 'No items found in Catalog database'}
+                  </p>
+                ) : (
+                  filteredTargetChoices.map((opt) => {
+                    const checked = form.applicableTargetIds.includes(opt.id);
+                    return (
+                      <label
+                        key={opt.id}
+                        className={`flex items-center gap-2 rounded px-2.5 py-1.5 text-xs cursor-pointer transition-colors ${
+                          checked
+                            ? 'bg-[#EAF2FC] font-semibold text-[#1D5FAF]'
+                            : 'hover:bg-[#F6F9FD] text-[#12263F]'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setForm((f) => ({
+                              ...f,
+                              applicableTargetIds: checked
+                                ? f.applicableTargetIds.filter((id) => id !== opt.id)
+                                : [...f.applicableTargetIds, opt.id],
+                            }))
+                          }
+                          className="rounded border-[#DCE6F2] text-[#1D5FAF] focus:ring-0"
+                        />
+                        <span className="truncate">{opt.label}</span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
 
@@ -471,9 +628,10 @@ export function CouponsPage() {
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+              disabled={saving}
+              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save Coupon
+              {saving ? 'Saving...' : 'Save Coupon'}
             </button>
           </div>
         </form>

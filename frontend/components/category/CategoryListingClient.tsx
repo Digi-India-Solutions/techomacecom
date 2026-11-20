@@ -82,7 +82,7 @@ export const CategoryListingClient: React.FC<CategoryListingClientProps> = ({
       ]
     : [];
 
-  const pageBanners: PageBanner[] =
+  const pageBanners: PageBanner[] = (
     banners.length > 0
       ? banners
       : adminBanner.length > 0
@@ -100,7 +100,18 @@ export const CategoryListingClient: React.FC<CategoryListingClientProps> = ({
             ctaText: 'Browse Catalog',
             ctaLink: `#catalog`
           }
-        ];
+        ]
+  ).map((b) => ({
+    ...b,
+    imageUrl: b.imageUrl || b.imageDesktop || category.image || '/images/bento_oxygen_conc_1793803384593.jpg',
+    imageDesktop: b.imageDesktop || b.imageUrl || category.image || '/images/bento_oxygen_conc_1793803384593.jpg',
+    headline: b.headline || b.title || category.name,
+    title: b.title || b.headline || category.name,
+    subtext: b.subtext || b.tagline || category.description,
+    tagline: b.tagline || b.subtext || category.description,
+    ctaLink: b.ctaLink || b.link || '#catalog',
+    ctaText: b.ctaText || 'Browse Catalog'
+  }));
 
   return (
     <ListingPageLayout

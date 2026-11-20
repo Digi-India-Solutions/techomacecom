@@ -1,5 +1,5 @@
 import type { BlogPost, CmsPage, FaqItem } from '@/types/admin';
-import { mockDelay, slugify } from './client';
+import { adminDelete, adminGet, adminPost, adminPut, mockDelay, slugify } from './client';
 import { PRODUCT_IMAGES } from './mockData';
 
 let cmsPagesStore: CmsPage[] = [
@@ -148,65 +148,148 @@ let blogStore: BlogPost[] = [
 ];
 
 export async function listCmsPages(): Promise<CmsPage[]> {
-  await mockDelay(100);
+  try {
+    const pages = await adminGet<CmsPage[]>('/admin/pages');
+    if (Array.isArray(pages) && pages.length > 0) {
+      return pages;
+    }
+  } catch (error) {
+    console.warn('Falling back to local CMS store:', error);
+  }
+  await mockDelay(60);
   return structuredClone(cmsPagesStore);
 }
+
 export async function saveCmsPage(page: CmsPage): Promise<CmsPage> {
-  await mockDelay(130);
-  const updated = { ...page, updatedAt: new Date().toISOString() };
-  cmsPagesStore = cmsPagesStore.map((p) => (p.id === page.id ? updated : p));
-  return structuredClone(updated);
+  const targetIdentifier = page.slug || page.id;
+  try {
+    const updated = await adminPut<CmsPage>(`/admin/pages/${targetIdentifier}`, page);
+    return updated;
+  } catch (error) {
+    console.error('API save failed:', error);
+    // Try by page.id if different from slug
+    if (page.id && page.id !== page.slug) {
+      try {
+        const retry = await adminPut<CmsPage>(`/admin/pages/${page.id}`, page);
+        return retry;
+      } catch (retryErr) {
+        console.error('API save retry failed:', retryErr);
+      }
+    }
+    throw error;
+  }
 }
 
 export async function listFaqs(): Promise<FaqItem[]> {
-  await mockDelay(100);
+  try {
+    const items = await adminGet<FaqItem[]>('/admin/faqs');
+    if (Array.isArray(items) && items.length > 0) {
+      return items;
+    }
+  } catch (error) {
+    console.warn('API listFaqs failed, using local store:', error);
+  }
+  await mockDelay(60);
   return structuredClone([...faqsStore].sort((a, b) => a.sortOrder - b.sortOrder));
 }
-export async function saveFaq(faq: Omit<FaqItem, 'id' | 'sortOrder'> & { id?: string }): Promise<FaqItem[]> {
-  await mockDelay(120);
-  if (faq.id) {
-    faqsStore = faqsStore.map((f) => (f.id === faq.id ? { ...f, ...faq } : f));
-  } else {
-    faqsStore.push({ ...faq, id: `faq-${Date.now()}`, sortOrder: faqsStore.length + 1 });
+
+export async function saveFaq(
+  faq: Omit<FaqItem, 'id' | 'sortOrder'> & { id?: string }
+): Promise<FaqItem[]> {
+  try {
+    if (faq.id) {
+      await adminPut<FaqItem>(`/admin/faqs/${faq.id}`, faq);
+    } else {
+      await adminPost<FaqItem>('/admin/faqs', faq);
+    }
+    return listFaqs();
+  } catch (error) {
+    console.warn('API saveFaq failed, fallback to local store:', error);
+    await mockDelay(60);
+    if (faq.id) {
+      faqsStore = faqsStore.map((f) => (f.id === faq.id ? { ...f, ...faq } : f));
+    } else {
+      faqsStore.push({ ...faq, id: `faq-${Date.now()}`, sortOrder: faqsStore.length + 1 });
+    }
+    return listFaqs();
   }
-  return listFaqs();
 }
+
 export async function reorderFaqs(next: FaqItem[]): Promise<FaqItem[]> {
-  await mockDelay(90);
+  try {
+    const updated = await adminPut<FaqItem[]>('/admin/faqs/reorder', { items: next });
+    if (Array.isArray(updated) && updated.length > 0) return updated;
+  } catch (error) {
+    console.warn('API reorderFaqs failed, fallback to local store:', error);
+  }
+  await mockDelay(60);
   faqsStore = next.map((f, idx) => ({ ...f, sortOrder: idx + 1 }));
   return listFaqs();
 }
+
 export async function deleteFaq(id: string): Promise<FaqItem[]> {
-  await mockDelay(90);
+  try {
+    await adminDelete(`/admin/faqs/${id}`);
+    return listFaqs();
+  } catch (error) {
+    console.warn('API deleteFaq failed, fallback to local store:', error);
+  }
+  await mockDelay(60);
   faqsStore = faqsStore.filter((f) => f.id !== id);
   return listFaqs();
 }
 
 export async function listBlogPosts(): Promise<BlogPost[]> {
-  await mockDelay(100);
+  try {
+    const items = await adminGet<BlogPost[]>('/admin/blog');
+    if (Array.isArray(items) && items.length > 0) {
+      return items;
+    }
+  } catch (error) {
+    console.warn('API listBlogPosts failed, using local store:', error);
+  }
+  await mockDelay(60);
   return structuredClone(blogStore);
 }
+
 export async function saveBlogPost(
   post: Omit<BlogPost, 'id' | 'updatedAt'> & { id?: string }
 ): Promise<BlogPost[]> {
-  await mockDelay(140);
-  const now = new Date().toISOString();
-  if (post.id) {
-    blogStore = blogStore.map((p) =>
-      p.id === post.id ? { ...p, ...post, slug: post.slug || slugify(post.title), updatedAt: now } : p
-    );
-  } else {
-    blogStore.unshift({
-      ...post,
-      id: `blog-${Date.now()}`,
-      slug: post.slug || slugify(post.title),
-      updatedAt: now,
-    });
+  try {
+    if (post.id) {
+      await adminPut<BlogPost>(`/admin/blog/${post.id}`, post);
+    } else {
+      await adminPost<BlogPost>('/admin/blog', post);
+    }
+    return listBlogPosts();
+  } catch (error) {
+    console.warn('API saveBlogPost failed, fallback to local store:', error);
+    await mockDelay(60);
+    const now = new Date().toISOString();
+    if (post.id) {
+      blogStore = blogStore.map((p) =>
+        p.id === post.id ? { ...p, ...post, slug: post.slug || slugify(post.title), updatedAt: now } : p
+      );
+    } else {
+      blogStore.unshift({
+        ...post,
+        id: `blog-${Date.now()}`,
+        slug: post.slug || slugify(post.title),
+        updatedAt: now,
+      });
+    }
+    return listBlogPosts();
   }
-  return listBlogPosts();
 }
+
 export async function deleteBlogPost(id: string): Promise<BlogPost[]> {
-  await mockDelay(100);
+  try {
+    await adminDelete(`/admin/blog/${id}`);
+    return listBlogPosts();
+  } catch (error) {
+    console.warn('API deleteBlogPost failed, fallback to local store:', error);
+  }
+  await mockDelay(60);
   blogStore = blogStore.filter((p) => p.id !== id);
   return listBlogPosts();
 }

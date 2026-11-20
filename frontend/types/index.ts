@@ -432,6 +432,7 @@ export interface PageBanner {
   imageMobile?: string;
   imageUrl?: string;
   link?: string;
+  linkUrl?: string;
   alt?: string;
   title?: string;
   headline?: string;

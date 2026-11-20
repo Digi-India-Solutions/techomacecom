@@ -173,8 +173,8 @@ export async function deletePageBanner(req, res) {
 }
 
 export async function listPublicPageBanners(req, res) {
-  const { pageType, targetId } = req.query;
-  const banners = await service.listPublicPageBanners(pageType, targetId);
+  const { pageType, targetId, slug } = req.query;
+  const banners = await service.listPublicPageBanners({ pageType, targetId, slug });
   return ok(res, banners);
 }
 

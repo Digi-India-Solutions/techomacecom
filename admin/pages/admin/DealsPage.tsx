@@ -11,10 +11,28 @@ import { Drawer } from '@/components/admin/Drawer';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { FormField, inputClass, selectClass } from '@/components/admin/FormField';
 
+function defaultStartIso() {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function defaultEndIso() {
+  const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  d.setSeconds(0, 0);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 function CountdownText({ endTime }: { endTime: string }) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
   const end = new Date(endTime).getTime();
-  const refNow = new Date('2026-11-17T10:30:00').getTime();
-  const diff = end - refNow;
+  const diff = end - now;
   if (Number.isNaN(diff) || diff <= 0) return <span className="text-red-600">Ended</span>;
   const hrs = Math.floor(diff / (1000 * 60 * 60));
   const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -31,6 +49,7 @@ export function DealsPage() {
   const [deals, setDeals] = useState<DealOfTheDayItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | undefined>(undefined);
@@ -38,9 +57,17 @@ export function DealsPage() {
 
   const [productId, setProductId] = useState('');
   const [dealPrice, setDealPrice] = useState(0);
-  const [startTime, setStartTime] = useState('2026-11-17T00:00');
-  const [endTime, setEndTime] = useState('2026-11-18T23:59');
+  const [startTime, setStartTime] = useState(defaultStartIso);
+  const [endTime, setEndTime] = useState(defaultEndIso);
   const [active, setActive] = useState(true);
+
+  const refreshProducts = () => {
+    listProducts()
+      .then((pRows) => {
+        setProducts(pRows);
+      })
+      .catch((err) => console.warn('Could not refresh products for deals:', err));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -65,19 +92,25 @@ export function DealsPage() {
 
   const selectedProduct = products.find((p) => p.id === productId);
 
+  const sortedProducts = React.useMemo(() => {
+    return [...products].sort((a, b) => a.name.localeCompare(b.name));
+  }, [products]);
+
   const openNew = () => {
+    refreshProducts();
     setEditingId(undefined);
     if (products[0]) {
       setProductId(products[0].id);
       setDealPrice(Math.round(products[0].price * 0.9));
     }
-    setStartTime('2026-11-17T00:00');
-    setEndTime('2026-11-18T23:59');
+    setStartTime(defaultStartIso());
+    setEndTime(defaultEndIso());
     setActive(true);
     setDrawerOpen(true);
   };
 
   const openEdit = (d: DealOfTheDayItem) => {
+    refreshProducts();
     setEditingId(d.id);
     setProductId(d.productId);
     setDealPrice(d.dealPrice);
@@ -90,28 +123,44 @@ export function DealsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct) return;
-    const next = await saveDeal({
-      id: editingId,
-      productId: selectedProduct.id,
-      productName: selectedProduct.name,
-      productImage: selectedProduct.images[0]?.url || '',
-      regularPrice: selectedProduct.price,
-      dealPrice,
-      startTime,
-      endTime,
-      active,
-    });
-    setDeals(next);
-    setDrawerOpen(false);
-    showToast({ title: 'Deal of the Day saved', variant: 'success' });
+    setSaving(true);
+    try {
+      const next = await saveDeal({
+        id: editingId,
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        productImage: selectedProduct.images[0]?.url || '',
+        regularPrice: selectedProduct.price,
+        dealPrice,
+        startTime,
+        endTime,
+        active,
+      });
+      setDeals(next);
+      setDrawerOpen(false);
+      showToast({
+        title: editingId ? 'Deal of the Day updated' : 'Deal of the Day scheduled',
+        variant: 'success',
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not save deal';
+      showToast({ title: 'Failed to save deal', description: msg, variant: 'error' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    const next = await deleteDeal(deleteTarget.id);
-    setDeals(next);
-    setDeleteTarget(null);
-    showToast({ title: 'Deal deleted', variant: 'success' });
+    try {
+      const next = await deleteDeal(deleteTarget.id);
+      setDeals(next);
+      setDeleteTarget(null);
+      showToast({ title: 'Deal deleted', variant: 'success' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not delete deal';
+      showToast({ title: 'Failed to delete deal', description: msg, variant: 'error' });
+    }
   };
 
   return (
@@ -221,9 +270,9 @@ export function DealsPage() {
               }}
               className={selectClass}
             >
-              {products.map((p) => (
+              {sortedProducts.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({formatINR(p.price)})
+                  {p.name} ({p.sku}) — {formatINR(p.price)}
                 </option>
               ))}
             </select>
@@ -298,9 +347,10 @@ export function DealsPage() {
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+              disabled={saving}
+              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save Deal
+              {saving ? 'Saving...' : 'Save Deal'}
             </button>
           </div>
         </form>

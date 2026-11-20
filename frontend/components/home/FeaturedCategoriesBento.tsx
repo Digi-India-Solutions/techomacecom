@@ -37,7 +37,11 @@ const BentoImageCard: React.FC<{ item: BentoItem; className?: string; sizes: str
   );
 };
 
-export const FeaturedCategoriesBento: React.FC = () => {
+interface FeaturedCategoriesBentoProps {
+  title?: string;
+}
+
+export const FeaturedCategoriesBento: React.FC<FeaturedCategoriesBentoProps> = ({ title = 'Featured Clinical Solutions' }) => {
   const topRowItems: BentoItem[] = [
     {
       id: 'oxygen',
@@ -92,7 +96,7 @@ export const FeaturedCategoriesBento: React.FC = () => {
         <div className="flex items-end justify-between mb-5 sm:mb-6">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-[#0F172A] font-heading relative inline-block">
-              Featured Clinical Solutions
+              {title || 'Featured Clinical Solutions'}
               <span className="absolute bottom-[-4px] left-0 w-10 h-[3px] bg-[#1D5FAF] rounded-full" />
             </h2>
             <p className="text-xs sm:text-sm text-[#475569] font-body mt-2">
