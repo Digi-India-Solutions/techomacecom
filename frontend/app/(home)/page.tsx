@@ -37,6 +37,11 @@ export default async function HomePage() {
     getBlogPosts()
   ]);
 
+  // Admin → Categories "Show on homepage" and Admin → Brands "Featured on homepage" pick what
+  // the home page shows. Until the admin has flagged any, show all so the sections are never empty.
+  const homeCategories = categories.some((c) => c.showOnHome) ? categories.filter((c) => c.showOnHome) : categories;
+  const homeBrands = brands.some((b) => b.isFeatured) ? brands.filter((b) => b.isFeatured) : brands;
+
   return (
     <div className="home-compact flex flex-col min-h-screen bg-[#F6F9FD]">
       {/* a) Full-width graphic hero banner slider */}
@@ -46,10 +51,10 @@ export default async function HomePage() {
       <TrustStrip />
 
       {/* c) Top Categories (horizontal scroll of icon + title + description cards, TrustStrip style) */}
-      <TopCategoriesGrid categories={categories} />
+      <TopCategoriesGrid categories={homeCategories} />
 
       {/* c2) Shop by Brand logo slider */}
-      <ShopByBrandSlider brands={brands} />
+      <ShopByBrandSlider brands={homeBrands} />
 
       {/* d) Featured Categories Bento Grid (Dentalkart style with 5 banners) */}
       <FeaturedCategoriesBento />
@@ -61,7 +66,7 @@ export default async function HomePage() {
       <ProductRowSlider
         title="New Arrivals"
         subtitle="Latest medical innovations, imported European autoclaves & dental ceramics"
-        viewAllLink="/category/dental-handpieces-motors"
+        viewAllLink="/new-arrivals"
         products={newArrivals}
       />
 
@@ -69,7 +74,7 @@ export default async function HomePage() {
       <ProductRowSlider
         title="Hot Selling Products"
         subtitle="Most ordered operatory handpieces, oxygen concentrators & clinical disposables"
-        viewAllLink="/category/respiratory-care"
+        viewAllLink="/best-sellers"
         products={bestSellers}
       />
 

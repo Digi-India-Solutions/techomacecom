@@ -19,11 +19,14 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   }
 
   return {
-    title: `${product.name} - ₹${product.price.toLocaleString('en-IN')} | Buy Denmed India`,
-    description: `${product.shortDescription} Genuine ${product.brandName} with official warranty, GST tax invoice, and pan-India shipping.`,
+    // SEO fields from the admin product editor win; otherwise a sensible default
+    title: product.seoTitle || `${product.name} - ₹${product.price.toLocaleString('en-IN')} | Buy Denmed India`,
+    description:
+      product.seoDescription ||
+      `${product.shortDescription} Genuine ${product.brandName} with official warranty, GST tax invoice, and pan-India shipping.`,
     openGraph: {
       title: `${product.name} | Buy Denmed`,
-      description: product.shortDescription,
+      description: product.seoDescription || product.shortDescription,
       images: [{ url: product.thumbnail || (typeof product.images?.[0] === 'string' ? product.images[0] : product.images?.[0]?.url) || '/images/hero_medical_sale_1793803411713.jpg' }]
     }
   };

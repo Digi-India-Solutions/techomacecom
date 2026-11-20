@@ -33,7 +33,7 @@ export const AuthModal: React.FC = () => {
             <Logo variant="dark" size="md" showTagline={false} />
           </div>
           <h3 id="auth-modal-title" className="font-bold text-xl mt-1 font-heading">
-            Sign in or create an account
+            Welcome to Buy Denmed
           </h3>
           <p className="text-xs sm:text-sm text-[#EAF2FC]/80 mt-1 max-w-sm mx-auto leading-relaxed">
             GST invoices, order tracking and equipment rentals in one place

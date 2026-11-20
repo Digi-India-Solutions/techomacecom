@@ -16,9 +16,6 @@ import {
   PageBanner
 } from '@/types';
 import {
-  MOCK_CATEGORIES,
-  MOCK_BRANDS,
-  MOCK_PRODUCTS,
   MOCK_COUPONS,
   MOCK_BLOG_POSTS,
   MOCK_SLEEP_TEST_PACKAGES,
@@ -27,7 +24,8 @@ import {
   MOCK_RENTALS,
   MOCK_REVIEWS
 } from '@/lib/mock/data';
-import { sendLoginOtp, verifyLoginOtp } from './customerAuth';
+// import { sendLoginOtp, verifyLoginOtp } from './customerAuth'; // mobile OTP sign-in disabled
+import { getBrandBySlug, getCategoryBySlug } from './catalog';
 import { errorMessage } from './backend';
 
 // Read base URL from NEXT_PUBLIC_API_URL if configured for real REST backend
@@ -64,254 +62,8 @@ async function fetchOrMock<T>(endpoint: string, mockFallback: () => T | Promise<
   });
 }
 
-/**
- * Fetch all categories or single category
- */
-export async function getCategories(): Promise<Category[]> {
-  return fetchOrMock('/api/categories', () => [...MOCK_CATEGORIES]);
-}
-
-export async function getCategoryBySlug(slug: string): Promise<Category | null> {
-  return fetchOrMock(`/api/categories/${slug}`, () => {
-    const clean = (slug || '').toLowerCase().trim();
-    return (
-      MOCK_CATEGORIES.find(
-        (c) =>
-          c.slug === clean ||
-          (clean === 'critical-care' && (c.slug === 'critical-care' || c.slug === 'critical-care-icu')) ||
-          (clean === 'critical-care-icu' && (c.slug === 'critical-care' || c.slug === 'critical-care-icu'))
-      ) || null
-    );
-  });
-}
-
-/**
- * Fetch all brands or single brand
- */
-export async function getBrands(): Promise<Brand[]> {
-  return fetchOrMock('/api/brands', () => [...MOCK_BRANDS]);
-}
-
-export async function getBrandBySlug(slug: string): Promise<Brand | null> {
-  return fetchOrMock(`/api/brands/${slug}`, () => {
-    return MOCK_BRANDS.find((b) => b.slug === slug) || null;
-  });
-}
-
-/**
- * Fetch products with extensive filter & sort capabilities
- */
-export async function getProducts(options: FilterOptions = {}): Promise<{
-  products: Product[];
-  total: number;
-  page: number;
-  totalPages: number;
-}> {
-  return fetchOrMock(
-    `/api/products?${new URLSearchParams(
-      Object.entries(options).reduce((acc, [k, v]) => {
-        if (v !== undefined) acc[k] = String(v);
-        return acc;
-      }, {} as Record<string, string>)
-    ).toString()}`,
-    () => {
-      let filtered = [...MOCK_PRODUCTS];
-
-      // Category filter
-      if (options.categoryId) {
-        filtered = filtered.filter((p) => p.categoryId === options.categoryId);
-      }
-
-      // Subcategory slug filter
-      if (options.subCategorySlug) {
-        filtered = filtered.filter((p) => p.subCategorySlug === options.subCategorySlug);
-      }
-
-      // Brand filter (multiple)
-      if (options.brandIds && options.brandIds.length > 0) {
-        filtered = filtered.filter((p) => options.brandIds!.includes(p.brandId));
-      }
-
-      // Price filter
-      if (options.minPrice !== undefined) {
-        filtered = filtered.filter((p) => p.price >= options.minPrice!);
-      }
-      if (options.maxPrice !== undefined) {
-        filtered = filtered.filter((p) => p.price <= options.maxPrice!);
-      }
-
-      // Discount filter
-      if (options.minDiscount !== undefined) {
-        filtered = filtered.filter((p) => p.discountPercentage >= options.minDiscount!);
-      }
-
-      // In stock only
-      if (options.inStockOnly) {
-        filtered = filtered.filter((p) => p.inStock);
-      }
-
-      // Rent only
-      if (options.rentOnly) {
-        filtered = filtered.filter((p) => p.rentEnabled);
-      }
-
-      // EMI only
-      if (options.emiOnly) {
-        filtered = filtered.filter((p) => p.emiEnabled);
-      }
-
-      // Search query
-      if (options.query) {
-        const q = options.query.toLowerCase().trim();
-        filtered = filtered.filter(
-          (p) =>
-            p.name.toLowerCase().includes(q) ||
-            p.brandName.toLowerCase().includes(q) ||
-            p.categoryName.toLowerCase().includes(q) ||
-            p.subCategory.toLowerCase().includes(q) ||
-            p.sku.toLowerCase().includes(q) ||
-            p.shortDescription.toLowerCase().includes(q)
-        );
-      }
-
-      // Sort
-      switch (options.sortBy) {
-        case 'price-asc':
-          filtered.sort((a, b) => a.price - b.price);
-          break;
-        case 'price-desc':
-          filtered.sort((a, b) => b.price - a.price);
-          break;
-        case 'newest':
-          filtered.sort((a, b) => (b.isNewArrival ? 1 : 0) - (a.isNewArrival ? 1 : 0));
-          break;
-        case 'discount':
-          filtered.sort((a, b) => b.discountPercentage - a.discountPercentage);
-          break;
-        case 'popularity':
-        default:
-          filtered.sort((a, b) => (b.isBestSeller ? 1 : 0) - (a.isBestSeller ? 1 : 0) || b.reviewsCount - a.reviewsCount);
-          break;
-      }
-
-      const total = filtered.length;
-      const page = options.page || 1;
-      const limit = options.limit || 12;
-      const totalPages = Math.ceil(total / limit);
-      const start = (page - 1) * limit;
-      const products = filtered.slice(start, start + limit);
-
-      return {
-        products,
-        total,
-        page,
-        totalPages
-      };
-    }
-  );
-}
-
-/**
- * Fetch a single product by slug
- */
-export async function getProductBySlug(slug: string): Promise<Product | null> {
-  return fetchOrMock(`/api/products/${slug}`, () => {
-    return MOCK_PRODUCTS.find((p) => p.slug === slug) || null;
-  });
-}
-
-/**
- * Fetch related products
- */
-export async function getRelatedProducts(productId: string, categoryId: string, limit = 4): Promise<Product[]> {
-  return fetchOrMock(`/api/products/${productId}/related`, () => {
-    return MOCK_PRODUCTS.filter((p) => p.id !== productId && p.categoryId === categoryId).slice(0, limit);
-  });
-}
-
-/**
- * Deals of the day
- */
-export async function getDealsOfTheDay(): Promise<Product[]> {
-  return fetchOrMock('/api/deals', () => {
-    return MOCK_PRODUCTS.filter((p) => p.isDealOfDay);
-  });
-}
-
-/**
- * Best sellers
- */
-export async function getBestSellers(): Promise<Product[]> {
-  return fetchOrMock('/api/best-sellers', () => {
-    return MOCK_PRODUCTS.filter((p) => p.isBestSeller);
-  });
-}
-
-/**
- * New arrivals
- */
-export async function getNewArrivals(): Promise<Product[]> {
-  return fetchOrMock('/api/new-arrivals', () => {
-    return MOCK_PRODUCTS.filter((p) => p.isNewArrival);
-  });
-}
-
-/**
- * Rentable products
- */
-export async function getRentableProducts(): Promise<Product[]> {
-  return fetchOrMock('/api/rentals', () => {
-    return MOCK_PRODUCTS.filter((p) => p.rentEnabled);
-  });
-}
-
-/**
- * Search autocomplete suggestions
- */
-export async function searchSuggestions(query: string): Promise<{
-  products: { id: string; name: string; slug: string; price: number; thumbnail: string; brandName: string }[];
-  categories: { id: string; name: string; slug: string }[];
-  brands: { id: string; name: string; slug: string }[];
-}> {
-  const q = query.toLowerCase().trim();
-  if (!q) {
-    return { products: [], categories: [], brands: [] };
-  }
-
-  const matchedProducts = MOCK_PRODUCTS.filter(
-    (p) =>
-      p.name.toLowerCase().includes(q) ||
-      p.brandName.toLowerCase().includes(q) ||
-      p.sku.toLowerCase().includes(q)
-  )
-    .slice(0, 5)
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      price: p.price,
-      thumbnail: p.thumbnail,
-      brandName: p.brandName
-    }));
-
-  const matchedCategories = MOCK_CATEGORIES.filter((c) =>
-    c.name.toLowerCase().includes(q)
-  )
-    .slice(0, 3)
-    .map((c) => ({ id: c.id, name: c.name, slug: c.slug }));
-
-  const matchedBrands = MOCK_BRANDS.filter((b) =>
-    b.name.toLowerCase().includes(q)
-  )
-    .slice(0, 3)
-    .map((b) => ({ id: b.id, name: b.name, slug: b.slug }));
-
-  return {
-    products: matchedProducts,
-    categories: matchedCategories,
-    brands: matchedBrands
-  };
-}
+// Catalog (categories, brands, products, search) comes from the live API — see ./catalog.ts
+export * from './catalog';
 
 /**
  * Check Indian pincode serviceability
@@ -491,28 +243,32 @@ export async function submitEnquiry(data: {
 /**
  * Mobile OTP Authentication UI helpers
  */
-/**
- * Mobile OTP sign-in — now served by the real API (backend/src/modules/auth).
- * Kept with the old signatures for existing callers (e.g. rental checkout);
- * new code should use lib/api/customerAuth directly.
- */
-export async function requestMobileOtp(phone: string): Promise<{ success: boolean; message: string; demoOtp: string }> {
-  try {
-    const res = await sendLoginOtp(phone);
-    return { success: true, message: res.message, demoOtp: res.devOtp || '' };
-  } catch (error) {
-    return { success: false, message: errorMessage(error), demoOtp: '' };
-  }
-}
-
-export async function verifyMobileOtp(phone: string, otp: string): Promise<{ success: boolean; token?: string; user?: User; message: string }> {
-  try {
-    const { user, isNewUser } = await verifyLoginOtp({ mobile: phone, otp });
-    return { success: true, user, message: isNewUser ? 'Account created' : 'Signed in' };
-  } catch (error) {
-    return { success: false, message: errorMessage(error) };
-  }
-}
+// ---------------------------------------------------------------------------
+// Mobile OTP sign-in — DISABLED (storefront uses email + password; backend /auth/otp/* routes
+// are commented out). Rental checkout now embeds the email sign-in form instead.
+// ---------------------------------------------------------------------------
+// /**
+//  * Mobile OTP sign-in — now served by the real API (backend/src/modules/auth).
+//  * Kept with the old signatures for existing callers (e.g. rental checkout);
+//  * new code should use lib/api/customerAuth directly.
+//  */
+// export async function requestMobileOtp(phone: string): Promise<{ success: boolean; message: string; demoOtp: string }> {
+//   try {
+//     const res = await sendLoginOtp(phone);
+//     return { success: true, message: res.message, demoOtp: res.devOtp || '' };
+//   } catch (error) {
+//     return { success: false, message: errorMessage(error), demoOtp: '' };
+//   }
+// }
+// 
+// export async function verifyMobileOtp(phone: string, otp: string): Promise<{ success: boolean; token?: string; user?: User; message: string }> {
+//   try {
+//     const { user, isNewUser } = await verifyLoginOtp({ mobile: phone, otp });
+//     return { success: true, user, message: isNewUser ? 'Account created' : 'Signed in' };
+//   } catch (error) {
+//     return { success: false, message: errorMessage(error) };
+//   }
+// }
 
 export async function getOrders(): Promise<Order[]> {
   return fetchOrMock('/api/orders', () => [...MOCK_ORDERS]);
@@ -836,6 +592,30 @@ export async function getPageBanners(
   pageType: string,
   slug?: string
 ): Promise<PageBanner[]> {
+  // Banners uploaded in Admin → Catalog (category / brand) win over the marketing defaults below
+  if ((pageType === 'category' || pageType === 'brand') && slug) {
+    const entity =
+      pageType === 'category'
+        ? await getCategoryBySlug(slug).catch(() => null)
+        : await getBrandBySlug(slug).catch(() => null);
+    const desktop = !entity ? '' : 'bannerImage' in entity ? entity.bannerImage : entity.bannerDesktop;
+    if (entity && desktop) {
+      return [
+        {
+          id: `${pageType}-${entity.id}`,
+          imageDesktop: desktop,
+          imageMobile: entity.bannerMobile || desktop,
+          link: `/${pageType}/${entity.slug}`,
+          alt: entity.name,
+          title: entity.name,
+          tagline: entity.description || '',
+          bgColor: 'from-[#EAF2FC] via-white to-[#F6F9FD]'
+        }
+      ];
+    }
+  }
+  const liveBrand = pageType === 'brand' && slug ? await getBrandBySlug(slug).catch(() => null) : null;
+
   return fetchOrMock(`/api/banners?type=${pageType}&slug=${slug || ''}`, () => {
     switch (pageType) {
       case 'category': {
@@ -888,8 +668,7 @@ export async function getPageBanners(
       }
 
       case 'brand': {
-        const brand = MOCK_BRANDS.find((b) => b.slug === slug);
-        const brandName = brand ? brand.name : 'Authorized Brand';
+        const brandName = liveBrand ? liveBrand.name : 'Authorized Brand';
         return [
           {
             id: `brand-${slug || 'default'}`,

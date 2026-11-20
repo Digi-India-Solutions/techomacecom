@@ -4,6 +4,7 @@ import customerAuthRoutes from "./modules/auth/routes.js";
 import adminAuthRoutes from "./modules/admin-auth/routes.js";
 import staffRoutes from "./modules/staff/routes.js";
 import uploadRoutes from "./modules/uploads/routes.js";
+import { adminCatalogRoutes, storefrontCatalogRoutes } from "./modules/catalog/index.js";
 
 /**
  * All API routes live under /api/v1 (document §12).
@@ -14,6 +15,7 @@ const api = Router();
 
 // ---- Storefront ----
 api.use("/auth", customerAuthRoutes);
+api.use(storefrontCatalogRoutes); // /categories, /brands, /products, /search (public, read-only)
 
 // ---- Admin ----
 const admin = Router();
@@ -21,7 +23,8 @@ admin.use("/auth", adminAuthRoutes); // login / refresh / reset are reachable wi
 admin.use(requireAdmin); // everything below needs a signed-in, active staff member
 admin.use(staffRoutes); // /permissions, /roles, /staff, /activity-logs
 admin.use("/uploads", uploadRoutes); // images → WebP on local disk
-// admin.use("/products", productRoutes) … add new admin modules here
+admin.use(adminCatalogRoutes); // /categories, /brands, /products
+// … add new admin modules here
 api.use("/admin", admin);
 
 export default api;

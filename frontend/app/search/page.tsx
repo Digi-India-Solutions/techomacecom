@@ -45,7 +45,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           </h1>
         </div>
         <div className="text-xs text-[#5B6B82] font-semibold bg-[#F6F9FD] px-3.5 py-1.5 rounded-lg border border-[#DCE6F2]">
-          <strong className="text-[#12263F]">{data.products.length}</strong> items found
+          <strong className="text-[#12263F]">{data.total}</strong> items found
         </div>
       </div>
 

@@ -32,7 +32,7 @@ import {
 import Logo from '@/components/common/Logo';
 import { useCartStore, useWishlistStore, usePincodeStore, useUserStore } from '@/lib/store';
 import { searchSuggestions } from '@/lib/api';
-import { MOCK_CATEGORIES } from '@/lib/mock/data';
+import { useCatalogCategories } from '@/lib/hooks/useCatalogCategories';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { Skeleton } from '@/components/common/Skeleton';
 
@@ -70,7 +70,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false);
   const [activeCategoryIndex, setActiveCategoryIndex] = useState(0);
 
-  const categories = MOCK_CATEGORIES;
+  const categories = useCatalogCategories({ menuOnly: true });
   const currentCategory = categories[activeCategoryIndex] || categories[0];
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -429,7 +429,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
               </button>
 
               {/* 3-Level Mega Menu Overlay */}
-              {isMegaMenuOpen && (
+              {isMegaMenuOpen && currentCategory && (
                 <div className="absolute top-full left-0 w-[940px] max-w-[calc(100vw-32px)] bg-white rounded-b-2xl shadow-2xl border border-[#DCE6F2] text-[#12263F] z-50 flex overflow-hidden animate-in fade-in duration-150 font-body">
                   {/* Column 1: Main Categories */}
                   <div className="w-72 bg-[#F6F9FD] border-r border-[#DCE6F2] py-2 max-h-[520px] overflow-y-auto shrink-0">
@@ -482,17 +482,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                             <span className="text-[11px] text-[#5B6B82] font-normal font-body">({sub.itemCount})</span>
                           </Link>
 
-                          {/* Level 3 items */}
-                          {sub.items && (
+                          {/* Level 3 categories → their own category page */}
+                          {sub.children && sub.children.length > 0 && (
                             <ul className="space-y-1.5 pl-2.5 border-l border-[#DCE6F2] font-body">
-                              {sub.items.map((item, i) => (
-                                <li key={i}>
+                              {sub.children.map((child) => (
+                                <li key={child.id}>
                                   <Link
-                                    href={`/search?q=${encodeURIComponent(item)}`}
+                                    href={`/category/${child.slug}`}
                                     onClick={() => setIsMegaMenuOpen(false)}
                                     className="text-xs text-[#5B6B82] hover:text-[#1D5FAF] block py-0.5 transition-colors"
                                   >
-                                    {item}
+                                    {child.name}
                                   </Link>
                                 </li>
                               ))}

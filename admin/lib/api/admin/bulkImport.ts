@@ -7,7 +7,7 @@ import type {
 import { downloadCsv, mockDelay, slugify } from './client';
 import { INITIAL_BULK_IMPORT_HISTORY, INITIAL_BRANDS, PRODUCT_IMAGES } from './mockData';
 import { flattenCategories, listCategories } from './categories';
-import { getProductsStore, setProductsStore } from './products';
+import { getProductsStore, setProductsStore } from './legacyProductStore';
 
 let importHistoryStore: BulkImportHistoryItem[] = structuredClone(INITIAL_BULK_IMPORT_HISTORY);
 

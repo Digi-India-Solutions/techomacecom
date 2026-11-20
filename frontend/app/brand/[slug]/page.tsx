@@ -22,13 +22,17 @@ export async function generateMetadata({ params }: BrandPageProps): Promise<Meta
     };
   }
 
+  // SEO fields from Admin → Brands win; otherwise a sensible default
+  const ogImage = brand.bannerImage || brand.logo;
   return {
-    title: `${brand.name} Products Online - Authorized Distributor | Buy Denmed`,
-    description: `Shop genuine ${brand.name} products with manufacturer warranty, pan-India delivery, and GST tax invoice. ${brand.description}`,
+    title: brand.seoTitle || `${brand.name} Products Online - Authorized Distributor | Buy Denmed`,
+    description:
+      brand.seoDescription ||
+      `Shop genuine ${brand.name} products with manufacturer warranty, pan-India delivery, and GST tax invoice. ${brand.description}`,
     openGraph: {
       title: `${brand.name} | Buy Denmed`,
-      description: brand.description,
-      images: [{ url: brand.bannerImage || brand.logo }]
+      description: brand.seoDescription || brand.description,
+      ...(ogImage ? { images: [{ url: ogImage }] } : {})
     }
   };
 }
@@ -56,27 +60,36 @@ export default async function BrandPage({ params }: BrandPageProps) {
 
       {/* Brand Hero Banner */}
       <div className="relative rounded-3xl bg-[#0B2545] text-white overflow-hidden shadow-xl border border-[#13335E]">
-        <div className="absolute inset-0 opacity-25">
-          <Image
-            src={brand.bannerImage}
-            alt={brand.name}
-            fill
-            className="object-cover"
-            priority
-            referrerPolicy="no-referrer"
-          />
-        </div>
+        {brand.bannerImage && (
+          <div className="absolute inset-0 opacity-25">
+            <Image
+              src={brand.bannerImage}
+              alt={brand.name}
+              fill
+              className="object-cover"
+              priority
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        )}
 
         <div className="relative z-10 p-6 sm:p-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-5">
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white p-2 relative overflow-hidden shadow-lg shrink-0">
-              <Image
-                src={brand.logo}
-                alt={brand.name}
-                fill
-                className="object-cover"
-                referrerPolicy="no-referrer"
-              />
+              {brand.logo ? (
+                <Image
+                  src={brand.logo}
+                  alt={brand.name}
+                  fill
+                  className="object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                // No logo uploaded → text wordmark (document: logo_url NULL → wordmark)
+                <span className="flex h-full w-full items-center justify-center text-center text-sm font-black text-[#0B2545] leading-tight">
+                  {brand.name}
+                </span>
+              )}
             </div>
             <div className="space-y-1">
               {brand.authorizedDistributor && (
@@ -93,9 +106,11 @@ export default async function BrandPage({ params }: BrandPageProps) {
           </div>
 
           <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/15 text-center shrink-0">
-            <div className="text-2xl font-black text-[#EAF2FC]">{productsData.products.length}</div>
+            <div className="text-2xl font-black text-[#EAF2FC]">{productsData.total}</div>
             <div className="text-xs text-blue-100/90">Catalog Products</div>
-            <div className="text-[11px] text-blue-200/75 mt-1">Origin: {brand.originCountry}</div>
+            {brand.originCountry && (
+              <div className="text-[11px] text-blue-200/75 mt-1">Origin: {brand.originCountry}</div>
+            )}
           </div>
         </div>
       </div>

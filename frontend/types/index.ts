@@ -6,6 +6,19 @@ export interface Variant {
   mrp: number;
   inStock: boolean;
   stockCount: number;
+  optionType?: 'Size' | 'Pack' | 'Model';
+  image?: string;
+  isDefault?: boolean;
+  /** "Buy 2+" price per unit */
+  bulkPrice?: number;
+  bulkMinQty?: number;
+}
+
+/** Breadcrumb entry: Level 1 → Level 3 category of a product */
+export interface CategoryCrumb {
+  id: string;
+  name: string;
+  slug: string;
 }
 
 export interface EmiPlan {
@@ -80,6 +93,27 @@ export interface Product {
   emiPlans?: EmiPlan[];
   certifications?: string[];
   gstRate?: number; // e.g. 12 or 18
+  // ---- Live API extras (backend/src/modules/catalog/products/dto.js) ----
+  brandSlug?: string;
+  categorySlug?: string;
+  /** The exact (possibly Level 3) category the product is filed under */
+  leafCategoryId?: string;
+  categoryPath?: CategoryCrumb[];
+  soldCount?: number;
+  /** Normal price while a Deal of the Day overrides `price` */
+  regularPrice?: number;
+  isFeatured?: boolean;
+  badgeText?: string;
+  codEnabled?: boolean;
+  saleEnabled?: boolean;
+  rentalPrescriptionRequired?: boolean;
+  defaultVariantId?: string;
+  bulkPrice?: number;
+  bulkMinQty?: number;
+  hsnCode?: string;
+  weightKg?: number;
+  seoTitle?: string;
+  seoDescription?: string;
 }
 
 export type RentalStatus =
@@ -142,7 +176,13 @@ export interface SubCategory {
   name: string;
   slug: string;
   itemCount?: number;
+  /** Level 3 names (mega menu) */
   items?: string[];
+  /** Level 3 categories with slugs (link to /category/<slug>) */
+  children?: { id: string; name: string; slug: string; itemCount?: number }[];
+  icon?: string;
+  image?: string;
+  showInMenu?: boolean;
 }
 
 export interface Category {
@@ -154,6 +194,17 @@ export interface Category {
   description: string;
   itemCount: number;
   subCategories: SubCategory[];
+  // ---- Live API extras ----
+  level?: number;
+  parentId?: string | null;
+  bannerDesktop?: string;
+  bannerMobile?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  showInMenu?: boolean;
+  showOnHome?: boolean;
+  /** Present on GET /categories/:slug — Level 1 → this category */
+  breadcrumbs?: CategoryCrumb[];
 }
 
 export interface Brand {
@@ -168,6 +219,10 @@ export interface Brand {
   authorizedDistributor?: boolean;
   productCount: number;
   featuredCategories?: string[];
+  bannerMobile?: string;
+  isFeatured?: boolean;
+  seoTitle?: string;
+  seoDescription?: string;
 }
 
 export interface CartItem {

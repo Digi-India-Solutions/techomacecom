@@ -10,22 +10,26 @@ import {
 } from 'lucide-react';
 import type { Brand, BrandPayload, BrandStatus } from '@/types/admin';
 import { deleteBrand, listBrands, saveBrand } from '@/lib/api/admin/brands';
-import { slugify } from '@/lib/api/admin/client';
-import { PRODUCT_IMAGES } from '@/lib/api/admin/mockData';
+import { slugify, uploadImages } from '@/lib/api/admin/client';
 import { useToast } from '@/components/admin/ToastProvider';
+import { useAuth } from '@/components/admin/AuthContext';
 import { Drawer } from '@/components/admin/Drawer';
 import { FormField, inputClass, selectClass, textareaClass } from '@/components/admin/FormField';
 import { StatusBadge } from '@/components/admin/StatusBadge';
 import { SafeImage } from '@/components/admin/SafeImage';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
+type ImageField = 'logoUrl' | 'desktopBannerUrl' | 'mobileBannerUrl';
+
 const EMPTY_BRAND: BrandPayload = {
   name: '',
   slug: '',
-  logoUrl: PRODUCT_IMAGES.oxygenConcentrator,
+  logoUrl: '',
   desktopBannerUrl: '',
   mobileBannerUrl: '',
   description: '',
+  originCountry: '',
+  authorizedDistributor: false,
   featuredOnHomepage: false,
   status: 'active',
   seoTitle: '',
@@ -34,6 +38,11 @@ const EMPTY_BRAND: BrandPayload = {
 
 export function BrandsPage() {
   const { showToast } = useToast();
+  // Buttons follow the role's permissions (the API enforces them too)
+  const { can } = useAuth();
+  const canCreate = can('brands.create');
+  const canEdit = can('brands.edit');
+  const canDelete = can('brands.delete');
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -44,11 +53,18 @@ export function BrandsPage() {
   const [slugTouched, setSlugTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Brand | null>(null);
+  const [uploadingFields, setUploadingFields] = useState<Set<ImageField>>(new Set());
 
   const load = async () => {
     setLoading(true);
     try {
       setBrands(await listBrands());
+    } catch (err) {
+      showToast({
+        title: 'Could not load brands',
+        description: err instanceof Error ? err.message : 'Please try again',
+        variant: 'error',
+      });
     } finally {
       setLoading(false);
     }
@@ -83,6 +99,8 @@ export function BrandsPage() {
       desktopBannerUrl: brand.desktopBannerUrl,
       mobileBannerUrl: brand.mobileBannerUrl,
       description: brand.description,
+      originCountry: brand.originCountry || '',
+      authorizedDistributor: Boolean(brand.authorizedDistributor),
       featuredOnHomepage: brand.featuredOnHomepage,
       status: brand.status,
       seoTitle: brand.seoTitle,
@@ -95,6 +113,10 @@ export function BrandsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
+    if (uploadingFields.size > 0) {
+      showToast({ title: 'Please wait', description: 'An image is still uploading.', variant: 'warning' });
+      return;
+    }
     setSaving(true);
     try {
       await saveBrand(form);
@@ -105,6 +127,12 @@ export function BrandsPage() {
       });
       setDrawerOpen(false);
       load();
+    } catch (err) {
+      showToast({
+        title: 'Save failed',
+        description: err instanceof Error ? err.message : 'Unable to save brand',
+        variant: 'error',
+      });
     } finally {
       setSaving(false);
     }
@@ -127,12 +155,49 @@ export function BrandsPage() {
     }
   };
 
-  const handleFile = (
-    file: File | undefined,
-    field: 'logoUrl' | 'desktopBannerUrl' | 'mobileBannerUrl'
-  ) => {
+  /** Uploads the picked image to the API (stored as WebP) and keeps its server URL in the form. */
+  const handleFile = async (file: File | undefined, field: ImageField) => {
     if (!file) return;
-    setForm((prev) => ({ ...prev, [field]: URL.createObjectURL(file) }));
+    setUploadingFields((prev) => new Set(prev).add(field));
+    try {
+      const [uploaded] = await uploadImages([file], 'brands');
+      setForm((prev) => ({ ...prev, [field]: uploaded.url }));
+    } catch (err) {
+      showToast({
+        title: 'Image upload failed',
+        description: err instanceof Error ? err.message : 'Please try again',
+        variant: 'error',
+      });
+    } finally {
+      setUploadingFields((prev) => {
+        const next = new Set(prev);
+        next.delete(field);
+        return next;
+      });
+    }
+  };
+
+  /** Small preview + remove link under a banner input. */
+  const renderImagePreview = (field: ImageField, label: string) => {
+    if (uploadingFields.has(field)) {
+      return <p className="mt-1.5 text-[11px] text-[#5B6B82]">Uploading…</p>;
+    }
+    const value = form[field];
+    if (!value) return null;
+    return (
+      <div className="mt-1.5 flex items-center gap-2">
+        <div className="h-10 w-16 overflow-hidden rounded border border-[#DCE6F2] bg-[#F6F9FD]">
+          <SafeImage src={value} alt={label} />
+        </div>
+        <button
+          type="button"
+          onClick={() => setForm((prev) => ({ ...prev, [field]: '' }))}
+          className="text-[11px] font-semibold text-red-600 hover:underline"
+        >
+          Remove
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -144,14 +209,16 @@ export function BrandsPage() {
             Authorized medical &amp; dental equipment manufacturers listed on Buy Denmed.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
-        >
-          <Plus className="h-4 w-4" />
-          Add Brand
-        </button>
+        {canCreate && (
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+          >
+            <Plus className="h-4 w-4" />
+            Add Brand
+          </button>
+        )}
       </div>
 
       {/* Toolbar */}
@@ -235,22 +302,26 @@ export function BrandsPage() {
                   {brand.productCount} products
                 </span>
                 <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => openEdit(brand)}
-                    className="rounded-md p-1.5 text-[#5B6B82] hover:bg-[#EAF2FC] hover:text-[#1D5FAF]"
-                    title="Edit brand"
-                  >
-                    <Edit3 className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteTarget(brand)}
-                    className="rounded-md p-1.5 text-[#5B6B82] hover:bg-red-50 hover:text-red-600"
-                    title="Delete brand"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => openEdit(brand)}
+                      className="rounded-md p-1.5 text-[#5B6B82] hover:bg-[#EAF2FC] hover:text-[#1D5FAF]"
+                      title="Edit brand"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(brand)}
+                      className="rounded-md p-1.5 text-[#5B6B82] hover:bg-red-50 hover:text-red-600"
+                      title="Delete brand"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -292,20 +363,26 @@ export function BrandsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="inline-flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(brand)}
-                        className="rounded-md p-1.5 text-[#5B6B82] hover:bg-[#EAF2FC] hover:text-[#1D5FAF]"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(brand)}
-                        className="rounded-md p-1.5 text-[#5B6B82] hover:bg-red-50 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => openEdit(brand)}
+                          title="Edit brand"
+                          className="rounded-md p-1.5 text-[#5B6B82] hover:bg-[#EAF2FC] hover:text-[#1D5FAF]"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(brand)}
+                          title="Delete brand"
+                          className="rounded-md p-1.5 text-[#5B6B82] hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -333,10 +410,16 @@ export function BrandsPage() {
             <button
               type="submit"
               form="brand-drawer-form"
-              disabled={saving}
-              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+              disabled={saving || uploadingFields.size > 0}
+              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F] disabled:opacity-60"
             >
-              {saving ? 'Saving...' : form.id ? 'Save Brand' : 'Create Brand'}
+              {saving
+                ? 'Saving...'
+                : uploadingFields.size > 0
+                  ? 'Uploading image...'
+                  : form.id
+                    ? 'Save Brand'
+                    : 'Create Brand'}
             </button>
           </>
         }
@@ -384,6 +467,17 @@ export function BrandsPage() {
                 className="block w-full text-xs text-[#5B6B82] file:mr-3 file:rounded-md file:border file:border-[#DCE6F2] file:bg-[#F6F9FD] file:px-3 file:py-1.5 file:text-xs file:font-semibold"
               />
             </div>
+            {uploadingFields.has('logoUrl') ? (
+              <p className="mt-1.5 text-[11px] text-[#5B6B82]">Uploading…</p>
+            ) : form.logoUrl ? (
+              <button
+                type="button"
+                onClick={() => setForm((prev) => ({ ...prev, logoUrl: '' }))}
+                className="mt-1.5 text-[11px] font-semibold text-red-600 hover:underline"
+              >
+                Remove logo (storefront shows the brand name instead)
+              </button>
+            ) : null}
           </FormField>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -394,6 +488,7 @@ export function BrandsPage() {
                 onChange={(e) => handleFile(e.target.files?.[0], 'desktopBannerUrl')}
                 className="block w-full text-xs text-[#5B6B82] file:mr-2 file:rounded-md file:border file:border-[#DCE6F2] file:bg-[#F6F9FD] file:px-2.5 file:py-1 file:text-xs"
               />
+              {renderImagePreview('desktopBannerUrl', 'Desktop banner')}
             </FormField>
             <FormField label="Mobile Banner">
               <input
@@ -402,7 +497,32 @@ export function BrandsPage() {
                 onChange={(e) => handleFile(e.target.files?.[0], 'mobileBannerUrl')}
                 className="block w-full text-xs text-[#5B6B82] file:mr-2 file:rounded-md file:border file:border-[#DCE6F2] file:bg-[#F6F9FD] file:px-2.5 file:py-1 file:text-xs"
               />
+              {renderImagePreview('mobileBannerUrl', 'Mobile banner')}
             </FormField>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+            <FormField label="Country of Origin">
+              <input
+                type="text"
+                maxLength={80}
+                placeholder="e.g. Germany"
+                value={form.originCountry || ''}
+                onChange={(e) => setForm((prev) => ({ ...prev, originCountry: e.target.value }))}
+                className={inputClass}
+              />
+            </FormField>
+            <label className="flex items-center gap-2 pt-5 text-xs font-medium text-[#12263F] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(form.authorizedDistributor)}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, authorizedDistributor: e.target.checked }))
+                }
+                className="rounded border-[#DCE6F2] text-[#1D5FAF]"
+              />
+              We are an authorized distributor
+            </label>
           </div>
 
           <FormField label="Description">

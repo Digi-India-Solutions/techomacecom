@@ -15,9 +15,9 @@ import {
   saveCategory,
   updateCategoryTree,
 } from '@/lib/api/admin/categories';
-import { slugify } from '@/lib/api/admin/client';
-import { PRODUCT_IMAGES } from '@/lib/api/admin/mockData';
+import { slugify, uploadImages } from '@/lib/api/admin/client';
 import { useToast } from '@/components/admin/ToastProvider';
+import { useAuth } from '@/components/admin/AuthContext';
 import { Drawer } from '@/components/admin/Drawer';
 import { FormField, inputClass, selectClass, textareaClass } from '@/components/admin/FormField';
 import { StatusBadge } from '@/components/admin/StatusBadge';
@@ -25,11 +25,14 @@ import { CategoryTreeSelect } from '@/components/admin/CategoryTreeSelect';
 import { SafeImage } from '@/components/admin/SafeImage';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 
+type ImageField = 'iconUrl' | 'imageUrl' | 'desktopBannerUrl' | 'mobileBannerUrl';
+
 const EMPTY_CATEGORY: CategoryPayload = {
   name: '',
   slug: '',
   parentId: null,
-  iconUrl: PRODUCT_IMAGES.oxygenConcentrator,
+  iconUrl: '',
+  imageUrl: '',
   desktopBannerUrl: '',
   mobileBannerUrl: '',
   description: '',
@@ -42,11 +45,17 @@ const EMPTY_CATEGORY: CategoryPayload = {
 
 export function CategoriesPage() {
   const { showToast } = useToast();
+  // Buttons follow the role's permissions (the API enforces them too)
+  const { can } = useAuth();
+  const canCreate = can('categories.create');
+  const canEdit = can('categories.edit');
+  const canDelete = can('categories.delete');
   const [tree, setTree] = useState<CategoryNode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState<Set<string>>(
-    new Set(['cat-respiratory', 'cat-oxygen-therapy', 'cat-dental', 'cat-operatory', 'cat-patient-monitoring', 'cat-hospital-mobility'])
-  );
+  // Level-1 categories start expanded (filled in after the first load)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Image fields currently uploading (Save waits for them)
+  const [uploadingFields, setUploadingFields] = useState<Set<ImageField>>(new Set());
 
   // Drag state
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -66,6 +75,13 @@ export function CategoriesPage() {
     try {
       const data = await listCategories();
       setTree(data);
+      setExpanded((prev) => (prev.size ? prev : new Set(data.map((n) => n.id))));
+    } catch (err) {
+      showToast({
+        title: 'Could not load categories',
+        description: err instanceof Error ? err.message : 'Please try again',
+        variant: 'error',
+      });
     } finally {
       setLoading(false);
     }
@@ -97,6 +113,7 @@ export function CategoriesPage() {
       slug: node.slug,
       parentId: node.parentId,
       iconUrl: node.iconUrl,
+      imageUrl: node.imageUrl || '',
       desktopBannerUrl: node.desktopBannerUrl,
       mobileBannerUrl: node.mobileBannerUrl,
       description: node.description,
@@ -113,6 +130,10 @@ export function CategoriesPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
+    if (uploadingFields.size > 0) {
+      showToast({ title: 'Please wait', description: 'An image is still uploading.', variant: 'warning' });
+      return;
+    }
     setSaving(true);
     try {
       const next = await saveCategory(form);
@@ -203,20 +224,66 @@ export function CategoriesPage() {
     };
 
     insertInto(withoutDragged, 1);
-    const updated = await updateCategoryTree(withoutDragged);
-    setTree(updated);
     setDraggedId(null);
     setDropTarget(null);
-    showToast({ title: 'Category order updated', variant: 'success' });
+    try {
+      // The server re-checks the 3-level limit and returns the stored tree
+      const updated = await updateCategoryTree(withoutDragged);
+      setTree(updated);
+      showToast({ title: 'Category order updated', variant: 'success' });
+    } catch (err) {
+      showToast({
+        title: 'Could not save the new order',
+        description: err instanceof Error ? err.message : 'Please try again',
+        variant: 'error',
+      });
+      load();
+    }
   };
 
-  const handleFilePreview = (
-    file: File | undefined,
-    field: 'iconUrl' | 'desktopBannerUrl' | 'mobileBannerUrl'
-  ) => {
+  /** Uploads the picked image to the API (stored as WebP) and keeps its server URL in the form. */
+  const handleFilePreview = async (file: File | undefined, field: ImageField) => {
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setForm((prev) => ({ ...prev, [field]: url }));
+    setUploadingFields((prev) => new Set(prev).add(field));
+    try {
+      const [uploaded] = await uploadImages([file], 'categories');
+      setForm((prev) => ({ ...prev, [field]: uploaded.url }));
+    } catch (err) {
+      showToast({
+        title: 'Image upload failed',
+        description: err instanceof Error ? err.message : 'Please try again',
+        variant: 'error',
+      });
+    } finally {
+      setUploadingFields((prev) => {
+        const next = new Set(prev);
+        next.delete(field);
+        return next;
+      });
+    }
+  };
+
+  /** Small preview + remove link under an image input. */
+  const renderImagePreview = (field: ImageField, label: string) => {
+    if (uploadingFields.has(field)) {
+      return <p className="mt-1.5 text-[11px] text-[#5B6B82]">Uploading…</p>;
+    }
+    const value = form[field];
+    if (!value) return null;
+    return (
+      <div className="mt-1.5 flex items-center gap-2">
+        <div className="h-10 w-16 overflow-hidden rounded border border-[#DCE6F2] bg-[#F6F9FD]">
+          <SafeImage src={value} alt={label} />
+        </div>
+        <button
+          type="button"
+          onClick={() => setForm((prev) => ({ ...prev, [field]: '' }))}
+          className="text-[11px] font-semibold text-red-600 hover:underline"
+        >
+          Remove
+        </button>
+      </div>
+    );
   };
 
   const renderNode = (node: CategoryNode) => {
@@ -228,12 +295,13 @@ export function CategoriesPage() {
     return (
       <div key={node.id} className="select-none">
         <div
-          draggable
+          draggable={canEdit}
           onDragStart={(e) => {
             e.stopPropagation();
             setDraggedId(node.id);
           }}
           onDragOver={(e) => {
+            if (!canEdit || !draggedId) return;
             e.preventDefault();
             e.stopPropagation();
             const rect = e.currentTarget.getBoundingClientRect();
@@ -261,7 +329,11 @@ export function CategoriesPage() {
           }`}
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <GripVertical className="h-4 w-4 text-[#5B6B82]/60 cursor-grab shrink-0" />
+            {canEdit ? (
+              <GripVertical className="h-4 w-4 text-[#5B6B82]/60 cursor-grab shrink-0" />
+            ) : (
+              <span className="w-4 shrink-0" />
+            )}
 
             {hasChildren ? (
               <button
@@ -306,7 +378,7 @@ export function CategoriesPage() {
             <StatusBadge status={node.status} />
 
             <div className="flex items-center gap-1">
-              {node.level < 3 && (
+              {canCreate && node.level < 3 && (
                 <button
                   type="button"
                   onClick={() => openCreateDrawer(node.id)}
@@ -316,22 +388,26 @@ export function CategoriesPage() {
                   <FolderPlus className="h-4 w-4" />
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => openEditDrawer(node)}
-                title="Edit category"
-                className="rounded-md p-1.5 text-[#5B6B82] hover:bg-[#EAF2FC] hover:text-[#1D5FAF]"
-              >
-                <Edit3 className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(node)}
-                title="Delete category"
-                className="rounded-md p-1.5 text-[#5B6B82] hover:bg-red-50 hover:text-red-600"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => openEditDrawer(node)}
+                  title="Edit category"
+                  className="rounded-md p-1.5 text-[#5B6B82] hover:bg-[#EAF2FC] hover:text-[#1D5FAF]"
+                >
+                  <Edit3 className="h-4 w-4" />
+                </button>
+              )}
+              {canDelete && (
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(node)}
+                  title="Delete category"
+                  className="rounded-md p-1.5 text-[#5B6B82] hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -352,14 +428,16 @@ export function CategoriesPage() {
             Organize the 3-level medical catalog taxonomy. Drag rows to reorder or nest under a parent category.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => openCreateDrawer(null)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
-        >
-          <Plus className="h-4 w-4" />
-          Add Category
-        </button>
+        {canCreate && (
+          <button
+            type="button"
+            onClick={() => openCreateDrawer(null)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+          >
+            <Plus className="h-4 w-4" />
+            Add Category
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -368,7 +446,13 @@ export function CategoriesPage() {
         </div>
       ) : (
         <div className="rounded-xl border border-[#DCE6F2] bg-[#F6F9FD] p-4">
-          {tree.map((node) => renderNode(node))}
+          {tree.length === 0 ? (
+            <p className="py-6 text-center text-sm text-[#5B6B82]">
+              No categories yet. Click &ldquo;Add Category&rdquo; to create the first one.
+            </p>
+          ) : (
+            tree.map((node) => renderNode(node))
+          )}
         </div>
       )}
 
@@ -390,10 +474,16 @@ export function CategoriesPage() {
             <button
               type="submit"
               form="category-drawer-form"
-              disabled={saving}
+              disabled={saving || uploadingFields.size > 0}
               className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F] disabled:opacity-60"
             >
-              {saving ? 'Saving...' : form.id ? 'Save Category' : 'Create Category'}
+              {saving
+                ? 'Saving...'
+                : uploadingFields.size > 0
+                  ? 'Uploading image...'
+                  : form.id
+                    ? 'Save Category'
+                    : 'Create Category'}
             </button>
           </>
         }
@@ -456,6 +546,16 @@ export function CategoriesPage() {
             </div>
           </FormField>
 
+          <FormField label="Card Image (storefront category tile)">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleFilePreview(e.target.files?.[0], 'imageUrl')}
+              className="block w-full text-xs text-[#5B6B82] file:mr-2 file:rounded-md file:border file:border-[#DCE6F2] file:bg-[#F6F9FD] file:px-2.5 file:py-1 file:text-xs"
+            />
+            {renderImagePreview('imageUrl', 'Card image')}
+          </FormField>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FormField label="Desktop Banner (16:5)">
               <input
@@ -466,6 +566,7 @@ export function CategoriesPage() {
                 }
                 className="block w-full text-xs text-[#5B6B82] file:mr-2 file:rounded-md file:border file:border-[#DCE6F2] file:bg-[#F6F9FD] file:px-2.5 file:py-1 file:text-xs"
               />
+              {renderImagePreview('desktopBannerUrl', 'Desktop banner')}
             </FormField>
             <FormField label="Mobile Banner (4:3)">
               <input
@@ -476,6 +577,7 @@ export function CategoriesPage() {
                 }
                 className="block w-full text-xs text-[#5B6B82] file:mr-2 file:rounded-md file:border file:border-[#DCE6F2] file:bg-[#F6F9FD] file:px-2.5 file:py-1 file:text-xs"
               />
+              {renderImagePreview('mobileBannerUrl', 'Mobile banner')}
             </FormField>
           </div>
 

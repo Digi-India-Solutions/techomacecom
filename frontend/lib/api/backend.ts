@@ -79,6 +79,39 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return body.data as T;
 }
 
+export interface PageMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
+/**
+ * Public, read-only GET that also returns the list `meta` (pagination).
+ * No cookies are sent, so it works the same in server components and the browser.
+ * `cache: 'no-store'` keeps admin edits visible immediately; switch to
+ * `next: { revalidate: 30 }` later if the storefront needs more caching.
+ */
+export async function publicGet<T>(path: string): Promise<{ data: T; meta?: PageMeta }> {
+  let response: Response;
+  try {
+    response = await fetch(`${BACKEND_URL}${path}`, { cache: 'no-store' });
+  } catch {
+    throw new ApiClientError(0, 'NETWORK_ERROR', 'Cannot reach the server. Check your connection and try again.');
+  }
+  const body = (await response.json().catch(() => null)) as (ApiEnvelope<T> & { meta?: PageMeta }) | null;
+  if (!response.ok || !body?.success) {
+    throw new ApiClientError(
+      response.status,
+      body?.error?.code || 'HTTP_ERROR',
+      body?.error?.message || `Request failed (${response.status})`
+    );
+  }
+  return { data: body.data as T, meta: body.meta };
+}
+
 export const apiPost = <T>(path: string, data?: unknown) =>
   apiFetch<T>(path, { method: 'POST', body: data === undefined ? undefined : JSON.stringify(data) });
 

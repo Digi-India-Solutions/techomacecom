@@ -1043,14 +1043,15 @@ function AccountInner() {
                     />
                   </Field>
                   <div className="sm:col-span-2">
-                    <Field label="Email" htmlFor="pf-email" required>
+                    <Field label="Email" htmlFor="pf-email" required hint="Your verified sign-in email — it can't be changed here">
+                      {/* The email is the account's verified sign-in id; the API refuses to change it */}
                       <input
                         id="pf-email"
                         required
                         type="email"
                         value={profile.email}
-                        onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                        className={inputClass}
+                        readOnly
+                        className={`${inputClass} bg-[#F6F9FD] text-[#5B6B82] cursor-not-allowed`}
                         autoComplete="email"
                       />
                     </Field>

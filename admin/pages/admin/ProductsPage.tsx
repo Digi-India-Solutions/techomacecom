@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Copy,
@@ -14,6 +14,7 @@ import {
   deleteProduct,
   duplicateProduct,
   listProducts,
+  storefrontProductUrl,
 } from '@/lib/api/admin/products';
 import { listCategories } from '@/lib/api/admin/categories';
 import { listBrands } from '@/lib/api/admin/brands';
@@ -52,57 +53,106 @@ export function ProductsPage() {
   const [bulkCategoryModal, setBulkCategoryModal] = useState<{ ids: string[]; categoryId: string } | null>(null);
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
 
-  const fetchAll = async () => {
+  // Search runs on the server — wait until typing pauses (300 ms) before asking
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Bumped after every write so the list reloads with the CURRENT filters
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = () => setReloadKey((k) => k + 1);
+  // Only the newest request may update the table (filters can change while one is in flight)
+  const latestRequest = useRef(0);
+
+  // Category + brand pickers: loaded once
+  useEffect(() => {
+    Promise.all([listCategories(), listBrands()])
+      .then(([cats, brds]) => {
+        setCategories(cats);
+        setBrands(brds);
+      })
+      .catch((err) =>
+        showToast({
+          title: 'Could not load filters',
+          description: err instanceof Error ? err.message : 'Please try again',
+          variant: 'error',
+        })
+      );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
+    listProducts({
+      search: debouncedSearch,
+      categoryId,
+      brandId,
+      status: statusFilter,
+      stockLevel: stockFilter,
+      emiEnabled: emiOnly,
+      rentEnabled: rentOnly,
+      codEnabled: codOnly,
+    })
+      .then((prods) => {
+        if (requestId === latestRequest.current) setProducts(prods);
+      })
+      .catch((err) => {
+        if (requestId !== latestRequest.current) return;
+        showToast({
+          title: 'Could not load products',
+          description: err instanceof Error ? err.message : 'Please try again',
+          variant: 'error',
+        });
+      })
+      .finally(() => {
+        if (requestId === latestRequest.current) setLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, categoryId, brandId, statusFilter, stockFilter, emiOnly, rentOnly, codOnly, reloadKey]);
+
+  /** Runs an API action, shows its error (e.g. permission / conflict) and refreshes the list. */
+  const runAction = async (action: () => Promise<void>) => {
     try {
-      const [prods, cats, brds] = await Promise.all([
-        listProducts({
-          search,
-          categoryId,
-          brandId,
-          status: statusFilter,
-          stockLevel: stockFilter,
-          emiEnabled: emiOnly,
-          rentEnabled: rentOnly,
-          codEnabled: codOnly,
-        }),
-        listCategories(),
-        listBrands(),
-      ]);
-      setProducts(prods);
-      setCategories(cats);
-      setBrands(brds);
+      await action();
+    } catch (err) {
+      showToast({
+        title: 'Action failed',
+        description: err instanceof Error ? err.message : 'Please try again',
+        variant: 'error',
+      });
     } finally {
-      setLoading(false);
+      reload();
     }
   };
 
-  useEffect(() => {
-    fetchAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, categoryId, brandId, statusFilter, stockFilter, emiOnly, rentOnly, codOnly]);
-
-  const handleDuplicate = async (product: Product) => {
-    const copy = await duplicateProduct(product.id);
-    showToast({
-      title: 'Product duplicated',
-      description: `${copy.name} saved as draft.`,
-      variant: 'success',
+  const handleDuplicate = (product: Product) =>
+    runAction(async () => {
+      const copy = await duplicateProduct(product.id);
+      showToast({
+        title: 'Product duplicated',
+        description: `${copy.name} saved as draft.`,
+        variant: 'success',
+      });
     });
-    fetchAll();
-  };
 
   const handleConfirmDelete = async () => {
-    if (deleteTarget) {
-      await deleteProduct(deleteTarget.id);
-      showToast({ title: `Deleted ${deleteTarget.name}`, variant: 'info' });
-      setDeleteTarget(null);
-      fetchAll();
-    } else if (bulkDeleteIds) {
-      await bulkUpdateProducts('delete', bulkDeleteIds);
-      showToast({ title: `Deleted ${bulkDeleteIds.length} products`, variant: 'info' });
-      setBulkDeleteIds(null);
-      fetchAll();
+    const single = deleteTarget;
+    const many = bulkDeleteIds;
+    setDeleteTarget(null);
+    setBulkDeleteIds(null);
+    if (single) {
+      await runAction(async () => {
+        await deleteProduct(single.id);
+        showToast({ title: `Deleted ${single.name}`, variant: 'info' });
+      });
+    } else if (many) {
+      await runAction(async () => {
+        const res = await bulkUpdateProducts('delete', many);
+        showToast({ title: res.message, variant: 'info' });
+      });
     }
   };
 
@@ -317,20 +367,20 @@ export function ProductsPage() {
         {
           key: 'activate',
           label: 'Activate',
-          onClick: async (rows) => {
-            await bulkUpdateProducts('activate', rows.map((r) => r.id));
-            showToast({ title: `Activated ${rows.length} products`, variant: 'success' });
-            fetchAll();
-          },
+          onClick: (rows) =>
+            runAction(async () => {
+              const res = await bulkUpdateProducts('activate', rows.map((r) => r.id));
+              showToast({ title: res.message, variant: 'success' });
+            }),
         },
         {
           key: 'deactivate',
-          label: 'Move to Draft',
-          onClick: async (rows) => {
-            await bulkUpdateProducts('deactivate', rows.map((r) => r.id));
-            showToast({ title: `Deactivated ${rows.length} products`, variant: 'info' });
-            fetchAll();
-          },
+          label: 'Deactivate (hide from store)',
+          onClick: (rows) =>
+            runAction(async () => {
+              const res = await bulkUpdateProducts('deactivate', rows.map((r) => r.id));
+              showToast({ title: res.message, variant: 'info' });
+            }),
         },
         {
           key: 'change_category',
@@ -419,7 +469,7 @@ export function ProductsPage() {
           <option value="all">All Statuses</option>
           <option value="active">Active</option>
           <option value="draft">Draft</option>
-          <option value="out_of_stock">Out of Stock</option>
+          <option value="inactive">Inactive</option>
         </select>
 
         <select
@@ -538,14 +588,12 @@ export function ProductsPage() {
                   disabled={!bulkCategoryModal.categoryId}
                   onClick={async () => {
                     if (!bulkCategoryModal.categoryId) return;
-                    await bulkUpdateProducts(
-                      'change_category',
-                      bulkCategoryModal.ids,
-                      bulkCategoryModal.categoryId
-                    );
-                    showToast({ title: 'Updated product categories', variant: 'success' });
+                    const { ids, categoryId: target } = bulkCategoryModal;
                     setBulkCategoryModal(null);
-                    fetchAll();
+                    await runAction(async () => {
+                      const res = await bulkUpdateProducts('change_category', ids, target);
+                      showToast({ title: res.message, variant: 'success' });
+                    });
                   }}
                   className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-sm font-medium text-white hover:bg-[#174D8F] disabled:opacity-50"
                 >
@@ -570,9 +618,20 @@ export function ProductsPage() {
             <div className="flex items-center justify-between border-b border-[#DCE6F2] px-5 py-3.5 bg-[#F6F9FD]">
               <div>
                 <p className="text-xs font-semibold text-[#1D5FAF]">Storefront Preview</p>
-                <p className="text-[11px] font-mono text-[#5B6B82]">
-                  https://buydenmed.in/products/{previewProduct.slug}
-                </p>
+                {previewProduct.status === 'active' ? (
+                  <a
+                    href={storefrontProductUrl(previewProduct.slug)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-mono text-[#1D5FAF] hover:underline"
+                  >
+                    {storefrontProductUrl(previewProduct.slug)}
+                  </a>
+                ) : (
+                  <p className="text-[11px] text-[#B85A0E]">
+                    Not visible on the storefront until the status is Active
+                  </p>
+                )}
               </div>
               <button
                 type="button"

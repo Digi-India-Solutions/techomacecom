@@ -45,7 +45,12 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
   // Filters state
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>(initialSubCategory);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [priceRange, setPriceRange] = useState<number>(250000);
+  // Slider ceiling follows the real catalog (at least ₹2.5L), rounded up to the next ₹10k
+  const priceCeiling = useMemo(
+    () => Math.max(250000, Math.ceil(Math.max(0, ...products.map((p) => p.price)) / 10000) * 10000),
+    [products]
+  );
+  const [priceRange, setPriceRange] = useState<number>(priceCeiling);
   const [minDiscount, setMinDiscount] = useState<number>(0);
   const [inStockOnly, setInStockOnly] = useState<boolean>(false);
   const [minRating, setMinRating] = useState<number>(0);
@@ -82,7 +87,12 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
 
     // Subcategory filter
     if (selectedSubCategory) {
-      list = list.filter((p) => p.subCategorySlug === selectedSubCategory || p.subCategory === selectedSubCategory);
+      list = list.filter(
+        (p) =>
+          p.subCategorySlug === selectedSubCategory ||
+          p.subCategory === selectedSubCategory ||
+          (p.categoryPath || []).some((c) => c.slug === selectedSubCategory)
+      );
     }
 
     // Brands filter
@@ -91,7 +101,7 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
     }
 
     // Price max filter
-    list = list.filter((p) => p.price <= priceRange);
+    if (priceRange < priceCeiling) list = list.filter((p) => p.price <= priceRange);
 
     // Discount filter
     if (minDiscount > 0) {
@@ -137,6 +147,7 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
     selectedSubCategory,
     selectedBrands,
     priceRange,
+    priceCeiling,
     minDiscount,
     inStockOnly,
     minRating,
@@ -152,7 +163,7 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
   const resetAllFilters = () => {
     setSelectedSubCategory('');
     setSelectedBrands([]);
-    setPriceRange(250000);
+    setPriceRange(priceCeiling);
     setMinDiscount(0);
     setInStockOnly(false);
     setMinRating(0);
@@ -171,7 +182,7 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
   const hasActiveFilters =
     Boolean(selectedSubCategory) ||
     selectedBrands.length > 0 ||
-    priceRange < 250000 ||
+    priceRange < priceCeiling ||
     minDiscount > 0 ||
     inStockOnly ||
     minRating > 0;
@@ -310,12 +321,12 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
                 type="button"
                 onClick={() => setActivePopover(activePopover === 'price' ? null : 'price')}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-1.5 transition-all cursor-pointer font-heading ${
-                  priceRange < 250000
+                  priceRange < priceCeiling
                     ? 'border-[#1D5FAF] bg-[#EAF2FC] text-[#174E90]'
                     : 'border-[#DCE6F2] bg-white text-[#12263F] hover:border-[#1D5FAF]'
                 }`}
               >
-                <span>Price {priceRange < 250000 ? `(≤ ₹${(priceRange / 1000).toFixed(0)}k)` : ''}</span>
+                <span>Price {priceRange < priceCeiling ? `(≤ ₹${(priceRange / 1000).toFixed(0)}k)` : ''}</span>
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activePopover === 'price' ? 'rotate-180' : ''}`} />
               </button>
 
@@ -330,7 +341,7 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
                     name="priceRange"
                     type="range"
                     min={500}
-                    max={250000}
+                    max={priceCeiling}
                     step={2000}
                     value={priceRange}
                     onChange={(e) => {
@@ -488,11 +499,11 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
               );
             })}
 
-            {priceRange < 250000 && (
+            {priceRange < priceCeiling && (
               <span className="inline-flex items-center gap-1 bg-[#EAF2FC] text-[#174E90] border border-[#1D5FAF]/20 px-2.5 py-1 rounded-full font-medium">
                 <span>Max: ₹{priceRange.toLocaleString('en-IN')}</span>
                 <button
-                  onClick={() => setPriceRange(250000)}
+                  onClick={() => setPriceRange(priceCeiling)}
                   className="hover:text-[#0B2545] cursor-pointer"
                 >
                   <X className="w-3 h-3" />
