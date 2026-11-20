@@ -10,7 +10,6 @@ import {
   X,
 } from 'lucide-react';
 import type { ProductImage, ProductImageType } from '@/types/admin';
-import { PRODUCT_IMAGES } from '@/lib/api/admin/mockData';
 import { uploadImages } from '@/lib/api/admin/client';
 import { useToast } from './ToastProvider';
 import { SafeImage } from './SafeImage';
@@ -101,20 +100,6 @@ export function ImageUploader({
     }
   };
 
-  const addSampleMedicalImage = () => {
-    if (images.length >= maxImages) return;
-    const pool = Object.values(PRODUCT_IMAGES);
-    const chosen = pool[images.length % pool.length];
-    const next: ProductImage = {
-      id: `img-${Date.now()}`,
-      url: chosen,
-      type: images.length === 0 ? 'main' : 'angle',
-      altText: 'Medical equipment studio photo',
-      sortOrder: images.length,
-    };
-    onChange(normalizeOrder([...images, next]));
-  };
-
   const moveImage = (from: number, to: number) => {
     if (to < 0 || to >= images.length || from === to) return;
     const copy = [...images];
@@ -171,14 +156,6 @@ export function ImageUploader({
           >
             <Plus className="h-3.5 w-3.5" />
             Choose Files
-          </button>
-          <button
-            type="button"
-            onClick={addSampleMedicalImage}
-            disabled={images.length >= maxImages}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE6F2] bg-white px-4 py-2 text-xs font-medium text-[#12263F] hover:bg-[#EAF2FC] disabled:opacity-50"
-          >
-            Add Studio Sample
           </button>
         </div>
         <input

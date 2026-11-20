@@ -20,7 +20,9 @@
     "db:seed:prod": "cross-env NODE_ENV=production node prisma/seed.js",
     "db:seed:inventory": "node scripts/seed-inventory.js",
     "admin:set-password": "node scripts/set-admin-password.js",
-    "admin:set-password:prod": "cross-env NODE_ENV=production node scripts/set-admin-password.js"
+    "admin:set-password:prod": "cross-env NODE_ENV=production node scripts/set-admin-password.js",
+    "test:catalog": "node --test --test-concurrency=1 tests/integration/catalog.e2e.js",
+    "test:auth": "node --test --test-concurrency=1 tests/integration/customer-auth.e2e.js"
   },
   "keywords": [],
   "author": "",
@@ -29,7 +31,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^6.19.3",
     "@prisma/client": "^6.19.3",
-    "argon2": "^0.45.2",
+    "argon2": "0.44.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^18.0.10",
@@ -41,6 +43,7 @@
     "multer": "^2.5.0",
     "nodemailer": "^10.6.0",
     "pg": "^8.23.1",
+    "sanitize-html": "2.17.0",
     "sharp": "^0.35.5",
     "zod": "^4.6.7"
   },

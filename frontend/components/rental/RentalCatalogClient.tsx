@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Product } from '@/types';
@@ -33,17 +33,13 @@ interface RentalCatalogClientProps {
   products: Product[];
 }
 
-export const RENTAL_CATEGORIES = [
-  { id: 'all', name: 'All Equipment', icon: Layers, count: 8 },
-  { id: 'oxygen', name: 'Oxygen Concentrator', icon: Wind, query: 'Oxygen Concentrator' },
-  { id: 'portable-oxygen', name: 'Portable Oxygen Concentrator', icon: Wind, query: 'Portable Oxygen' },
-  { id: 'cpap', name: 'CPAP', icon: Activity, query: 'CPAP' },
-  { id: 'bipap', name: 'BiPAP', icon: Activity, query: 'BiPAP' },
-  { id: 'hospital-bed', name: 'Hospital Bed', icon: Bed, query: 'Hospital Bed' },
-  { id: 'wheelchair', name: 'Wheelchair', icon: Activity, query: 'Wheelchair' },
-  { id: 'patient-monitor', name: 'Patient Monitor', icon: Activity, query: 'Monitor' },
-  { id: 'suction', name: 'Suction Machine', icon: Wind, query: 'Suction' },
-];
+/** Icon for a rental category pill, picked from the category name. */
+function rentalIcon(name: string) {
+  const n = name.toLowerCase();
+  if (/oxygen|suction|nebuli|respir|cpap|bipap/.test(n)) return Wind;
+  if (/bed|furniture/.test(n)) return Bed;
+  return Activity;
+}
 
 const FAQS = [
   {
@@ -82,19 +78,30 @@ export default function RentalCatalogClient({ products }: RentalCatalogClientPro
   const [callbackEquipment, setCallbackEquipment] = useState('Oxygen Concentrator');
   const [callbackSubmitted, setCallbackSubmitted] = useState(false);
 
-  // Filter products by category
-  const filteredProducts = products.filter((p) => {
-    if (selectedCategory === 'all') return true;
-    const cat = RENTAL_CATEGORIES.find((c) => c.id === selectedCategory);
-    if (!cat || !cat.query) return true;
-    const query = cat.query.toLowerCase();
-    return (
-      p.name.toLowerCase().includes(query) ||
-      p.subCategory.toLowerCase().includes(query) ||
-      p.categoryName.toLowerCase().includes(query) ||
-      p.shortDescription.toLowerCase().includes(query)
-    );
-  });
+  // Category pills come from the rentable products themselves (the category each one
+  // is filed under in Admin → Products), so a new rental category appears automatically.
+  const rentalCategories = useMemo(() => {
+    const byCategory = new Map<string, { id: string; name: string; count: number }>();
+    for (const p of products) {
+      const leaf = p.categoryPath?.[p.categoryPath.length - 1];
+      if (!leaf) continue;
+      const entry = byCategory.get(leaf.slug) || { id: leaf.slug, name: leaf.name, count: 0 };
+      entry.count += 1;
+      byCategory.set(leaf.slug, entry);
+    }
+    return [
+      { id: 'all', name: 'All Equipment', icon: Layers, count: products.length },
+      ...[...byCategory.values()]
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+        .map((c) => ({ ...c, icon: rentalIcon(c.name) })),
+    ];
+  }, [products]);
+
+  // Filter products by the selected category (any level of the product's category path)
+  const filteredProducts =
+    selectedCategory === 'all'
+      ? products
+      : products.filter((p) => (p.categoryPath || []).some((c) => c.slug === selectedCategory));
 
   const handleCallbackSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -254,7 +261,7 @@ export default function RentalCatalogClient({ products }: RentalCatalogClientPro
 
         {/* Categories Pills / Buttons */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
-          {RENTAL_CATEGORIES.map((cat) => {
+          {rentalCategories.map((cat) => {
             const Icon = cat.icon;
             const isSelected = selectedCategory === cat.id;
             return (

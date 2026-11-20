@@ -169,7 +169,8 @@ export interface DashboardOverview {
   recentEnquiries: RecentEnquirySummary[];
 }
 
-export type ProductStatus = 'active' | 'draft' | 'out_of_stock';
+/** Listing status (DB products.status). Stock level is separate — see ProductFilters.stockLevel. */
+export type ProductStatus = 'active' | 'draft' | 'inactive';
 export type GstRate = 0 | 5 | 12 | 18 | 28;
 export type ProductImageType =
   | 'main'
@@ -274,6 +275,12 @@ export interface Product {
   rental: ProductRentalConfig;
   seoTitle: string;
   seoDescription: string;
+  /** Bullet points on the storefront product page */
+  features?: string[];
+  warranty?: string;
+  /** e.g. CE, ISO 13485, CDSCO */
+  certifications?: string[];
+  publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -289,7 +296,10 @@ export interface ProductFilters {
   codEnabled?: boolean;
 }
 
-export type ProductFormPayload = Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'brandName' | 'categoryPath'>;
+export type ProductFormPayload = Omit<
+  Product,
+  'id' | 'createdAt' | 'updatedAt' | 'brandName' | 'categoryPath' | 'publishedAt'
+>;
 
 export type CategoryStatus = 'active' | 'inactive';
 
@@ -301,6 +311,8 @@ export interface CategoryNode {
   level: 1 | 2 | 3;
   sortOrder: number;
   iconUrl: string;
+  /** Card / tile image on the storefront (falls back to the desktop banner, then the icon) */
+  imageUrl?: string;
   desktopBannerUrl: string;
   mobileBannerUrl: string;
   description: string;
@@ -331,6 +343,10 @@ export interface Brand {
   status: BrandStatus;
   seoTitle: string;
   seoDescription: string;
+  /** e.g. "Germany" — shown on the storefront brand page */
+  originCountry?: string;
+  /** Shows the "Authorized Distributor" badge on the storefront */
+  authorizedDistributor?: boolean;
   productCount: number;
   updatedAt: string;
 }

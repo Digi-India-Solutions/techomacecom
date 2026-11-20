@@ -5,18 +5,12 @@ import Link from 'next/link';
 import Logo from '@/components/common/Logo';
 import Image from 'next/image';
 import { Phone, Mail, MapPin, Clock, ChevronDown, Landmark, CalendarClock } from 'lucide-react';
-import { MOCK_CATEGORIES } from '@/lib/mock/data';
+import { useCatalogCategories } from '@/lib/hooks/useCatalogCategories';
 
 type FooterLink = { label: string; href: string };
 
+/** Static columns; the "Shop" column (live categories) is prepended in the component. */
 const COLUMNS: { title: string; links: FooterLink[] }[] = [
-  {
-    title: 'Shop',
-    links: [
-      ...MOCK_CATEGORIES.slice(0, 6).map((c) => ({ label: c.name, href: `/category/${c.slug}` })),
-      { label: 'All Brands', href: '/brands' }
-    ]
-  },
   {
     title: 'Services',
     links: [
@@ -97,6 +91,18 @@ const FooterColumn: React.FC<{ title: string; links: FooterLink[] }> = ({ title,
 
 export const Footer: React.FC = () => {
   const year = new Date().getFullYear();
+  // Live categories from Admin → Catalog (only those marked "Show in navigation menu")
+  const categories = useCatalogCategories({ menuOnly: true });
+  const columns = [
+    {
+      title: 'Shop',
+      links: [
+        ...categories.slice(0, 6).map((c) => ({ label: c.name, href: `/category/${c.slug}` })),
+        { label: 'All Brands', href: '/brands' }
+      ]
+    },
+    ...COLUMNS
+  ];
 
   return (
     <footer className="bg-[#17191D] text-[#B4BAC3] font-body pb-16 lg:pb-0">
@@ -150,7 +156,7 @@ export const Footer: React.FC = () => {
             </ul>
           </div>
 
-          {COLUMNS.map((col) => (
+          {columns.map((col) => (
             <FooterColumn key={col.title} title={col.title} links={col.links} />
           ))}
         </div>
@@ -163,7 +169,7 @@ export const Footer: React.FC = () => {
             Popular Categories
           </h3>
           <div className="space-y-2.5 text-[13px] leading-relaxed">
-            {MOCK_CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <p key={cat.id}>
                 <Link href={`/category/${cat.slug}`} className="font-semibold text-[#D5D9DF] hover:text-white">
                   {cat.name}:

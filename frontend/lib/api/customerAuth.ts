@@ -21,6 +21,7 @@ export interface CustomerDto {
   mobileVerified: boolean;
   emailVerified: boolean;
   hasGoogle: boolean;
+  hasPassword: boolean;
   profileComplete: boolean;
   createdAt: string;
   lastLoginAt: string | null;
@@ -104,6 +105,7 @@ export function toUser(dto: CustomerDto): User {
     mobileVerified: dto.mobileVerified,
     emailVerified: dto.emailVerified,
     hasGoogle: dto.hasGoogle,
+    hasPassword: dto.hasPassword,
     profileComplete: dto.profileComplete,
     createdAt: dto.createdAt,
     lastLoginAt: dto.lastLoginAt || undefined,
@@ -134,17 +136,85 @@ export interface AuthConfig {
 
 export const getAuthConfig = () => apiFetch<AuthConfig>('/auth/config');
 
-export const sendLoginOtp = (mobile: string) => apiPost<OtpSent>('/auth/otp/send', { mobile });
+// ---------------------------------------------------------------------------
+// Email + password sign-up / sign-in
+// ---------------------------------------------------------------------------
 
-export async function verifyLoginOtp(input: {
+export interface EmailCodeSent {
+  emailSent: boolean;
+  expiresInSeconds: number;
+  resendAfterSeconds: number;
+  message: string;
+  /** Development only — returned when the API could not send the email (SMTP not configured). */
+  devOtp?: string;
+}
+
+/** Sign-up step 1: email a 6-digit code (409 EMAIL_TAKEN if the email already has an account). */
+export const sendSignupEmailOtp = (email: string) =>
+  apiPost<EmailCodeSent>('/auth/signup/email/send-otp', { email });
+
+/** Sign-up step 2: check the code → one-time token proving the email is verified (valid 30 min). */
+export const verifySignupEmailOtp = (email: string, otp: string) =>
+  apiPost<{ verificationToken: string; expiresInSeconds: number; message: string }>('/auth/signup/email/verify-otp', {
+    email,
+    otp,
+  });
+
+/** Sign-up step 3: create the account. The API signs the customer in (cookies) in the same call. */
+export async function signUpWithEmail(input: {
+  name: string;
+  email: string;
+  emailVerificationToken: string;
   mobile: string;
-  otp: string;
+  password: string;
+  confirmPassword: string;
   customerType?: CustomerType;
-  name?: string;
 }): Promise<AuthResult> {
-  const data = await apiPost<{ user: CustomerDto; isNewUser: boolean }>('/auth/otp/verify', input);
+  const data = await apiPost<{ user: CustomerDto; isNewUser: boolean }>('/auth/signup', input);
   return { user: toUser(data.user), isNewUser: data.isNewUser };
 }
+
+export async function signInWithPassword(email: string, password: string): Promise<AuthResult> {
+  const data = await apiPost<{ user: CustomerDto; isNewUser: boolean }>('/auth/login', { email, password });
+  return { user: toUser(data.user), isNewUser: data.isNewUser };
+}
+
+// ---------------------------------------------------------------------------
+// Forgot / reset password (emailed one-time link → /reset-password?token=…)
+// ---------------------------------------------------------------------------
+
+/** Always resolves with the same generic message, whether or not the email has an account. */
+export const requestPasswordReset = (email: string) =>
+  apiPost<{ message: string; /** development only, when SMTP is not configured */ devResetUrl?: string }>(
+    '/auth/forgot-password',
+    { email }
+  );
+
+/** Is the link still usable? Rejects (RESET_LINK_INVALID) when expired / used / unknown. */
+export const checkResetLink = (token: string) =>
+  apiFetch<{ email: string; expiresAt: string }>(`/auth/reset-password/check?token=${encodeURIComponent(token)}`);
+
+/** Sets the new password (link is single-use); the API signs the customer in on this device. */
+export async function resetPasswordWithLink(input: { token: string; password: string; confirmPassword: string }): Promise<User> {
+  const data = await apiPost<{ user: CustomerDto }>('/auth/reset-password', input);
+  return toUser(data.user);
+}
+
+// ---------------------------------------------------------------------------
+// Mobile OTP sign-in — DISABLED (backend /auth/otp/* routes are commented out).
+// Uncomment together with those routes to switch it back on.
+// ---------------------------------------------------------------------------
+// export const sendLoginOtp = (mobile: string) => apiPost<OtpSent>('/auth/otp/send', { mobile });
+//
+// export async function verifyLoginOtp(input: {
+//   mobile: string;
+//   otp: string;
+//   customerType?: CustomerType;
+//   name?: string;
+// }): Promise<AuthResult> {
+//   const data = await apiPost<{ user: CustomerDto; isNewUser: boolean }>('/auth/otp/verify', input);
+//   return { user: toUser(data.user), isNewUser: data.isNewUser };
+// }
 
 export async function signInWithGoogle(credential: string, customerType?: CustomerType): Promise<AuthResult> {
   const data = await apiPost<{ user: CustomerDto; isNewUser: boolean }>('/auth/google', { credential, customerType });

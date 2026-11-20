@@ -11,9 +11,23 @@ import { Skeleton } from '@/components/common/Skeleton';
  */
 export const SkeletonImage: React.FC<ImageProps> = ({ onLoad, onError, src, alt, ...props }) => {
   // Track which src has finished, so switching images (gallery, thumbnails) shows the shimmer again
-  const key = typeof src === 'string' ? src : 'src' in src ? src.src : src.default.src;
+  const key = !src ? '' : typeof src === 'string' ? src : 'src' in src ? src.src : src.default.src;
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const loaded = loadedSrc === key;
+
+  // Catalog images are optional in the admin (e.g. a category without a card image):
+  // next/image throws on an empty src, so show a neutral tile instead.
+  if (!key) {
+    return (
+      <div
+        role="img"
+        aria-label={alt}
+        className="absolute inset-0 flex items-center justify-center bg-[#EAF2FC] text-[#1D5FAF] text-2xl font-bold"
+      >
+        {alt?.trim().charAt(0).toUpperCase()}
+      </div>
+    );
+  }
 
   return (
     <>

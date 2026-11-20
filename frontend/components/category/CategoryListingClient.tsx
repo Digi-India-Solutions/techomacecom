@@ -63,10 +63,31 @@ export const CategoryListingClient: React.FC<CategoryListingClientProps> = ({
     ]
   };
 
+  // Banner uploaded in Admin → Categories comes first
+  const adminBanner: PageBanner[] = category.bannerDesktop
+    ? [
+        {
+          id: `banner-${category.id}-admin`,
+          pageType: 'category',
+          slug: category.slug,
+          headline: category.name,
+          subtext: category.description,
+          imageUrl: category.bannerDesktop,
+          imageDesktop: category.bannerDesktop,
+          imageMobile: category.bannerMobile || category.bannerDesktop,
+          bgColor: 'blue',
+          ctaText: 'Browse Catalog',
+          ctaLink: '#catalog'
+        }
+      ]
+    : [];
+
   const pageBanners: PageBanner[] =
     banners.length > 0
       ? banners
-      : categoryBannersMap[category.slug] || [
+      : adminBanner.length > 0
+        ? adminBanner
+        : categoryBannersMap[category.slug] || [
           {
             id: `banner-${category.id}-1`,
             pageType: 'category',
@@ -90,6 +111,8 @@ export const CategoryListingClient: React.FC<CategoryListingClientProps> = ({
       breadcrumbs={[
         { label: 'Home', href: '/' },
         { label: 'Categories', href: '/#categories' },
+        // Parent categories (Level 1 → 2) when this is a subcategory page
+        ...(category.breadcrumbs || []).slice(0, -1).map((c) => ({ label: c.name, href: `/category/${c.slug}` })),
         { label: category.name }
       ]}
       banners={pageBanners}

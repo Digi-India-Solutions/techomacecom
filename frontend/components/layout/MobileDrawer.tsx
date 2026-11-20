@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { X, ChevronRight, ChevronDown, Layers, Bed, Activity, Percent, Flame, Sparkles, FileText, Phone, MapPin, User } from 'lucide-react';
 import Logo from '@/components/common/Logo';
-import { MOCK_CATEGORIES } from '@/lib/mock/data';
+import { useCatalogCategories } from '@/lib/hooks/useCatalogCategories';
 import { usePincodeStore, useUserStore } from '@/lib/store';
 
 interface MobileDrawerProps {
@@ -17,6 +17,8 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ isOpen, onClose }) =
   const { user, isAuthenticated, setAuthModalOpen } = useUserStore();
 
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
+  // Live categories from Admin → Catalog (menu-visible only)
+  const categories = useCatalogCategories({ menuOnly: true });
 
   if (!isOpen) return null;
 
@@ -166,7 +168,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({ isOpen, onClose }) =
                 All Categories
               </div>
               <div className="space-y-1.5">
-                {MOCK_CATEGORIES.map((cat) => {
+                {categories.map((cat) => {
                   const isExpanded = expandedCat === cat.id;
                   return (
                     <div key={cat.id} className="rounded-xl border border-[#DCE6F2] overflow-hidden">

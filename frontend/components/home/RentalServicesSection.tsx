@@ -76,7 +76,7 @@ export const RentalServicesSection: React.FC<RentalServicesSectionProps> = ({ re
                   <ArrowRight className="w-4 h-4" />
                 </Link>
                 <Link
-                  href="/category/respiratory-care"
+                  href="/search"
                   className="px-5 py-3.5 bg-white hover:bg-[#EAF2FC] text-[#1D5FAF] font-semibold text-xs sm:text-sm font-heading rounded-xl border border-[#1D5FAF] transition-colors"
                 >
                   Buy Brand New Equipment

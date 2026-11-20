@@ -7,7 +7,7 @@ import type {
 } from '@/types/admin';
 import { adminGet, adminPatch, adminPost, mockDelay } from './client';
 import { INITIAL_RENTAL_UNITS } from './mockData';
-import { getProductsStore } from './products';
+import { getProductsStore } from './legacyProductStore';
 
 let rentalUnitsStore: RentalUnit[] = structuredClone(INITIAL_RENTAL_UNITS);
 

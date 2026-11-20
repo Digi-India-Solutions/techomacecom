@@ -19,13 +19,16 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
     };
   }
 
+  // SEO fields from Admin → Categories win; otherwise a sensible default
   return {
-    title: `${category.name} - Buy Online at Best Prices | Buy Denmed India`,
-    description: `Shop authentic ${category.name.toLowerCase()} equipment, instruments and consumables from verified brands. Pan-India delivery, easy EMI, and GST tax invoice on Buy Denmed.`,
+    title: category.seoTitle || `${category.name} - Buy Online at Best Prices | Buy Denmed India`,
+    description:
+      category.seoDescription ||
+      `Shop authentic ${category.name.toLowerCase()} equipment, instruments and consumables from verified brands. Pan-India delivery, easy EMI, and GST tax invoice on Buy Denmed.`,
     openGraph: {
       title: `${category.name} | Buy Denmed Store`,
-      description: category.description,
-      images: [{ url: category.image }]
+      description: category.seoDescription || category.description,
+      ...(category.image ? { images: [{ url: category.image }] } : {})
     }
   };
 }

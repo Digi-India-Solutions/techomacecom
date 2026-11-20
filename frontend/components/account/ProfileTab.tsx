@@ -236,7 +236,8 @@ export default function ProfileTab({ user }: { user: User }) {
     setForm(initial);
   }
 
-  const emailLocked = Boolean(user.hasGoogle && user.email);
+  // The email is a sign-in id for Google and email + password accounts — the API refuses to change it
+  const emailLocked = Boolean(user.email && (user.hasGoogle || user.hasPassword));
   const dirty = (Object.keys(form) as (keyof Form)[]).some((k) => form[k] !== initial[k]);
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => {
@@ -324,7 +325,8 @@ export default function ProfileTab({ user }: { user: User }) {
                 hint={
                   emailLocked ? (
                     <span className="inline-flex items-center gap-1">
-                      <BadgeCheck className="w-3.5 h-3.5 text-[#16A34A]" /> Linked to your Google sign-in, so it can&rsquo;t be changed here.
+                      <BadgeCheck className="w-3.5 h-3.5 text-[#16A34A]" />{' '}
+                      {user.hasGoogle ? 'Linked to your Google sign-in' : 'Your verified sign-in email'}, so it can&rsquo;t be changed here.
                     </span>
                   ) : (
                     'Order confirmations and GST invoices are emailed here.'

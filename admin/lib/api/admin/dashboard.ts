@@ -11,7 +11,7 @@ import {
   INITIAL_RECENT_ENQUIRIES,
   INITIAL_RECENT_ORDERS,
 } from './mockData';
-import { getProductsStore } from './products';
+import { getProductsStore } from './legacyProductStore';
 import { getStockItemsStore } from './inventory';
 import { getRentalUnitsStore } from './rentalUnits';
 

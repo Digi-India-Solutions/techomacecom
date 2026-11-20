@@ -5,7 +5,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRentalStore, useUserStore, useToastStore, RentalDraft } from '@/lib/store';
-import { requestMobileOtp, verifyMobileOtp, createRentalBooking } from '@/lib/api';
+// Mobile OTP sign-in is disabled — step 1 now embeds the email + password form
+// import { requestMobileOtp, verifyMobileOtp, createRentalBooking } from '@/lib/api';
+import { createRentalBooking } from '@/lib/api';
+import CustomerAuthForm from '@/components/auth/CustomerAuthForm';
 import { Address, RentalPayment, Rental } from '@/types';
 import { getProductImageUrl } from '@/lib/utils';
 import { 
@@ -34,7 +37,7 @@ import { CheckoutSkeleton } from '@/components/skeletons/PageSkeletons';
 export default function RentalCheckoutClient() {
   const router = useRouter();
   const { draft, setDraft, addRental } = useRentalStore();
-  const { user, isAuthenticated, login } = useUserStore();
+  const { user, isAuthenticated } = useUserStore();
   const { addToast } = useToastStore();
 
   // Current active step (1 to 4)
@@ -93,11 +96,11 @@ export default function RentalCheckoutClient() {
     }
   }, [draft, setDraft]);
 
-  // STEP 1: AUTH STATE
-  const [phoneInput, setPhoneInput] = useState(user?.phone || '');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpInput, setOtpInput] = useState('');
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  // STEP 1: AUTH — handled by <CustomerAuthForm> (email + password). Mobile OTP state disabled:
+  // const [phoneInput, setPhoneInput] = useState(user?.phone || '');
+  // const [otpSent, setOtpSent] = useState(false);
+  // const [otpInput, setOtpInput] = useState('');
+  // const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
 
   // STEP 2: ADDRESS STATE
   const [selectedAddressId, setSelectedAddressId] = useState<string>(
@@ -136,48 +139,43 @@ export default function RentalCheckoutClient() {
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'netbanking'>('upi');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
-  // OTP handlers
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!phoneInput || phoneInput.length < 10) {
-      addToast({ type: 'error', title: 'Invalid Phone', message: 'Enter a valid 10-digit mobile number.' });
-      return;
-    }
-    const res = await requestMobileOtp(phoneInput);
-    if (!res.success) {
-      addToast({ type: 'error', title: 'Could not send OTP', message: res.message });
-      return;
-    }
-    setOtpSent(true);
-    addToast({
-      type: 'info',
-      title: 'OTP Sent',
-      // devOtp is only returned by the API in development (no SMS provider yet)
-      message: res.demoOtp ? `${res.message}. Development code: ${res.demoOtp}` : res.message
-    });
-    setOtpInput('');
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsVerifyingOtp(true);
-    try {
-      const res = await verifyMobileOtp(phoneInput, otpInput);
-      if (res.success && res.user) {
-        login(res.user);
-        addToast({
-          type: 'success',
-          title: 'Mobile Verified',
-          message: 'Welcome! Identity verified for clinical rental.'
-        });
-        setCurrentStep(2);
-      } else {
-        addToast({ type: 'error', title: 'Verification Failed', message: res.message });
-      }
-    } finally {
-      setIsVerifyingOtp(false);
-    }
-  };
+  // OTP handlers — DISABLED (mobile OTP sign-in is switched off; see <CustomerAuthForm> in step 1)
+  // const handleSendOtp = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   if (!phoneInput || phoneInput.length < 10) {
+  //     addToast({ type: 'error', title: 'Invalid Phone', message: 'Enter a valid 10-digit mobile number.' });
+  //     return;
+  //   }
+  //   const res = await requestMobileOtp(phoneInput);
+  //   if (!res.success) {
+  //     addToast({ type: 'error', title: 'Could not send OTP', message: res.message });
+  //     return;
+  //   }
+  //   setOtpSent(true);
+  //   addToast({
+  //     type: 'info',
+  //     title: 'OTP Sent',
+  //     message: res.demoOtp ? `${res.message}. Development code: ${res.demoOtp}` : res.message
+  //   });
+  //   setOtpInput('');
+  // };
+  //
+  // const handleVerifyOtp = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   setIsVerifyingOtp(true);
+  //   try {
+  //     const res = await verifyMobileOtp(phoneInput, otpInput);
+  //     if (res.success && res.user) {
+  //       login(res.user);
+  //       addToast({ type: 'success', title: 'Mobile Verified', message: 'Welcome! Identity verified for clinical rental.' });
+  //       setCurrentStep(2);
+  //     } else {
+  //       addToast({ type: 'error', title: 'Verification Failed', message: res.message });
+  //     }
+  //   } finally {
+  //     setIsVerifyingOtp(false);
+  //   }
+  // };
 
   // Simulated file upload
   const handleFileUpload = (type: keyof typeof kycDocs, fileName: string) => {
@@ -316,10 +314,10 @@ export default function RentalCheckoutClient() {
                   Step 1 of 4
                 </div>
                 <h2 className="text-xl font-black text-[#12263F]">
-                  Doctor / Patient Mobile Verification
+                  Sign in to continue your rental
                 </h2>
                 <p className="text-xs text-gray-500">
-                  Enter your mobile number to receive contract updates, KYC approval alerts, and delivery tracking.
+                  Sign in or create an account to receive contract updates, KYC approval alerts, and delivery tracking.
                 </p>
               </div>
 
@@ -338,6 +336,9 @@ export default function RentalCheckoutClient() {
                 </div>
               ) : (
                 <div className="space-y-4 pt-2">
+                  {/* Email + password sign-in / sign-up; a new account is signed in straight away */}
+                  <CustomerAuthForm onSuccess={() => setCurrentStep(2)} />
+                  {/* Mobile OTP sign-in — DISABLED (kept for reference)
                   {!otpSent ? (
                     <form onSubmit={handleSendOtp} className="space-y-4">
                       <div>
@@ -396,6 +397,7 @@ export default function RentalCheckoutClient() {
                       </button>
                     </form>
                   )}
+                  */}
                 </div>
               )}
             </div>

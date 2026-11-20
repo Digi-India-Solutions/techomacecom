@@ -843,7 +843,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     categoryPath: 'Dental Equipment > Sterilization & Autoclaves > Class B Autoclaves',
     shortDescription: '18-liter triple pre-vacuum Class B steam sterilizer with Helix/Bowie-Dick test & USB logger.',
     fullDescription: '<p>EN 13060 compliant Class B dental autoclave featuring a stainless steel seamless chamber, double safety door lock, and automated drying cycle.</p>',
-    status: 'out_of_stock',
+    status: 'inactive',
     price: 78500,
     mrp: 96000,
     gstPercent: 18,

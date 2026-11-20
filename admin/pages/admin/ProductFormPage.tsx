@@ -28,14 +28,15 @@ import type {
 import {
   createProduct,
   duplicateProduct,
-  getExternalCatalogSkus,
   getProductById,
+  storefrontProductUrl,
   updateProduct,
 } from '@/lib/api/admin/products';
 import { listCategories } from '@/lib/api/admin/categories';
 import { listBrands } from '@/lib/api/admin/brands';
-import { formatINR, slugify } from '@/lib/api/admin/client';
+import { AdminApiError, formatINR, slugify } from '@/lib/api/admin/client';
 import { useToast } from '@/components/admin/ToastProvider';
+import { useAuth } from '@/components/admin/AuthContext';
 import { FormField, inputClass, selectClass, textareaClass } from '@/components/admin/FormField';
 import { CategoryTreeSelect } from '@/components/admin/CategoryTreeSelect';
 import { RichTextEditor } from '@/components/admin/RichTextEditor';
@@ -96,13 +97,30 @@ const EMPTY_FORM: ProductFormPayload = {
   },
   seoTitle: '',
   seoDescription: '',
+  features: [],
+  warranty: '',
+  certifications: [],
 };
+
+/** Which tab holds the field an API validation error points at (e.g. "variants.2.sku"). */
+function tabForField(field: string): TabKey {
+  const root = field.split('.')[0];
+  if (root === 'variants') return 'variants';
+  if (root === 'images') return 'images';
+  if (root === 'specifications') return 'specs';
+  if (root === 'rental') return 'rental';
+  if (['price', 'mrp', 'gstPercent', 'hsnCode', 'buyTwoPlusPrice'].includes(root)) return 'pricing';
+  if (['weightKg', 'lengthCm', 'widthCm', 'heightCm'].includes(root)) return 'shipping';
+  if (['seoTitle', 'seoDescription'].includes(root)) return 'seo';
+  return 'basic';
+}
 
 export function ProductFormPage() {
   const { id } = useParams<{ id: string }>();
   const isNew = !id || id === 'new';
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { can } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabKey>('basic');
   const [form, setForm] = useState<ProductFormPayload>(EMPTY_FORM);
@@ -133,7 +151,15 @@ export function ProductFormPage() {
         setCategories(cats);
         setBrands(brds);
         if (prod) {
-          const { id: _id, createdAt: _c, updatedAt: _u, brandName: _bn, categoryPath: _cp, ...rest } = prod;
+          const {
+            id: _id,
+            createdAt: _c,
+            updatedAt: _u,
+            brandName: _bn,
+            categoryPath: _cp,
+            publishedAt: _p,
+            ...rest
+          } = prod;
           const normalizedVariants = [...(rest.variants || [])]
             .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
             .map((v, idx, arr) => ({
@@ -142,11 +168,28 @@ export function ProductFormPage() {
               isActive: v.isActive ?? true,
               sortOrder: idx,
             }));
-          setForm({ ...rest, variants: normalizedVariants });
+          setForm({
+            ...rest,
+            features: rest.features || [],
+            warranty: rest.warranty || '',
+            certifications: rest.certifications || [],
+            variants: normalizedVariants,
+          });
           setSlugTouched(true);
+        } else if (!isNew) {
+          showToast({ title: 'Product not found', description: 'It may have been deleted.', variant: 'error' });
+          navigate('/admin/products', { replace: true });
         } else if (brds.length > 0) {
           setForm((prev) => ({ ...prev, brandId: brds[0].id }));
         }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        showToast({
+          title: 'Could not load the product editor',
+          description: err instanceof Error ? err.message : 'Please try again',
+          variant: 'error',
+        });
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -198,10 +241,9 @@ export function ProductFormPage() {
     return Math.round(((effectiveMrp - effectivePrice) / effectiveMrp) * 100);
   }, [effectivePrice, effectiveMrp]);
 
-  const externalSkus = useMemo(
-    () => new Set(getExternalCatalogSkus(isNew ? undefined : id)),
-    [id, isNew, loading]
-  );
+  // SKUs used by OTHER products are checked by the API on save (409 with the exact
+  // variant field); this set only feeds the in-form duplicate + auto-SKU helpers.
+  const externalSkus = useMemo(() => new Set<string>(), []);
 
   const variantValidation = useMemo(() => {
     const skuCounts = new Map<string, number>();
@@ -363,6 +405,9 @@ export function ProductFormPage() {
         showToast({ title: 'Product saved', description: updated.name, variant: 'success' });
       }
     } catch (err) {
+      // Jump to the tab that holds the first invalid field the API reported
+      const firstField = err instanceof AdminApiError && err.fields ? Object.keys(err.fields)[0] : null;
+      if (firstField) setActiveTab(tabForField(firstField));
       showToast({
         title: 'Save failed',
         description: err instanceof Error ? err.message : 'Unable to save product',
@@ -380,9 +425,17 @@ export function ProductFormPage() {
 
   const handleDuplicate = async () => {
     if (!id || isNew) return;
-    const copy = await duplicateProduct(id);
-    showToast({ title: 'Product duplicated as draft', variant: 'success' });
-    navigate(`/admin/products/${copy.id}`);
+    try {
+      const copy = await duplicateProduct(id);
+      showToast({ title: 'Product duplicated as draft', variant: 'success' });
+      navigate(`/admin/products/${copy.id}`);
+    } catch (err) {
+      showToast({
+        title: 'Duplicate failed',
+        description: err instanceof Error ? err.message : 'Please try again',
+        variant: 'error',
+      });
+    }
   };
 
   // Variants helpers
@@ -534,14 +587,17 @@ export function ProductFormPage() {
         <div className="flex items-center gap-2">
           {!isNew && (
             <>
-              <button
-                type="button"
-                onClick={handleDuplicate}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE6F2] bg-white px-3 py-2 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC]"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                Duplicate
-              </button>
+              {/* Duplicating creates a product → needs products.create */}
+              {can('products.create') && (
+                <button
+                  type="button"
+                  onClick={handleDuplicate}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE6F2] bg-white px-3 py-2 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC]"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Duplicate
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setPreviewOpen(true)}
@@ -661,7 +717,7 @@ export function ProductFormPage() {
               >
                 <option value="active">Active (Visible on storefront)</option>
                 <option value="draft">Draft (Hidden from storefront)</option>
-                <option value="out_of_stock">Out of Stock</option>
+                <option value="inactive">Inactive (Hidden from storefront)</option>
               </select>
             </FormField>
 
@@ -699,6 +755,55 @@ export function ProductFormPage() {
               <RichTextEditor
                 value={form.fullDescription}
                 onChange={(html) => updateField('fullDescription', html)}
+              />
+            </FormField>
+
+            <FormField
+              label="Key Features"
+              hint="One feature per line — shown as bullet points on the product page (max 30)"
+              className="lg:col-span-2"
+            >
+              <textarea
+                value={(form.features || []).join('\n')}
+                onChange={(e) => updateField('features', e.target.value.split('\n'))}
+                onBlur={() =>
+                  updateField(
+                    'features',
+                    (form.features || []).map((f) => f.trim()).filter(Boolean)
+                  )
+                }
+                placeholder={'93% ± 3% oxygen purity\nLow noise (< 40 dB)\n2-year manufacturer warranty'}
+                className={textareaClass}
+              />
+            </FormField>
+
+            <FormField label="Warranty" hint="e.g. 2 years manufacturer warranty">
+              <input
+                type="text"
+                maxLength={200}
+                value={form.warranty || ''}
+                onChange={(e) => updateField('warranty', e.target.value)}
+                className={inputClass}
+              />
+            </FormField>
+
+            <FormField label="Certifications" hint="Comma separated, e.g. CE, ISO 13485, CDSCO">
+              <input
+                type="text"
+                value={(form.certifications || []).join(', ')}
+                onChange={(e) =>
+                  updateField(
+                    'certifications',
+                    e.target.value.split(',').map((c) => c.trimStart())
+                  )
+                }
+                onBlur={() =>
+                  updateField(
+                    'certifications',
+                    (form.certifications || []).map((c) => c.trim()).filter(Boolean)
+                  )
+                }
+                className={inputClass}
               />
             </FormField>
           </div>
@@ -1645,9 +1750,25 @@ export function ProductFormPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-[#DCE6F2] px-5 py-3.5 bg-[#F6F9FD]">
-              <span className="text-xs font-semibold text-[#1D5FAF]">
-                Storefront Preview · /products/{form.slug}
-              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-[#1D5FAF]">Storefront Preview</p>
+                {form.status === 'active' && !isDirty ? (
+                  <a
+                    href={storefrontProductUrl(form.slug)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-mono text-[#1D5FAF] hover:underline break-all"
+                  >
+                    Open {storefrontProductUrl(form.slug)}
+                  </a>
+                ) : (
+                  <p className="text-[11px] text-[#B85A0E]">
+                    {isDirty
+                      ? 'Save your changes to see them on the storefront'
+                      : 'Visible on the storefront only when the status is Active'}
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setPreviewOpen(false)}

@@ -42,10 +42,10 @@ export const TopCategoriesGrid: React.FC<TopCategoriesGridProps> = ({ categories
 
           <div className="flex items-center gap-3">
             <Link
-              href="/category/respiratory-care"
+              href="/search"
               className="text-xs sm:text-sm font-bold text-[#1D5FAF] hover:text-[#0B2545] flex items-center gap-1 font-heading transition-colors"
             >
-              <span>All Categories</span>
+              <span>All Products</span>
               <span className="tracking-tighter">&gt;&gt;</span>
             </Link>
 

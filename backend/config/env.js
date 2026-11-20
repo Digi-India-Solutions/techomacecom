@@ -98,6 +98,8 @@ export const env = {
   otp: {
     secret: optional("OTP_HASH_SECRET") || jwtSecret,
     expiryMinutes: int("OTP_EXPIRY_MINUTES", 5),
+    // Email codes (sign-up) live longer than SMS codes — inboxes can be slow
+    emailExpiryMinutes: int("EMAIL_OTP_EXPIRY_MINUTES", 10),
     maxAttempts: 5, // document §7.2
     sendLimit: 3, // document §13.1: 3 per mobile per 10 min
     sendWindowMinutes: 10,
@@ -147,6 +149,15 @@ export const env = {
     lockMinutes: int("ADMIN_LOCK_MINUTES", 15),
     inviteExpiryHours: int("ADMIN_INVITE_EXPIRY_HOURS", 72),
     resetExpiryMinutes: int("ADMIN_RESET_EXPIRY_MINUTES", 60),
+  },
+
+  // Storefront email + password sign-in
+  customer: {
+    lockAfterFailedLogins: 5,
+    lockMinutes: int("CUSTOMER_LOCK_MINUTES", 15),
+    // "Forgot password" link lifetime, and the minimum gap between two reset emails
+    resetExpiryMinutes: int("CUSTOMER_RESET_EXPIRY_MINUTES", 30),
+    resetCooldownSeconds: int("CUSTOMER_RESET_COOLDOWN_SECONDS", 60),
   },
 };
 

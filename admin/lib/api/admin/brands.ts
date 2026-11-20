@@ -1,50 +1,39 @@
 import type { Brand, BrandPayload } from '@/types/admin';
-import { mockDelay, slugify } from './client';
-import { INITIAL_BRANDS } from './mockData';
+import { adminDelete, adminGet, adminPost, adminPut } from './client';
 
-let brandsStore: Brand[] = structuredClone(INITIAL_BRANDS);
+// ---------------------------------------------------------------------------
+// Live API — backend/src/modules/catalog/brands (/api/v1/admin/brands)
+// ---------------------------------------------------------------------------
 
+/** All brands (active + inactive) with product counts, sorted by name. */
 export async function listBrands(): Promise<Brand[]> {
-  await mockDelay(120);
-  return structuredClone(brandsStore);
+  return adminGet<Brand[]>('/admin/brands');
+}
+
+function toBody(payload: BrandPayload) {
+  return {
+    name: payload.name,
+    slug: payload.slug,
+    logoUrl: payload.logoUrl || '',
+    desktopBannerUrl: payload.desktopBannerUrl || '',
+    mobileBannerUrl: payload.mobileBannerUrl || '',
+    description: payload.description || '',
+    originCountry: payload.originCountry || '',
+    authorizedDistributor: Boolean(payload.authorizedDistributor),
+    featuredOnHomepage: payload.featuredOnHomepage,
+    status: payload.status,
+    seoTitle: payload.seoTitle || '',
+    seoDescription: payload.seoDescription || '',
+  };
 }
 
 export async function saveBrand(payload: BrandPayload): Promise<Brand> {
-  await mockDelay(180);
-  const now = new Date().toISOString();
-
-  if (payload.id) {
-    const existing = brandsStore.find((b) => b.id === payload.id);
-    if (!existing) throw new Error('Brand not found');
-    const updated: Brand = {
-      ...existing,
-      ...payload,
-      id: payload.id,
-      slug: payload.slug || slugify(payload.name),
-      updatedAt: now,
-    };
-    brandsStore = brandsStore.map((b) => (b.id === payload.id ? updated : b));
-    return structuredClone(updated);
-  }
-
-  const created: Brand = {
-    ...payload,
-    id: `brand-${Date.now()}`,
-    slug: payload.slug || slugify(payload.name),
-    productCount: 0,
-    updatedAt: now,
-  };
-  brandsStore = [created, ...brandsStore];
-  return structuredClone(created);
+  return payload.id
+    ? adminPut<Brand>(`/admin/brands/${payload.id}`, toBody(payload))
+    : adminPost<Brand>('/admin/brands', toBody(payload));
 }
 
+/** Soft delete. The API refuses (409) while products are linked to the brand. */
 export async function deleteBrand(id: string): Promise<void> {
-  await mockDelay(140);
-  const target = brandsStore.find((b) => b.id === id);
-  if (target && target.productCount > 0) {
-    throw new Error(
-      `Cannot delete "${target.name}" while ${target.productCount} products are linked to it.`
-    );
-  }
-  brandsStore = brandsStore.filter((b) => b.id !== id);
+  await adminDelete(`/admin/brands/${id}`);
 }
