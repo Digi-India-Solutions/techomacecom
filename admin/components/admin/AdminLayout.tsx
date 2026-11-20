@@ -39,15 +39,13 @@ import {
 } from 'lucide-react';
 import type { AdminNotification, AdminPermission, GlobalSearchResult } from '@/types/admin';
 import { useAuth } from './AuthContext';
-import { useToast } from './ToastProvider';
 import {
   getNotifications,
   globalSearchAdmin,
   markAllNotificationsRead,
   markNotificationRead,
 } from '@/lib/api/admin/dashboard';
-import { changeAdminPassword, PASSWORD_HINT } from '@/lib/api/admin/auth';
-import { FormField, inputClass } from './FormField';
+import { Avatar } from './Avatar';
 
 interface NavItem {
   label: string;
@@ -130,8 +128,7 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 export function AdminLayout() {
-  const { user, isAuthenticated, status, can, logout, updateProfile } = useAuth();
-  const { showToast } = useToast();
+  const { user, isAuthenticated, status, can, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -147,20 +144,8 @@ export function AdminLayout() {
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
 
-  // Profile menu & modals
+  // Profile menu
   const [profileOpen, setProfileOpen] = useState(false);
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
-
-  // Profile edit state
-  const [profileName, setProfileName] = useState(user?.name || '');
-  const [profilePhone, setProfilePhone] = useState(user?.phone || '');
-  const [profileDept, setProfileDept] = useState(user?.department || '');
-
-  // Password state
-  const [currPwd, setCurrPwd] = useState('');
-  const [newPwd, setNewPwd] = useState('');
-  const [confirmPwd, setConfirmPwd] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -221,39 +206,6 @@ export function AdminLayout() {
   const handleMarkAllRead = async () => {
     const next = await markAllNotificationsRead();
     setNotifications(next);
-  };
-
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await updateProfile({
-      name: profileName,
-      phone: profilePhone,
-      department: profileDept,
-    });
-    setProfileModalOpen(false);
-    showToast({ title: 'Profile updated', variant: 'success' });
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPwd !== confirmPwd) {
-      showToast({ title: 'Passwords do not match', variant: 'error' });
-      return;
-    }
-    try {
-      const res = await changeAdminPassword({ currentPassword: currPwd, newPassword: newPwd });
-      setPasswordModalOpen(false);
-      setCurrPwd('');
-      setNewPwd('');
-      setConfirmPwd('');
-      showToast({ title: 'Password updated', description: res.message, variant: 'success' });
-    } catch (err) {
-      showToast({
-        title: 'Unable to update password',
-        description: err instanceof Error ? err.message : 'Check input',
-        variant: 'error',
-      });
-    }
   };
 
   const sidebarContent = (isMobile = false) => (
@@ -345,17 +297,17 @@ export function AdminLayout() {
       {/* Role indicator footer */}
       <div className="border-t border-white/10 p-3">
         {!collapsed || isMobile ? (
-          <div className="rounded-lg bg-white/8 px-3 py-2">
-            <p className="text-xs font-medium text-white truncate">{user.name}</p>
-            <p className="text-[11px] text-white/65 truncate">{user.roleLabel}</p>
-          </div>
+          <Link to="/admin/profile" className="flex items-center gap-2.5 rounded-lg bg-white/8 px-3 py-2 hover:bg-white/12 transition-colors">
+            <Avatar name={user.name} initials={user.avatarInitials} url={user.avatarUrl} className="h-8 w-8 text-xs bg-white/10" rounded="rounded-lg" />
+            <span className="min-w-0">
+              <span className="block text-xs font-medium text-white truncate">{user.name}</span>
+              <span className="block text-[11px] text-white/65 truncate">{user.roleLabel}</span>
+            </span>
+          </Link>
         ) : (
-          <div
-            className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-xs font-semibold text-white"
-            title={`${user.name} (${user.roleLabel})`}
-          >
-            {user.avatarInitials}
-          </div>
+          <Link to="/admin/profile" className="mx-auto block w-fit" title={`${user.name} (${user.roleLabel})`}>
+            <Avatar name={user.name} initials={user.avatarInitials} url={user.avatarUrl} className="h-8 w-8 text-xs bg-white/10" rounded="rounded-lg" />
+          </Link>
         )}
       </div>
     </div>
@@ -563,9 +515,7 @@ export function AdminLayout() {
                 }}
                 className="flex items-center gap-2.5 rounded-lg border border-[#DCE6F2] bg-white px-2.5 py-1.5 hover:bg-[#EAF2FC] transition-colors"
               >
-                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#0B2545] text-xs font-semibold text-white">
-                  {user.avatarInitials}
-                </div>
+                <Avatar name={user.name} initials={user.avatarInitials} url={user.avatarUrl} className="h-7 w-7 text-xs" />
                 <div className="hidden sm:block text-left">
                   <p className="text-xs font-semibold text-[#12263F] leading-tight whitespace-nowrap">
                     {user.name}
@@ -584,20 +534,20 @@ export function AdminLayout() {
                     onClick={() => setProfileOpen(false)}
                   />
                   <div className="absolute right-0 z-30 mt-2 w-64 rounded-xl border border-[#DCE6F2] bg-white shadow-xl overflow-hidden">
-                    <div className="border-b border-[#DCE6F2] px-4 py-3 bg-[#F6F9FD]">
-                      <p className="text-xs font-semibold text-[#12263F]">{user.name}</p>
-                      <p className="text-[11px] text-[#5B6B82] truncate">{user.email}</p>
+                    <div className="flex items-center gap-3 border-b border-[#DCE6F2] px-4 py-3 bg-[#F6F9FD]">
+                      <Avatar name={user.name} initials={user.avatarInitials} url={user.avatarUrl} className="h-9 w-9 text-xs" rounded="rounded-lg" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-[#12263F] truncate">{user.name}</p>
+                        <p className="text-[11px] text-[#5B6B82] truncate">{user.email}</p>
+                      </div>
                     </div>
 
                     <div className="p-1.5 space-y-0.5">
                       <button
                         type="button"
                         onClick={() => {
-                          setProfileName(user.name);
-                          setProfilePhone(user.phone);
-                          setProfileDept(user.department);
                           setProfileOpen(false);
-                          setProfileModalOpen(true);
+                          navigate('/admin/profile');
                         }}
                         className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-[#12263F] hover:bg-[#EAF2FC]"
                       >
@@ -608,12 +558,12 @@ export function AdminLayout() {
                         type="button"
                         onClick={() => {
                           setProfileOpen(false);
-                          setPasswordModalOpen(true);
+                          navigate('/admin/profile?tab=security');
                         }}
                         className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-[#12263F] hover:bg-[#EAF2FC]"
                       >
                         <KeyRound className="h-4 w-4 text-[#5B6B82]" />
-                        Change Password
+                        Password &amp; Devices
                       </button>
                     </div>
 
@@ -642,131 +592,6 @@ export function AdminLayout() {
           <Outlet />
         </main>
       </div>
-
-      {/* Profile Modal */}
-      {profileModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/45 p-4">
-          <div className="w-full max-w-md rounded-xl border border-[#DCE6F2] bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-[#DCE6F2] px-5 py-4">
-              <h3 className="text-base font-semibold text-[#12263F]">Admin Profile</h3>
-              <button
-                type="button"
-                onClick={() => setProfileModalOpen(false)}
-                className="rounded-lg p-1 text-[#5B6B82] hover:bg-[#EAF2FC]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <form onSubmit={handleSaveProfile} className="p-5 space-y-4">
-              <FormField label="Full Name" required>
-                <input
-                  type="text"
-                  required
-                  value={profileName}
-                  onChange={(e) => setProfileName(e.target.value)}
-                  className={inputClass}
-                />
-              </FormField>
-              <FormField label="Work Email">
-                <input type="email" value={user.email} disabled className={inputClass} />
-              </FormField>
-              <FormField label="Phone">
-                <input
-                  type="text"
-                  value={profilePhone}
-                  onChange={(e) => setProfilePhone(e.target.value)}
-                  className={inputClass}
-                />
-              </FormField>
-              <FormField label="Department">
-                <input
-                  type="text"
-                  value={profileDept}
-                  onChange={(e) => setProfileDept(e.target.value)}
-                  className={inputClass}
-                />
-              </FormField>
-              <div className="flex justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setProfileModalOpen(false)}
-                  className="rounded-lg border border-[#DCE6F2] px-4 py-2 text-sm font-medium text-[#12263F] hover:bg-[#EAF2FC]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-sm font-medium text-white hover:bg-[#174D8F]"
-                >
-                  Save Profile
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Change Password Modal */}
-      {passwordModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/45 p-4">
-          <div className="w-full max-w-md rounded-xl border border-[#DCE6F2] bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-[#DCE6F2] px-5 py-4">
-              <h3 className="text-base font-semibold text-[#12263F]">Change Password</h3>
-              <button
-                type="button"
-                onClick={() => setPasswordModalOpen(false)}
-                className="rounded-lg p-1 text-[#5B6B82] hover:bg-[#EAF2FC]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <form onSubmit={handleChangePassword} className="p-5 space-y-4">
-              <FormField label="Current Password" required>
-                <input
-                  type="password"
-                  required
-                  value={currPwd}
-                  onChange={(e) => setCurrPwd(e.target.value)}
-                  className={inputClass}
-                />
-              </FormField>
-              <FormField label="New Password" required hint={PASSWORD_HINT}>
-                <input
-                  type="password"
-                  required
-                  value={newPwd}
-                  onChange={(e) => setNewPwd(e.target.value)}
-                  className={inputClass}
-                />
-              </FormField>
-              <FormField label="Confirm New Password" required>
-                <input
-                  type="password"
-                  required
-                  value={confirmPwd}
-                  onChange={(e) => setConfirmPwd(e.target.value)}
-                  className={inputClass}
-                />
-              </FormField>
-              <div className="flex justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setPasswordModalOpen(false)}
-                  className="rounded-lg border border-[#DCE6F2] px-4 py-2 text-sm font-medium text-[#12263F] hover:bg-[#EAF2FC]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-sm font-medium text-white hover:bg-[#174D8F]"
-                >
-                  Update Password
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -233,7 +233,8 @@ export function ProductFormPage() {
 
   const effectivePrice = hasVariants && defaultVariant ? defaultVariant.price : form.price;
   const effectiveMrp = hasVariants && defaultVariant ? defaultVariant.mrp : form.mrp;
-  const effectiveStock = hasVariants && defaultVariant ? defaultVariant.stock : form.stock;
+  const totalVariantStock = form.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+  const effectiveStock = hasVariants ? totalVariantStock : form.stock;
 
   const discountPercent = useMemo(() => {
     if (effectiveMrp <= 0 || effectivePrice <= 0 || effectiveMrp <= effectivePrice) return 0;
@@ -722,7 +723,11 @@ export function ProductFormPage() {
 
             <FormField
               label="Available Stock"
-              hint={hasVariants ? 'Managed by variants (default variant stock)' : undefined}
+              hint={
+                hasVariants
+                  ? `Total stock across variants (${totalVariantStock} units in ${form.variants.length} variants)`
+                  : undefined
+              }
             >
               <input
                 type="number"

@@ -1,8 +1,9 @@
 import type {NextConfig} from 'next';
+import {BACKEND_API_URL} from './lib/config';
 
 // Uploaded product / brand / banner images are served by the API at /uploads/… (WebP).
-// Derive the image host from NEXT_PUBLIC_BACKEND_API_URL so dev and production both work.
-const backendUrl = new URL(process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:5001/api/v1');
+// The image host follows the API URL picked for this environment (lib/config.ts).
+const backendUrl = new URL(BACKEND_API_URL);
 const isLocalBackend = ['localhost', '127.0.0.1'].includes(backendUrl.hostname);
 
 const nextConfig: NextConfig = {

@@ -1,6 +1,14 @@
-import { ok, clientIp } from "../../lib/http.js";
+import { ok, clientIp, ApiError } from "../../lib/http.js";
 import { setAuthCookies, clearAuthCookies, readRefreshToken } from "../../lib/tokens.js";
-import { issueTokens, rotateRefreshToken, revokeByRefreshToken } from "../../services/session.service.js";
+import {
+  issueTokens,
+  rotateRefreshToken,
+  revokeByRefreshToken,
+  currentSessionJti,
+  listActiveSessions,
+  revokeSessionById,
+  revokeOtherSessions,
+} from "../../services/session.service.js";
 import env from "../../../config/env.js";
 import * as service from "./service.js";
 
@@ -136,4 +144,26 @@ export async function verifyMobile(req, res) {
   await service.linkMobile(req.customer, req.body);
   const profile = await service.getCustomerProfile(req.customer.id);
   return ok(res, { user: service.toCustomerDto(profile) });
+}
+
+/** GET /auth/sessions — signed-in devices */
+export async function sessions(req, res) {
+  return ok(res, await listActiveSessions("customer", req.customer.id, currentSessionJti(req, "customer")));
+}
+
+/** DELETE /auth/sessions/:id */
+export async function revokeSession(req, res) {
+  const device = await revokeSessionById("customer", req.customer.id, req.validatedParams.id, currentSessionJti(req, "customer"));
+  return ok(res, { message: `${device.label} has been signed out.` });
+}
+
+/** POST /auth/sessions/revoke-others */
+export async function revokeOthers(req, res) {
+  const jti = currentSessionJti(req, "customer");
+  if (!jti) throw ApiError.unauthorized("Please sign in again to manage your devices.", "NO_REFRESH_TOKEN");
+  const count = await revokeOtherSessions("customer", req.customer.id, jti);
+  return ok(res, {
+    count,
+    message: count ? `Signed out of ${count} other device${count === 1 ? "" : "s"}.` : "No other devices were signed in.",
+  });
 }

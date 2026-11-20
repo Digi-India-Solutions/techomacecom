@@ -3,6 +3,9 @@ import { ApiError } from "../lib/http.js";
 import { readAccessToken, verifyAccessToken } from "../lib/tokens.js";
 import { getRolePermissions } from "../rbac/permission.service.js";
 import { SUPER_ADMIN_SLUG } from "../rbac/catalog.js";
+import { isSessionActive } from "../services/session.service.js";
+
+const SIGNED_OUT = () => ApiError.unauthorized("This device has been signed out. Please sign in again.", "SESSION_REVOKED");
 
 function decode(req, subjectType) {
   const token = readAccessToken(req, subjectType);
@@ -32,6 +35,7 @@ async function loadCustomer(id) {
 export async function requireCustomer(req, res, next) {
   const { payload, error } = decode(req, "customer");
   if (error) return next(error);
+  if (!(await isSessionActive(payload.sid))) return next(SIGNED_OUT());
   const customer = await loadCustomer(BigInt(payload.sub));
   if (!customer) return next(ApiError.unauthorized("Account not found", "ACCOUNT_NOT_FOUND"));
   if (customer.status !== "active") return next(ApiError.forbidden("This account has been blocked. Contact support.", "ACCOUNT_BLOCKED"));
@@ -42,7 +46,7 @@ export async function requireCustomer(req, res, next) {
 /** Guest-friendly routes (e.g. reviews): sets req.customer when a valid session exists. */
 export async function optionalCustomer(req, res, next) {
   const { payload } = decode(req, "customer");
-  if (payload) {
+  if (payload && (await isSessionActive(payload.sid))) {
     const customer = await loadCustomer(BigInt(payload.sub));
     if (customer?.status === "active") req.customer = customer;
   }
@@ -61,6 +65,7 @@ export async function optionalCustomer(req, res, next) {
 export async function requireAdmin(req, res, next) {
   const { payload, error } = decode(req, "admin");
   if (error) return next(error);
+  if (!(await isSessionActive(payload.sid))) return next(SIGNED_OUT());
 
   const admin = await prisma.adminUser.findUnique({
     where: { id: BigInt(payload.sub) },

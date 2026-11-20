@@ -95,10 +95,14 @@ export function DataTable<T>({
   };
 
   const filteredData = useMemo(() => {
-    if (!activeSearch.trim() || onSearchChange || !searchKeys) return data;
-    const q = activeSearch.trim().toLowerCase();
-    return data.filter((row) => searchKeys(row).toLowerCase().includes(q));
-  }, [data, activeSearch, onSearchChange, searchKeys]);
+    if (!activeSearch.trim() || !searchKeys) return data;
+    const tokens = activeSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return data;
+    return data.filter((row) => {
+      const target = searchKeys(row).toLowerCase();
+      return tokens.every((token) => target.includes(token));
+    });
+  }, [data, activeSearch, searchKeys]);
 
   const sortedData = useMemo(() => {
     if (!sortKey) return filteredData;

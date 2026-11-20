@@ -1,18 +1,7 @@
-import "dotenv/config";
+import env from "./env.js";
 
-const isProduction = process.env.NODE_ENV === "production";
-
-// Comma-separated list in .env → array of origins (trailing slashes removed)
-const parseOrigins = (value = "") =>
-  value
-    .split(",")
-    .map((origin) => origin.trim().replace(/\/+$/, ""))
-    .filter(Boolean);
-
-// development → LOCAL_URL, production → PRODUCTION_URL
-export const allowedOrigins = parseOrigins(
-  isProduction ? process.env.PRODUCTION_URL : process.env.LOCAL_URL
-);
+// Storefront + admin URLs for the current NODE_ENV (see config/env.js corsOrigins)
+export const allowedOrigins = env.corsOrigins;
 
 export const corsOptions = {
   origin(origin, callback) {

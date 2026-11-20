@@ -19,7 +19,10 @@ npm run dev         # http://localhost:5001  ·  API base /api/v1  ·  GET /heal
 | Admin (`admin/`, Vite) | 3001 | `VITE_API_URL` |
 | API (`backend/`) | 5001 (`PORT`) | PostgreSQL |
 
-All settings are in `.env` — see `.env.example` for every variable.
+All settings are in ONE `.env` for both local and production — see `.env.example`.
+Any key can have `_LOCAL` and `_PRODUCTION` versions (e.g. `DB_PASSWORD_LOCAL`, `DB_PASSWORD_PRODUCTION`);
+`config/load-env.js` copies the right one to the plain name based on `NODE_ENV`, which the npm scripts set:
+`dev`, `db:migrate`, `db:seed` → local · `start`, `db:deploy`, `db:seed:prod`, `admin:set-password:prod` → production.
 
 ## Database
 
@@ -37,6 +40,9 @@ All settings are in `.env` — see `.env.example` for every variable.
 **Tokens.** Access JWT (`ACCESS_TOKEN_EXPIRY`) + refresh JWT (`REFRESH_TOKEN_EXPIRY`), both in
 httpOnly `SameSite=Lax` cookies. Each refresh token is one `auth_sessions` row; every refresh
 rotates it, and replaying an old refresh token signs that user out everywhere.
+The access token carries `sid` (its session), and every authenticated request checks that the
+session is still active — so logout, "sign out this device", a password change or deactivation
+take effect immediately, not when the access token expires.
 Customer and staff tokens have different audiences and cookie names, so neither works on the
 other's routes. `Authorization: Bearer <access token>` is also accepted.
 
@@ -53,9 +59,20 @@ other's routes. `Authorization: Bearer <access token>` is also accepted.
 | `POST /reset-password` `{ token, password, confirmPassword }` | One use; clears lockout; **signs out every other device**; emails a "password changed" notice; signs in here |
 | `POST /google` `{ credential }` | Google ID token verified server-side (not shown on the storefront form now) |
 | `POST /refresh`, `POST /logout` | |
-| `GET /me`, `PUT /me` | Profile (name, customer type). The sign-in email of a password account cannot be changed |
-| `POST /me/mobile/send`, `/me/mobile/verify` | Verify / change the mobile with an SMS OTP (signed in) |
+| `GET /me`, `PUT /me` | Profile: name, customer type, qualification, council registration no. The sign-in email of a password account cannot be changed |
+| `POST /me/mobile/send`, `/me/mobile/verify` | Add or change the mobile (OTP to the new number; not a sign-in) |
+| `GET /sessions`, `DELETE /sessions/:id`, `POST /sessions/revoke-others` | Signed-in devices |
 | ~~`POST /otp/send`, `/otp/verify`~~ | **Mobile OTP sign-in is disabled** — routes commented out in `src/modules/auth/routes.js` |
+
+**Customer account** — `/api/v1/account` (signed-in customers; every write returns `{ user }`)
+| | |
+|---|---|
+| `GET/POST /addresses`, `PUT/DELETE /addresses/:id`, `POST /addresses/:id/default` | Up to 20; state normalised to the official name (GST place of supply) |
+| `GET/POST /gst`, `PUT/DELETE /gst/:id`, `POST /gst/:id/default` | Up to 10 GSTINs; format, state code and check digit validated |
+| `PUT /avatar` (multipart `file`), `DELETE /avatar` | Profile photo |
+
+The first address / GSTIN becomes the default; choosing a new default clears the old one, and
+deleting the default promotes another. A customer can only ever see or change their own rows.
 
 Email codes are stored only as HMAC hashes (`email_otps`); the browser never decides an email
 is verified — `/signup` must present the server-issued token for that exact email.
@@ -71,7 +88,13 @@ Emails that hit a network error (ECONNRESET, timeouts) are retried twice before 
 | `POST /login` `{ email, password, rememberMe }` | argon2; 5 wrong passwords → locked 15 min |
 | `POST /refresh`, `POST /logout` | |
 | `POST /forgot-password`, `POST /reset-password` | Emailed one-time link (also used for staff invites) |
-| `GET /me`, `PUT /me`, `PUT /me/password` | `/me` returns the user **and their permission codes** |
+| `GET /me`, `PUT /me`, `PUT /me/password` | `/me` returns the user **and their permission codes**; `PUT /me`: name, mobile, department |
+| `PUT /me/avatar` (multipart `file`), `DELETE /me/avatar` | Profile photo |
+| `GET /me/activity?page=&limit=` | Your own activity log (no `activity.view` needed) |
+| `GET /sessions`, `DELETE /sessions/:id`, `POST /sessions/revoke-others` | Signed-in devices |
+
+Profile photos (staff and customers) are square-cropped on the most detailed area, saved as
+256 × 256 WebP in `uploads/avatars/`, and the previous photo file is deleted when replaced.
 
 ## RBAC
 
@@ -169,7 +192,7 @@ Rules:
 `stateCode("Uttar Pradesh" | GSTIN)`, `isIntraState(seller, placeOfSupply)`,
 and zod fields `rupeesField({ min })` (form rupees → paise) and `gstRateField`.
 
-`npm test` runs the unit tests for money, lists and image conversion (`tests/`).
+`npm test` runs the unit tests for money, lists, GSTIN checks, device names and image conversion (`tests/`).
 
 ## Layout
 
@@ -177,11 +200,13 @@ and zod fields `rupeesField({ min })` (form rupees → paise) and `gstRateField`
 config/        env.js (every variable, validated) · cors.js
 db/            Prisma client with the pg driver adapter
 prisma/        schema, migrations, seed.js
-src/lib/       tokens (JWT + cookies), password, OTP SMS, mailer, http, list, money, image (WebP), storage
+src/lib/       tokens (JWT + cookies), password, OTP SMS, mailer, http, list, money, gstin, device, image (WebP), storage
 src/middlewares/ auth (requireCustomer / requireAdmin / requirePermission), validate (zod), rate limits, errors
 src/rbac/      permission catalogue + per-role permission cache
-src/services/  sessions, OTPs, activity log
-src/modules/   auth (customers) · admin-auth · staff · uploads · catalog/{categories,brands,products,storefront}
+src/services/  sessions (+ signed-in devices), OTPs (SMS + email), activity log, avatars
+src/modules/   auth (customers) · account (addresses, GST, photo) · admin-auth · staff · uploads
+               catalog/{categories,brands,products,storefront} · products (basic CRUD at /admin/products-basic)
+               inventory · rental-units · banners — each: routes → controller → service → validator
                — each: routes → controller → service → validator
 uploads/       stored images (git-ignored)
 tests/         node --test unit tests

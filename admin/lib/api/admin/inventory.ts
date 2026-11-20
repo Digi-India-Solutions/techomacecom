@@ -1,18 +1,45 @@
 import type { StockAdjustmentReason, StockItem, StockMovement, StockStatus } from '@/types/admin';
-import { downloadCsv, mockDelay } from './client';
-import { INITIAL_STOCK_ITEMS, INITIAL_STOCK_MOVEMENTS } from './mockData';
+import { adminGet, adminPost, downloadCsv } from './client';
 
-let stockItemsStore: StockItem[] = structuredClone(INITIAL_STOCK_ITEMS);
-let stockMovementsStore: StockMovement[] = structuredClone(INITIAL_STOCK_MOVEMENTS);
+let cachedStockItems: StockItem[] = [];
 
-export function getStockItemsStore(): StockItem[] {
-  return stockItemsStore;
+type StockChangeListener = (items: StockItem[]) => void;
+const stockListeners = new Set<StockChangeListener>();
+
+export function onStockChange(listener: StockChangeListener): () => void {
+  stockListeners.add(listener);
+  return () => stockListeners.delete(listener);
 }
 
-function computeStockStatus(available: number, threshold: number): StockStatus {
-  if (available <= 0) return 'out_of_stock';
-  if (available <= threshold) return 'low_stock';
-  return 'in_stock';
+function notifyStockChanged(items: StockItem[]): void {
+  stockListeners.forEach((fn) => {
+    try {
+      fn(items);
+    } catch (err) {
+      console.error('Error in stock change listener:', err);
+    }
+  });
+}
+
+export function getStockItemsStore(): StockItem[] {
+  return cachedStockItems;
+}
+
+export function setStockItemsStore(items: StockItem[]): void {
+  cachedStockItems = items;
+  notifyStockChanged(cachedStockItems);
+}
+
+export interface WarehouseOption {
+  id: string;
+  name: string;
+  code: string;
+  city?: string;
+  state?: string;
+}
+
+export async function listWarehouses(): Promise<WarehouseOption[]> {
+  return await adminGet<WarehouseOption[]>('/admin/inventory/warehouses');
 }
 
 export async function listStockItems(filters?: {
@@ -20,79 +47,49 @@ export async function listStockItems(filters?: {
   status?: 'all' | StockStatus | 'low_or_out';
   warehouseId?: string;
 }): Promise<StockItem[]> {
-  await mockDelay(130);
-  let list = [...stockItemsStore];
+  const params = new URLSearchParams();
+  if (filters?.search) params.set('search', filters.search);
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.warehouseId) params.set('warehouseId', filters.warehouseId);
 
-  if (filters?.search) {
-    const q = filters.search.trim().toLowerCase();
-    list = list.filter(
-      (item) =>
-        item.productName.toLowerCase().includes(q) ||
-        item.sku.toLowerCase().includes(q) ||
-        (item.variantName && item.variantName.toLowerCase().includes(q))
-    );
-  }
-
-  if (filters?.warehouseId && filters.warehouseId !== 'all') {
-    list = list.filter((item) => item.warehouseId === filters.warehouseId);
-  }
-
-  if (filters?.status && filters.status !== 'all') {
-    if (filters.status === 'low_or_out') {
-      list = list.filter((item) => item.status === 'low_stock' || item.status === 'out_of_stock');
-    } else {
-      list = list.filter((item) => item.status === filters.status);
-    }
-  }
-
-  return structuredClone(list);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const items = await adminGet<StockItem[]>(`/admin/inventory/stock${query}`);
+  cachedStockItems = items;
+  notifyStockChanged(items);
+  return items;
 }
 
 export async function adjustStockItem(params: {
   id: string;
-  delta: number;
+  delta?: number;
+  availableStock?: number;
+  reservedStock?: number;
+  lowStockThreshold?: number;
   reason: StockAdjustmentReason;
-  note: string;
-  performedBy: string;
+  note?: string;
+  performedBy?: string;
 }): Promise<StockItem> {
-  await mockDelay(160);
-  const existing = stockItemsStore.find((s) => s.id === params.id);
-  if (!existing) throw new Error('Stock item not found');
-
-  const nextAvailable = Math.max(0, existing.availableStock + params.delta);
-  const now = new Date().toISOString();
-
-  const updated: StockItem = {
-    ...existing,
-    availableStock: nextAvailable,
-    status: computeStockStatus(nextAvailable, existing.lowStockThreshold),
-    updatedAt: now,
-  };
-
-  stockItemsStore = stockItemsStore.map((s) => (s.id === params.id ? updated : s));
-
-  const movement: StockMovement = {
-    id: `mov-${Date.now()}`,
-    stockItemId: existing.id,
-    sku: existing.sku,
-    delta: nextAvailable - existing.availableStock,
-    previousStock: existing.availableStock,
-    newStock: nextAvailable,
+  const payload: Record<string, unknown> = {
     reason: params.reason,
-    note: params.note || `Adjusted by ${params.delta > 0 ? `+${params.delta}` : params.delta}`,
-    performedBy: params.performedBy,
-    createdAt: now,
+    note: params.note || '',
   };
-  stockMovementsStore = [movement, ...stockMovementsStore];
+  if (params.delta !== undefined) payload.delta = params.delta;
+  if (params.availableStock !== undefined) payload.availableStock = params.availableStock;
+  if (params.reservedStock !== undefined) payload.reservedStock = params.reservedStock;
+  if (params.lowStockThreshold !== undefined) payload.lowStockThreshold = params.lowStockThreshold;
 
-  return structuredClone(updated);
+  const updated = await adminPost<StockItem>(`/admin/inventory/stock/${params.id}/adjust`, payload);
+
+  cachedStockItems = cachedStockItems.map((item) =>
+    item.id === updated.id ? updated : item
+  );
+  notifyStockChanged(cachedStockItems);
+
+  return updated;
 }
 
 export async function getStockMovements(stockItemId: string): Promise<StockMovement[]> {
-  await mockDelay(100);
-  return structuredClone(
-    stockMovementsStore.filter((m) => m.stockItemId === stockItemId)
-  );
+  return await adminGet<StockMovement[]>(`/admin/inventory/stock/${stockItemId}/movements`);
 }
 
 export function exportStockCsv(items: StockItem[]): void {

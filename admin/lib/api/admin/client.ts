@@ -1,10 +1,16 @@
-/** Express API base, e.g. http://localhost:5001/api/v1 (set VITE_API_URL in admin/.env). */
+/**
+ * Express API base, picked automatically from ONE env file (admin/.env):
+ *   VITE_API_URL_LOCAL       → `npm run dev`
+ *   VITE_API_URL_PRODUCTION  → `npm run build` (the deployed panel)
+ *   VITE_API_URL             → optional override for both
+ */
 export function getApiBaseUrl(): string {
-  const vitePublic =
-    typeof import.meta !== 'undefined' && import.meta.env
-      ? (import.meta.env.VITE_API_URL as string | undefined)
-      : undefined;
-  return (vitePublic || 'http://localhost:5001/api/v1').replace(/\/+$/, '');
+  // Written out in full so the production build contains only the production URL
+  const url =
+    import.meta.env.VITE_API_URL ||
+    (import.meta.env.PROD ? import.meta.env.VITE_API_URL_PRODUCTION : import.meta.env.VITE_API_URL_LOCAL || 'http://localhost:5001/api/v1');
+  if (!url) throw new Error('Set VITE_API_URL_PRODUCTION in admin/.env before building for production.');
+  return String(url).trim().replace(/\/+$/, '');
 }
 
 export async function mockDelay(ms = 180): Promise<void> {
@@ -25,10 +31,20 @@ export class AdminApiError extends Error {
   }
 }
 
+/** List metadata from the API (backend/src/lib/list.js listMeta). */
+export interface ListMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages?: number;
+  hasNextPage?: boolean;
+  hasPrevPage?: boolean;
+}
+
 interface Envelope<T> {
   success: boolean;
   data?: T;
-  meta?: { page: number; limit: number; total: number };
+  meta?: ListMeta;
   error?: { code: string; message: string; fields?: Record<string, string> };
 }
 
@@ -95,7 +111,7 @@ export const adminPost = async <T>(path: string, body?: unknown) =>
     })
   ).data;
 export const adminPut = async <T>(path: string, body: unknown) =>
-  (await adminFetch<T>(path, { method: 'PUT', body: JSON.stringify(body) })).data;
+  (await adminFetch<T>(path, { method: 'PUT', body: body instanceof FormData ? body : JSON.stringify(body) })).data;
 export const adminPatch = async <T>(path: string, body?: unknown) =>
   (await adminFetch<T>(path, { method: 'PATCH', body: body === undefined ? undefined : JSON.stringify(body) })).data;
 export const adminDelete = async <T>(path: string) => (await adminFetch<T>(path, { method: 'DELETE' })).data;

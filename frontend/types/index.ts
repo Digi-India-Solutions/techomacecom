@@ -260,6 +260,32 @@ export interface GstDetails {
   isVerified?: boolean;
 }
 
+/** A saved GSTIN (customers can keep several, e.g. one per branch). */
+export interface GstProfile {
+  id: string;
+  gstin: string;
+  legalBusinessName: string;
+  billingAddress?: string;
+  stateCode: string;
+  stateName?: string;
+  pan: string;
+  isDefault: boolean;
+}
+
+/** A browser/app where the customer is signed in. */
+export interface DeviceSession {
+  id: string;
+  browser: string;
+  os: string;
+  type: 'desktop' | 'mobile' | 'tablet';
+  label: string;
+  ipAddress: string | null;
+  lastActiveAt: string;
+  expiresAt: string;
+  rememberMe: boolean;
+  current: boolean;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -269,11 +295,19 @@ export interface User {
   degree?: string;
   registrationNumber?: string; // Dental/Medical Council reg number
   addresses: Address[];
+  /** The default GST profile (used at checkout) */
   gstDetails?: GstDetails;
+  /** Every saved GST profile, default first */
+  gstProfiles?: GstProfile[];
   // From the API (backend/src/modules/auth)
   avatarUrl?: string;
   mobileVerified?: boolean;
+  emailVerified?: boolean;
   hasGoogle?: boolean;
+  /** Signed up with email + password — the email is the sign-in id */
+  hasPassword?: boolean;
+  createdAt?: string;
+  lastLoginAt?: string;
   /** false until the customer has both a name and a verified mobile */
   profileComplete?: boolean;
 }

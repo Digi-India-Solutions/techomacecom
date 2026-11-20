@@ -1,5 +1,5 @@
-import type { AdminPermission, AdminUser, AuthSession } from '@/types/admin';
-import { adminGet, adminPost, adminPut } from './client';
+import type { AdminPermission, AdminUser, AuthSession, DeviceSession, MyActivityEntry } from '@/types/admin';
+import { adminDelete, adminFetch, adminGet, adminPost, adminPut, type ListMeta } from './client';
 
 /**
  * Admin staff auth — backend/src/modules/admin-auth (/api/v1/admin/auth/*).
@@ -125,6 +125,37 @@ export async function updateAdminProfile(
 
 export async function changeAdminPassword(payload: { currentPassword: string; newPassword: string }): Promise<{ message: string }> {
   return adminPut<{ message: string }>('/admin/auth/me/password', payload);
+}
+
+// ---------------------------------------------------------------------------
+// My Profile — photo, signed-in devices, own activity
+// ---------------------------------------------------------------------------
+
+/** Uploads a profile photo; the API square-crops it to 256 × 256 WebP. */
+export async function uploadAdminAvatar(file: File): Promise<AuthSession> {
+  const form = new FormData();
+  form.append('file', file);
+  const session = await adminPut<AuthSession>('/admin/auth/me/avatar', form);
+  persistSession(session);
+  return session;
+}
+
+export async function removeAdminAvatar(): Promise<AuthSession> {
+  const session = await adminDelete<AuthSession>('/admin/auth/me/avatar');
+  persistSession(session);
+  return session;
+}
+
+export const listMySessions = () => adminGet<DeviceSession[]>('/admin/auth/sessions');
+
+export const signOutDevice = (id: string) => adminDelete<{ message: string }>(`/admin/auth/sessions/${id}`);
+
+export const signOutOtherDevices = () =>
+  adminPost<{ count: number; message: string }>('/admin/auth/sessions/revoke-others');
+
+export async function listMyActivity(page = 1, limit = 15): Promise<{ rows: MyActivityEntry[]; meta?: ListMeta }> {
+  const { data, meta } = await adminFetch<MyActivityEntry[]>(`/admin/auth/me/activity?page=${page}&limit=${limit}`);
+  return { rows: data, meta };
 }
 
 /** Same rule as the API (backend/src/lib/password.js). */

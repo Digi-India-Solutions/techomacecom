@@ -35,9 +35,42 @@ export interface AdminUser {
   roleId: string;
   roleLabel: string;
   avatarInitials: string;
+  /** Profile photo (256 × 256 WebP) or null */
+  avatarUrl?: string | null;
   phone: string;
   department: string;
+  status?: 'active' | 'inactive';
+  isSuperAdmin?: boolean;
   lastLoginAt: string;
+  passwordChangedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** A browser/app where this staff member is signed in (auth_sessions row). */
+export interface DeviceSession {
+  id: string;
+  browser: string;
+  os: string;
+  type: 'desktop' | 'mobile' | 'tablet';
+  label: string;
+  ipAddress: string | null;
+  lastActiveAt: string;
+  expiresAt: string;
+  rememberMe: boolean;
+  /** The browser making this request */
+  current: boolean;
+}
+
+/** One row of the signed-in staff member's own audit trail. */
+export interface MyActivityEntry {
+  id: string;
+  timestamp: string;
+  module: string;
+  action: string;
+  recordLabel: string;
+  summary: string;
+  ipAddress: string | null;
 }
 
 /** Signed-in staff member + the permission codes of their role (module.action). Tokens live in httpOnly cookies. */
@@ -87,6 +120,8 @@ export interface TopSellingProduct {
   unitsSold: number;
   revenue: number;
   imageUrl: string;
+  brandName?: string;
+  categoryName?: string;
 }
 
 export interface ActionNeededItem {
@@ -170,6 +205,8 @@ export interface ProductVariant {
   mrp: number;
   stock: number;
   imageUrl: string;
+  brandName?: string;
+  categoryName?: string;
   isDefault: boolean;
   isActive: boolean;
   sortOrder: number;
@@ -363,7 +400,15 @@ export interface BulkImportHistoryItem {
   createdAt: string;
 }
 
-export type StockAdjustmentReason = 'purchase' | 'damage' | 'correction' | 'return';
+export type StockAdjustmentReason =
+  | 'purchase'
+  | 'sale'
+  | 'return'
+  | 'damage'
+  | 'correction'
+  | 'audit'
+  | 'reserve'
+  | 'release';
 export type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
 
 export interface StockItem {
@@ -374,6 +419,8 @@ export interface StockItem {
   variantName?: string;
   sku: string;
   imageUrl: string;
+  brandName?: string;
+  categoryName?: string;
   warehouseId: string;
   warehouseName: string;
   availableStock: number;

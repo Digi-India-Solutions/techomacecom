@@ -27,10 +27,13 @@ function webpOptions() {
 }
 
 /**
+ * @param options.maxDimension   longest side (default IMAGE_MAX_DIMENSION)
+ * @param options.variantWidths  extra widths (default IMAGE_VARIANT_WIDTHS; [] for none)
+ * @param options.square         centre-crop to a square on the most interesting area (profile photos)
  * @returns {Promise<{ main: {buffer, width, height}, variants: {width, height, buffer}[],
  *            placeholder: string, sourceFormat: string, animated: boolean }>}
  */
-export async function processImage(buffer) {
+export async function processImage(buffer, { maxDimension, variantWidths, square = false } = {}) {
   let meta;
   try {
     meta = await sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
@@ -46,13 +49,19 @@ export async function processImage(buffer) {
     );
   }
 
-  const animated = (meta.pages || 1) > 1; // animated GIF / WebP stays animated
+  const animated = !square && (meta.pages || 1) > 1; // animated GIF / WebP stays animated (not for photos)
   const base = () =>
     sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS, animated, failOn: "error" }).rotate();
 
-  const max = env.uploads.maxDimension;
+  const max = maxDimension ?? env.uploads.maxDimension;
+  // Square: never enlarge — the side is at most the shorter edge of the upload.
+  const side = Math.min(max, meta.width || max, meta.height || max);
   const mainResult = await base()
-    .resize({ width: max, height: max, fit: "inside", withoutEnlargement: true })
+    .resize(
+      square
+        ? { width: side, height: side, fit: "cover", position: sharp.strategy.attention }
+        : { width: max, height: max, fit: "inside", withoutEnlargement: true }
+    )
     .webp(webpOptions())
     .toBuffer({ resolveWithObject: true });
 
@@ -61,10 +70,14 @@ export async function processImage(buffer) {
   // Smaller sizes (skipped for animations, and for widths ≥ the main image)
   const variants = [];
   if (!animated) {
-    for (const width of env.uploads.variantWidths) {
+    for (const width of variantWidths ?? env.uploads.variantWidths) {
       if (width >= main.width) continue;
       const v = await base()
-        .resize({ width, withoutEnlargement: true })
+        .resize(
+          square
+            ? { width, height: width, fit: "cover", position: sharp.strategy.attention }
+            : { width, withoutEnlargement: true }
+        )
         .webp(webpOptions())
         .toBuffer({ resolveWithObject: true });
       variants.push({ width: v.info.width, height: v.info.height, buffer: v.data });

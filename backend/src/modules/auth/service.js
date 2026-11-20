@@ -8,8 +8,43 @@ import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { randomToken, sha256 } from "../../lib/tokens.js";
 import { sendMail, actionEmail } from "../../lib/mailer.js";
 import { revokeAllSessions } from "../../services/session.service.js";
+import { publicUrl } from "../../lib/storage.js";
+import { GST_STATE_CODES } from "../../lib/money.js";
 
 let googleClient;
+
+export function toAddressDto(a) {
+  return {
+    id: String(a.id),
+    name: a.name,
+    phone: a.phone,
+    organisationName: a.organisation_name,
+    line1: a.line1,
+    line2: a.line2,
+    landmark: a.landmark,
+    city: a.city,
+    state: a.state,
+    pincode: a.pincode,
+    type: a.type,
+    isDefault: a.is_default,
+    updatedAt: a.updated_at,
+  };
+}
+
+export function toGstDto(g) {
+  const code = g.gstin.slice(0, 2) === "25" ? "26" : g.gstin.slice(0, 2);
+  return {
+    id: String(g.id),
+    gstin: g.gstin,
+    companyName: g.company_name,
+    billingAddress: g.billing_address,
+    stateCode: code,
+    stateName: GST_STATE_CODES[code] || null,
+    pan: g.gstin.slice(2, 12),
+    isDefault: g.is_default,
+    updatedAt: g.updated_at,
+  };
+}
 
 /** Shape returned to the storefront (camelCase, no internal columns). */
 export function toCustomerDto(c) {
@@ -19,33 +54,19 @@ export function toCustomerDto(c) {
     mobile: c.mobile || null,
     email: c.email || null,
     customerType: c.customer_type,
-    avatarUrl: c.avatar_url || null,
+    qualification: c.qualification || null,
+    registrationNumber: c.registration_number || null,
+    avatarUrl: publicUrl(c.avatar_url),
     mobileVerified: Boolean(c.mobile_verified_at),
     emailVerified: Boolean(c.email_verified_at),
     hasGoogle: Boolean(c.google_id),
+    // Email + password account: the email is the verified sign-in id (cannot be changed in the profile)
+    hasPassword: Boolean(c.password_hash),
     profileComplete: Boolean(c.name && c.mobile),
     createdAt: c.created_at,
-    addresses: (c.addresses || []).map((a) => ({
-      id: String(a.id),
-      name: a.name,
-      phone: a.phone,
-      organisationName: a.organisation_name,
-      line1: a.line1,
-      line2: a.line2,
-      landmark: a.landmark,
-      city: a.city,
-      state: a.state,
-      pincode: a.pincode,
-      type: a.type,
-      isDefault: a.is_default,
-    })),
-    gstDetails: (c.gst_details || []).map((g) => ({
-      id: String(g.id),
-      gstin: g.gstin,
-      companyName: g.company_name,
-      billingAddress: g.billing_address,
-      isDefault: g.is_default,
-    })),
+    lastLoginAt: c.last_login_at,
+    addresses: (c.addresses || []).map(toAddressDto),
+    gstDetails: (c.gst_details || []).map(toGstDto),
   };
 }
 
@@ -411,16 +432,28 @@ export async function loginWithGoogle({ credential, customerType }) {
   return { customer, isNewUser };
 }
 
-export async function updateProfile(customer, { name, email, customerType }) {
+export async function updateProfile(customer, { name, email, customerType, qualification, registrationNumber }) {
   const data = {};
   if (name !== undefined) data.name = name;
   if (customerType !== undefined) data.customer_type = customerType;
+  if (qualification !== undefined) data.qualification = qualification;
+  if (registrationNumber !== undefined) data.registration_number = registrationNumber;
   if (email !== undefined) {
     const next = email ? email.toLowerCase() : null;
-    if (next !== (customer.email || null)) {
-      if (!next && !customer.mobile) throw ApiError.badRequest("Add a mobile number before removing your email.");
-      if (customer.google_id && next !== customer.email) {
-        throw ApiError.badRequest("This email is your Google sign-in and cannot be changed here.", "EMAIL_LOCKED");
+    if (next !== (customer.email?.toLowerCase() || null)) {
+      if (!next && !customer.mobile) {
+        throw ApiError.badRequest("Add a mobile number before removing your email.", "EMAIL_REQUIRED", { email: "Required" });
+      }
+      if (customer.google_id && customer.email) {
+        throw ApiError.badRequest("This email is your Google sign-in and cannot be changed here.", "EMAIL_LOCKED", {
+          email: "Linked to Google sign-in",
+        });
+      }
+      if (next) {
+        const owner = await prisma.customer.findUnique({ where: { email: next }, select: { id: true } });
+        if (owner && owner.id !== customer.id) {
+          throw ApiError.conflict("This email is already used by another account.", "EMAIL_IN_USE", { email: "Already in use" });
+        }
       }
       // The email is the (verified) sign-in id of password accounts — never swapped for an unverified one
       if (customer.password_hash) {
@@ -430,11 +463,15 @@ export async function updateProfile(customer, { name, email, customerType }) {
       data.email_verified_at = null;
     }
   }
+  if (!Object.keys(data).length) return customer;
   return prisma.customer.update({ where: { id: customer.id }, data });
 }
 
 /** Google users add a mobile with OTP (needed for checkout, delivery and rentals). */
 export async function requestMobileLinkOtp(customer, mobile, ip) {
+  if (customer.mobile === mobile) {
+    throw ApiError.badRequest("This is already your mobile number.", "SAME_MOBILE", { mobile: "Same as current" });
+  }
   const owner = await prisma.customer.findUnique({ where: { mobile }, select: { id: true } });
   if (owner && owner.id !== customer.id) {
     throw ApiError.conflict("This mobile number is already linked to another account.", "MOBILE_IN_USE");

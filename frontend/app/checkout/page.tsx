@@ -29,7 +29,7 @@ import { CheckoutSkeleton } from '@/components/skeletons/PageSkeletons';
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, getSubtotal, getDiscount, getShippingFee, getGstAmount, getTotal, clearCart } = useCartStore();
-  const { user, isAuthenticated, logout, addAddress } = useUserStore();
+  const { user, isAuthenticated, logout } = useUserStore();
   const { addToast } = useToastStore();
   const hydrated = useHydrated();
 

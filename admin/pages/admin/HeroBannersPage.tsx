@@ -18,7 +18,7 @@ import {
   saveHeroBanner,
 } from '@/lib/api/admin/marketing';
 import { PRODUCT_IMAGES } from '@/lib/api/admin/mockData';
-import { formatShortDate } from '@/lib/api/admin/client';
+import { formatShortDate, uploadImages } from '@/lib/api/admin/client';
 import { useToast } from '@/components/admin/ToastProvider';
 import { StatusBadge } from '@/components/admin/StatusBadge';
 import { SafeImage } from '@/components/admin/SafeImage';
@@ -48,7 +48,47 @@ export function HeroBannersPage() {
   const [editingId, setEditingId] = useState<string | undefined>(undefined);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [uploadingDesktop, setUploadingDesktop] = useState(false);
+  const [uploadingMobile, setUploadingMobile] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<HeroBanner | null>(null);
+
+  const handleDesktopFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingDesktop(true);
+    try {
+      const uploaded = await uploadImages([file], 'banners');
+      if (uploaded[0]?.url) {
+        setForm((f) => ({ ...f, desktopImageUrl: uploaded[0].url }));
+        showToast({ title: 'Desktop banner uploaded as WebP', variant: 'success' });
+        return;
+      }
+    } catch (err) {
+      console.warn('Backend upload failed, using local preview:', err);
+    } finally {
+      setUploadingDesktop(false);
+    }
+    setForm((f) => ({ ...f, desktopImageUrl: URL.createObjectURL(file) }));
+  };
+
+  const handleMobileFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingMobile(true);
+    try {
+      const uploaded = await uploadImages([file], 'banners');
+      if (uploaded[0]?.url) {
+        setForm((f) => ({ ...f, mobileImageUrl: uploaded[0].url }));
+        showToast({ title: 'Mobile banner uploaded as WebP', variant: 'success' });
+        return;
+      }
+    } catch (err) {
+      console.warn('Backend upload failed, using local preview:', err);
+    } finally {
+      setUploadingMobile(false);
+    }
+    setForm((f) => ({ ...f, mobileImageUrl: URL.createObjectURL(file) }));
+  };
 
   const load = async () => {
     setLoading(true);
@@ -342,17 +382,13 @@ export function HeroBannersPage() {
               </div>
               <label className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE6F2] bg-white px-3 py-1.5 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC] cursor-pointer">
                 <Upload className="h-3.5 w-3.5" />
-                Upload Desktop Image
+                {uploadingDesktop ? 'Uploading...' : 'Upload Desktop Image'}
                 <input
                   type="file"
                   accept="image/*"
+                  disabled={uploadingDesktop}
                   className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setForm((f) => ({ ...f, desktopImageUrl: URL.createObjectURL(file) }));
-                    }
-                  }}
+                  onChange={handleDesktopFile}
                 />
               </label>
             </div>
@@ -365,17 +401,13 @@ export function HeroBannersPage() {
               </div>
               <label className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE6F2] bg-white px-3 py-1.5 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC] cursor-pointer">
                 <Upload className="h-3.5 w-3.5" />
-                Upload Mobile Image
+                {uploadingMobile ? 'Uploading...' : 'Upload Mobile Image'}
                 <input
                   type="file"
                   accept="image/*"
+                  disabled={uploadingMobile}
                   className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setForm((f) => ({ ...f, mobileImageUrl: URL.createObjectURL(file) }));
-                    }
-                  }}
+                  onChange={handleMobileFile}
                 />
               </label>
             </div>
@@ -444,8 +476,8 @@ export function HeroBannersPage() {
             </button>
             <button
               type="submit"
-              disabled={saving}
-              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+              disabled={saving || uploadingDesktop || uploadingMobile}
+              className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F] disabled:opacity-50"
             >
               {saving ? 'Saving...' : 'Save Hero Banner'}
             </button>

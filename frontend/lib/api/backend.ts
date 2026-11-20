@@ -7,7 +7,10 @@
  * A 401 triggers one silent POST /auth/refresh, then the request is retried.
  */
 
-export const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:5001/api/v1').replace(/\/+$/, '');
+import { BACKEND_API_URL } from '../config';
+
+// Local or production API, chosen automatically (lib/config.ts)
+export const BACKEND_URL = BACKEND_API_URL;
 
 export class ApiClientError extends Error {
   status: number;
@@ -25,7 +28,7 @@ export class ApiClientError extends Error {
 interface ApiEnvelope<T> {
   success: boolean;
   data?: T;
-  meta?: { page: number; limit: number; total: number };
+  meta?: { page: number; limit: number; total: number; totalPages?: number; hasNextPage?: boolean; hasPrevPage?: boolean };
   error?: { code: string; message: string; fields?: Record<string, string> };
 }
 
@@ -51,7 +54,8 @@ async function send(path: string, init: RequestInit): Promise<Response> {
       ...init,
       credentials: 'include',
       headers: {
-        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        // JSON only — FormData (photo uploads) must let the browser set its multipart boundary
+        ...(typeof init.body === 'string' ? { 'Content-Type': 'application/json' } : {}),
         ...(init.headers || {}),
       },
     });
@@ -116,7 +120,9 @@ export const apiPost = <T>(path: string, data?: unknown) =>
   apiFetch<T>(path, { method: 'POST', body: data === undefined ? undefined : JSON.stringify(data) });
 
 export const apiPut = <T>(path: string, data: unknown) =>
-  apiFetch<T>(path, { method: 'PUT', body: JSON.stringify(data) });
+  apiFetch<T>(path, { method: 'PUT', body: data instanceof FormData ? data : JSON.stringify(data) });
+
+export const apiDelete = <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' });
 
 /** Human message for any thrown error. */
 export function errorMessage(error: unknown, fallback = 'Something went wrong. Please try again.'): string {
