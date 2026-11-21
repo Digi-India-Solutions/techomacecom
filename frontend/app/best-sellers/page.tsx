@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   description: 'Top-selling clinic essentials, dental turbines, rotary files, and oxygen concentrators preferred by 15,000+ Indian healthcare providers.'
 };
 
+export const dynamic = 'force-dynamic';
+
 export default async function BestSellersPage() {
   const [products, banners, brands] = await Promise.all([
     getBestSellers(),

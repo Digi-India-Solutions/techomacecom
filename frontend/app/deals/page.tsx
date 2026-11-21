@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   description: 'Limited-time daily deals on certified clinical equipment, dental operatory instruments, and respiratory devices.'
 };
 
+export const dynamic = 'force-dynamic';
+
 export default async function DealsPage() {
   const [products, banners, brands] = await Promise.all([
     getDealsOfTheDay(),

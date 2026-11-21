@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   description: 'Discover the latest releases in digital dental radiology, cordless endomotors, Class B vacuum autoclaves, and patient monitoring.'
 };
 
+export const dynamic = 'force-dynamic';
+
 export default async function NewArrivalsPage() {
   const [products, banners, brands] = await Promise.all([
     getNewArrivals(),
