@@ -22,7 +22,8 @@
     "admin:set-password": "node scripts/set-admin-password.js",
     "admin:set-password:prod": "cross-env NODE_ENV=production node scripts/set-admin-password.js",
     "test:catalog": "node --test --test-concurrency=1 tests/integration/catalog.e2e.js",
-    "test:auth": "node --test --test-concurrency=1 tests/integration/customer-auth.e2e.js"
+    "test:auth": "node --test --test-concurrency=1 tests/integration/customer-auth.e2e.js",
+    "test:enquiries": "node --test --test-concurrency=1 tests/integration/enquiries.e2e.js"
   },
   "keywords": [],
   "author": "",

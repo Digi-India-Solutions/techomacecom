@@ -4,10 +4,24 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Logo from '@/components/common/Logo';
 import Image from 'next/image';
-import { Phone, Mail, MapPin, Clock, ChevronDown, Landmark, CalendarClock, Instagram, Facebook, Linkedin, Youtube, Twitter } from 'lucide-react';
+import { 
+  Phone, 
+  Mail, 
+  MapPin, 
+  Clock, 
+  ChevronDown, 
+  Landmark, 
+  CalendarClock, 
+  Store,
+  Instagram,
+  Facebook,
+  Linkedin,
+  Youtube,
+  Twitter
+} from 'lucide-react';
+import { useCatalogCategories } from '@/lib/hooks/useCatalogCategories';
 import { useSiteSettings } from '@/lib/settings/store';
 import { formatSupportHours, mailto } from '@/lib/settings/format';
-import { useCatalogCategories } from '@/lib/hooks/useCatalogCategories';
 
 type FooterLink = { label: string; href: string };
 
@@ -16,6 +30,7 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
   {
     title: 'Services',
     links: [
+      { label: 'Sell on Buy Denmed', href: '/sell' },
       { label: 'Equipment on Rent', href: '/rent' },
       { label: 'Home Sleep Test', href: '/sleep-test' },
       { label: 'Bulk & Institutional Orders', href: '/bulk-enquiry' },
@@ -174,23 +189,35 @@ export const Footer: React.FC = () => {
               </li>
             </ul>
 
-            {socials.length > 0 && (
-              <div className="mt-6 flex items-center gap-2.5">
-                {socials.map(({ href, label, Icon }) => (
-                  <a
-                    key={label}
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={label}
-                    title={label}
-                    className="w-9 h-9 rounded-full border border-[#2A2E35] flex items-center justify-center text-[#B4BAC3] hover:text-white hover:border-[#5A616B] transition-colors"
-                  >
-                    <Icon className="w-4 h-4" />
-                  </a>
-                ))}
-              </div>
-            )}
+            <div className="mt-5 pt-4 border-t border-[#2A2E35] flex flex-wrap items-center justify-between gap-3">
+              <Link
+                href="/sell"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1D5FAF] hover:bg-[#174E90] text-white text-xs font-bold font-heading transition-all shadow-md active:scale-95"
+              >
+                <Store className="w-4 h-4 text-[#93C5FD]" />
+                <span>Sell on Buy Denmed</span>
+              </Link>
+
+              {socials.length > 0 && (
+                <div className="flex items-center gap-2">
+                  {socials.map((s) => {
+                    const Icon = s.Icon;
+                    return (
+                      <a
+                        key={s.label}
+                        href={s.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={s.label}
+                        className="w-8 h-8 rounded-full bg-[#2A2E35] hover:bg-[#1D5FAF] hover:text-white flex items-center justify-center text-[#B4BAC3] transition-colors"
+                      >
+                        <Icon className="w-4 h-4" />
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {columns.map((col) => (

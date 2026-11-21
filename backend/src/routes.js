@@ -10,6 +10,7 @@ import inventoryRoutes from "./modules/inventory/routes.js";
 import productRoutes from "./modules/products/routes.js";
 import rentalUnitRoutes from "./modules/rental-units/routes.js";
 import bannerRoutes from "./modules/banners/routes.js";
+import { publicEnquiryRoutes, adminEnquiryRoutes } from "./modules/enquiries/routes.js";
 import { adminSettingsRoutes, publicSettingsRoutes } from "./modules/settings/routes.js";
 import { adminOrdersRoutes, adminReturnsRoutes, storefrontOrdersRoutes } from "./modules/orders/index.js";
 import couponRoutes from "./modules/coupons/routes.js";
@@ -30,6 +31,7 @@ api.use("/auth", customerAuthRoutes); // email + password sign-up / sign-in, for
 api.use("/account", accountRoutes); // addresses, GST details, profile photo
 api.use("/orders", storefrontOrdersRoutes); // customer orders (create, list, detail)
 api.use("/banners", bannerRoutes); // public hero banners for storefront
+api.use("/enquiries", publicEnquiryRoutes); // sleep-test callback form (+ risk quiz answers)
 api.use(publicSettingsRoutes); // /settings/public (store details, fees, rules) · /pincodes/:pincode
 api.use("/coupons", couponRoutes); // storefront coupon apply / validate
 api.use("/deals", dealRoutes); // storefront deals of the day
@@ -55,6 +57,7 @@ admin.use("/rental-units", rentalUnitRoutes); // serialized rental equipment uni
 admin.use("/orders", adminOrdersRoutes); // sales orders & fulfilment
 admin.use("/returns", adminReturnsRoutes); // RMA returns & refund processing
 admin.use("/banners", bannerRoutes); // hero banners & marketing management
+admin.use("/enquiries", adminEnquiryRoutes); // leads from public forms (enquiries.view)
 admin.use("/settings", adminSettingsRoutes); // store, shipping, tax & invoice, notifications, rental
 admin.use("/coupons", couponRoutes); // coupons & discount management
 admin.use("/deals", dealRoutes); // deals of the day flash sales
