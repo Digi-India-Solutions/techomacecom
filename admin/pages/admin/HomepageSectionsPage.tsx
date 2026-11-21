@@ -74,21 +74,35 @@ export function HomepageSectionsPage() {
     setEditSelectedIds(sec.selectedIds);
   };
 
-  const saveEditDrawer = () => {
+  const saveEditDrawer = async () => {
     if (!editingSection) return;
-    setSections((prev) =>
-      prev.map((s) =>
-        s.id === editingSection.id
-          ? { ...s, title: editTitle, selectedIds: editSelectedIds }
-          : s
-      )
+    const targetKey = editingSection.key;
+    const targetId = editingSection.id;
+    const updatedSections = sections.map((s) =>
+      (s.key === targetKey || s.id === targetId)
+        ? { ...s, title: editTitle, selectedIds: editSelectedIds }
+        : s
     );
+    setSections(updatedSections);
     setEditingSection(null);
-    showToast({
-      title: 'Section updated locally',
-      description: 'Click "Save Homepage Layout" to publish changes.',
-      variant: 'info',
-    });
+    setSaving(true);
+
+    try {
+      await saveHomepageConfig({ announcementStrip, sections: updatedSections });
+      showToast({
+        title: 'Section heading updated & live!',
+        description: `"${editTitle}" is now published on the homepage.`,
+        variant: 'success',
+      });
+    } catch (err: any) {
+      showToast({
+        title: 'Section updated locally',
+        description: 'Click "Save Homepage Layout" at the top to publish changes.',
+        variant: 'warning',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSaveAll = async () => {

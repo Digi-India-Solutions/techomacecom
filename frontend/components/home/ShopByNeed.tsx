@@ -14,7 +14,11 @@ interface NeedItem {
   badge: string;
 }
 
-export const ShopByNeed: React.FC = () => {
+interface ShopByNeedProps {
+  title?: string;
+}
+
+export const ShopByNeed: React.FC<ShopByNeedProps> = ({ title = 'Shop by Medical Need' }) => {
   const needs: NeedItem[] = [
     {
       id: 'homecare',
@@ -61,7 +65,7 @@ export const ShopByNeed: React.FC = () => {
         <div className="flex items-end justify-between mb-5 sm:mb-6">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-[#12263F] font-heading relative inline-block">
-              Shop by Medical Need
+              {title || 'Shop by Medical Need'}
               <span className="absolute bottom-[-4px] left-0 w-10 h-[3px] bg-[#1D5FAF] rounded-full" />
             </h2>
             <p className="text-xs sm:text-sm text-[#5B6B82] font-body mt-2">

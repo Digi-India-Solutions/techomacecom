@@ -3,7 +3,11 @@
 import React from 'react';
 import { PackageCheck, Building, Truck, Headphones } from 'lucide-react';
 
-export const WhyBuyDenmed: React.FC = () => {
+interface WhyBuyDenmedProps {
+  title?: string;
+}
+
+export const WhyBuyDenmed: React.FC<WhyBuyDenmedProps> = ({ title = 'Why Doctors & Families Choose Buy Denmed' }) => {
   const stats = [
     {
       icon: PackageCheck,
@@ -37,7 +41,7 @@ export const WhyBuyDenmed: React.FC = () => {
         <div className="rounded-3xl bg-white border border-[#DCE6F2] p-6 sm:p-10 shadow-xs">
           <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-10">
             <h2 className="text-xl sm:text-3xl font-bold text-[#12263F] font-heading">
-              Why Doctors &amp; Families Choose Buy Denmed
+              {title || 'Why Doctors & Families Choose Buy Denmed'}
             </h2>
             <p className="text-xs sm:text-sm text-[#5B6B82] font-body mt-2 leading-relaxed">
               We empower clinics, hospitals, and patients with authentic medical technology, verified GST invoicing, and flexible rental options.

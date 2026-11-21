@@ -18,6 +18,7 @@ import dealRoutes from "./modules/deals/routes.js";
 import { publicPageRoutes, adminPageRoutes } from "./modules/pages/routes.js";
 import { publicFaqRoutes, adminFaqRoutes } from "./modules/faqs/routes.js";
 import { publicBlogRoutes, adminBlogRoutes } from "./modules/blog/routes.js";
+import adminCustomerRoutes from "./modules/customers/routes.js";
 
 /**
  * All API routes live under /api/v1 (document §12).
@@ -56,6 +57,7 @@ admin.use("/inventory", inventoryRoutes); // stock, warehouses, movements
 admin.use("/rental-units", rentalUnitRoutes); // serialized rental equipment units
 admin.use("/orders", adminOrdersRoutes); // sales orders & fulfilment
 admin.use("/returns", adminReturnsRoutes); // RMA returns & refund processing
+admin.use("/customers", adminCustomerRoutes); // customer management
 admin.use("/banners", bannerRoutes); // hero banners & marketing management
 admin.use("/enquiries", adminEnquiryRoutes); // leads from public forms (enquiries.view)
 admin.use("/settings", adminSettingsRoutes); // store, shipping, tax & invoice, notifications, rental

@@ -46,9 +46,31 @@ export interface CreateOrderPayload {
   couponCode?: string;
 }
 
+export interface RazorpayOrderInfo {
+  keyId: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+}
+
+export interface CreateOrderResult extends Order {
+  razorpay?: RazorpayOrderInfo;
+}
+
 /** Place a new order from storefront checkout. */
-export function createOrder(payload: CreateOrderPayload): Promise<Order> {
-  return apiPost<Order>('/orders', payload);
+export function createOrder(payload: CreateOrderPayload): Promise<CreateOrderResult> {
+  return apiPost<CreateOrderResult>('/orders', payload);
+}
+
+export interface VerifyPaymentPayload {
+  razorpayPaymentId: string;
+  razorpayOrderId: string;
+  razorpaySignature: string;
+}
+
+/** Verify online payment via Razorpay. */
+export function verifyOrderPayment(orderId: string, payload: VerifyPaymentPayload): Promise<Order> {
+  return apiPost<Order>(`/orders/${encodeURIComponent(orderId)}/verify-payment`, payload);
 }
 
 /** List all orders for the signed-in customer, newest first. */

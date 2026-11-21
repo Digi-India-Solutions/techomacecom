@@ -75,6 +75,7 @@ export async function getHomepageConfig(): Promise<HomepageConfigData> {
   try {
     const res = await fetch(`${BACKEND_API_URL}/banners/public/homepage-config`, {
       cache: 'no-store',
+      next: { revalidate: 0 },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();

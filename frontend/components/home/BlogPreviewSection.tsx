@@ -6,16 +6,17 @@ import SkeletonImage from '@/components/common/SkeletonImage';
 
 interface BlogPreviewSectionProps {
   posts: BlogPost[];
+  title?: string;
 }
 
-export const BlogPreviewSection: React.FC<BlogPreviewSectionProps> = ({ posts }) => {
+export const BlogPreviewSection: React.FC<BlogPreviewSectionProps> = ({ posts, title = 'From the Denmed Knowledge Hub' }) => {
   return (
     <section className="py-12 sm:py-16 bg-white border-t border-[#DCE6F2]">
       <div className="max-w-[1320px] mx-auto px-4 sm:px-6">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-3">
           <div>
             <h2 className="text-xl sm:text-3xl font-bold text-[#12263F] font-heading">
-              From the Denmed Knowledge Hub
+              {title || 'From the Denmed Knowledge Hub'}
             </h2>
             <p className="text-xs sm:text-sm text-[#5B6B82] font-body mt-1.5">
               Equipment calibration tips, sleep apnea guidelines, and clinic setup tutorials

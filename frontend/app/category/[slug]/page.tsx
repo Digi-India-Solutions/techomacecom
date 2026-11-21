@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { getCategoryBySlug, getCategories, getProducts, getBrands, getBestSellers, getPageBanners } from '@/lib/api';
 import CategoryListingClient from '@/components/category/CategoryListingClient';
 import CategoryNotFoundView from '@/components/category/CategoryNotFoundView';
+import type { Category } from '@/types';
 
 interface CategoryPageProps {
   params: Promise<{ slug: string }>;
@@ -54,6 +55,15 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
     );
   }
 
+  // If this category is a subcategory (has parent in breadcrumbs), fetch parent to get sibling subcategories
+  let parentCategory: Category | null = null;
+  if ((!category.subCategories || category.subCategories.length === 0) && category.breadcrumbs && category.breadcrumbs.length > 1) {
+    const parentSlug = category.breadcrumbs[category.breadcrumbs.length - 2].slug;
+    if (parentSlug && parentSlug !== category.slug) {
+      parentCategory = await getCategoryBySlug(parentSlug).catch(() => null);
+    }
+  }
+
   const [productsData, brands, pageBanners] = await Promise.all([
     getProducts({ categoryId: category.id, limit: 100 }),
     getBrands(),
@@ -63,6 +73,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   return (
     <CategoryListingClient
       category={category}
+      parentCategory={parentCategory}
       initialProducts={productsData.products}
       brands={brands}
       initialSubCategory={sub}

@@ -159,6 +159,12 @@ export const env = {
     resetExpiryMinutes: int("CUSTOMER_RESET_EXPIRY_MINUTES", 30),
     resetCooldownSeconds: int("CUSTOMER_RESET_COOLDOWN_SECONDS", 60),
   },
+
+  // Razorpay Payment Gateway
+  razorpay: {
+    keyId: optional("RAZORPAY_KEY_ID", "rzp_test_TmsfO3hloFEA31"),
+    keySecret: optional("RAZORPAY_KEY_SECRET", "1xt3UXSTLfyVhQa3G9SSVIKY"),
+  },
 };
 
 export default env;

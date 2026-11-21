@@ -47,18 +47,22 @@ export const pageBannerSchema = z.object({
 export const updatePageBannerSchema = pageBannerSchema.partial();
 
 // Homepage Sections & Announcement Strip
-export const homepageSectionItemSchema = z.object({
-  id: z.union([z.string(), z.number()]).optional(),
-  key: z.string().min(1),
-  defaultName: z.string().optional().default(""),
-  title: z.string().optional().default(""),
-  visible: z.boolean().optional().default(true),
-  sortOrder: z.number().int().optional().default(1),
-  configurableType: z.enum(["none", "products", "categories"]).optional().default("none"),
-  selectedIds: z.array(z.string()).optional().default([]),
-});
+export const homepageSectionItemSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).optional(),
+    key: z.string().min(1),
+    defaultName: z.string().optional().default(""),
+    title: z.string().optional().default(""),
+    visible: z.union([z.boolean(), z.string(), z.number()]).transform((v) => Boolean(v)).optional().default(true),
+    sortOrder: z.union([z.number(), z.string()]).transform((v) => Number(v) || 1).optional().default(1),
+    configurableType: z.string().optional().default("none"),
+    selectedIds: z.array(z.union([z.string(), z.number()]).transform(String)).optional().default([]),
+  })
+  .passthrough();
 
-export const saveHomepageConfigSchema = z.object({
-  announcementStrip: z.string().optional().default(""),
-  sections: z.array(homepageSectionItemSchema),
-});
+export const saveHomepageConfigSchema = z
+  .object({
+    announcementStrip: z.string().optional().default(""),
+    sections: z.array(homepageSectionItemSchema),
+  })
+  .passthrough();

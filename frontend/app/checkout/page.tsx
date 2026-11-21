@@ -28,8 +28,27 @@ import { CheckoutSkeleton } from '@/components/skeletons/PageSkeletons';
 import { useSiteSettings } from '@/lib/settings/store';
 import { usePincodeCheck } from '@/lib/settings/pincode';
 import { gstinError } from '@/lib/india';
-import { createOrder } from '@/lib/api/orders';
+import { createOrder, verifyOrderPayment } from '@/lib/api/orders';
 import { errorMessage } from '@/lib/api/backend';
+
+const loadRazorpayScript = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined') return resolve(false);
+    if ((window as any).Razorpay) return resolve(true);
+    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -58,6 +77,17 @@ export default function CheckoutPage() {
     state: '',
     isDefault: true
   });
+
+  // Automatically populate address recipient name and phone from signed-in customer
+  React.useEffect(() => {
+    if (user) {
+      setNewAddr((prev) => ({
+        ...prev,
+        name: prev.name || user.name || '',
+        phone: prev.phone || user.phone || '',
+      }));
+    }
+  }, [user]);
 
   // Step 3: Optional GSTIN business invoice
   const [includeGst, setIncludeGst] = useState<boolean>(Boolean(user?.gstDetails?.gstin));
@@ -120,10 +150,16 @@ export default function CheckoutPage() {
       return;
     }
 
-    const chosenAddress =
+    const rawChosen =
       selectedAddressId === 'new' || showNewAddressForm
         ? newAddr
         : user?.addresses?.find((a) => a.id === selectedAddressId) || newAddr;
+
+    const chosenAddress: Address = {
+      ...rawChosen,
+      name: (rawChosen.name?.trim() || user?.name?.trim() || 'Customer'),
+      phone: (rawChosen.phone?.trim() || user?.phone?.trim() || ''),
+    };
 
     // Validate address fields if entering a new address
     if (selectedAddressId === 'new' || showNewAddressForm) {
@@ -197,6 +233,95 @@ export default function CheckoutPage() {
         couponCode: coupon?.code,
       });
 
+      // If online payment via Razorpay
+      if (effectiveMethod === 'razorpay') {
+        if (!order.razorpay) {
+          setIsProcessing(false);
+          addToast({
+            type: 'error',
+            title: 'Payment Gateway Offline',
+            message: 'Razorpay gateway could not be initialized. Please try again or select Cash on Delivery.',
+          });
+          return;
+        }
+
+        const loaded = await loadRazorpayScript();
+        if (!loaded) {
+          setIsProcessing(false);
+          addToast({
+            type: 'error',
+            title: 'Payment Gateway Error',
+            message: 'Could not load Razorpay checkout SDK. Please check your internet connection.',
+          });
+          return;
+        }
+
+        const rzpOptions = {
+          key: order.razorpay.keyId,
+          amount: order.razorpay.amount,
+          currency: order.razorpay.currency || 'INR',
+          name: 'Buy Denmed',
+          description: `Order #${order.orderNumber}`,
+          order_id: order.razorpay.orderId,
+          prefill: {
+            name: chosenAddress.name || user?.name || '',
+            email: user?.email || '',
+            contact: chosenAddress.phone || user?.phone || '',
+          },
+          theme: {
+            color: '#1D5FAF',
+          },
+          handler: async function (response: any) {
+            try {
+              setIsProcessing(true);
+              await verifyOrderPayment(order.id, {
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpayOrderId: response.razorpay_order_id,
+                razorpaySignature: response.razorpay_signature,
+              });
+              clearCart();
+              setIsProcessing(false);
+              addToast({
+                type: 'success',
+                title: 'Payment Successful!',
+                message: `Order #${order.orderNumber} confirmed.`,
+              });
+              router.push(`/order-success/${order.orderNumber || order.id}`);
+            } catch (vErr) {
+              setIsProcessing(false);
+              addToast({
+                type: 'error',
+                title: 'Payment Verification Failed',
+                message: errorMessage(vErr, 'Payment verification failed. Please contact support if amount was debited.'),
+              });
+            }
+          },
+          modal: {
+            ondismiss: function () {
+              setIsProcessing(false);
+              addToast({
+                type: 'info',
+                title: 'Payment Window Closed',
+                message: 'Payment was not completed. You can try again or choose Cash on Delivery.',
+              });
+            },
+          },
+        };
+
+        const rzp = new (window as any).Razorpay(rzpOptions);
+        rzp.on('payment.failed', function (resp: any) {
+          setIsProcessing(false);
+          addToast({
+            type: 'error',
+            title: 'Payment Failed',
+            message: resp.error?.description || 'Your payment was declined or could not be completed.',
+          });
+        });
+        rzp.open();
+        return;
+      }
+
+      // Cash On Delivery
       clearCart();
       setIsProcessing(false);
       addToast({
@@ -367,7 +492,7 @@ export default function CheckoutPage() {
             ) : (
               <div className="p-4 bg-[#F6F9FD] rounded-xl border border-[#DCE6F2] space-y-3">
                 <div className="text-xs font-bold text-[#12263F]">Add New Clinic Address</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="text-[12px] font-semibold text-[#12263F] block mb-1">
                       Clinic / Hospital Name
@@ -382,13 +507,25 @@ export default function CheckoutPage() {
                   </div>
                   <div>
                     <label className="text-[12px] font-semibold text-[#12263F] block mb-1">
-                      Doctor / Recipient Name
+                      Doctor / Recipient Name <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       value={newAddr.name}
                       onChange={(e) => setNewAddr({ ...newAddr, name: e.target.value })}
                       placeholder="Dr. Full Name"
+                      className="w-full text-xs px-3 py-2 bg-white border border-[#DCE6F2] rounded-lg focus:outline-none focus:border-[#1D5FAF]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[12px] font-semibold text-[#12263F] block mb-1">
+                      Contact Phone Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={newAddr.phone}
+                      onChange={(e) => setNewAddr({ ...newAddr, phone: e.target.value })}
+                      placeholder="10-digit mobile number"
                       className="w-full text-xs px-3 py-2 bg-white border border-[#DCE6F2] rounded-lg focus:outline-none focus:border-[#1D5FAF]"
                     />
                   </div>

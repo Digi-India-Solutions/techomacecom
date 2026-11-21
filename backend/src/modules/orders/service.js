@@ -1,9 +1,11 @@
+import crypto from "node:crypto";
 import prisma from "../../../db/db.js";
 import { ApiError } from "../../lib/http.js";
 import { publicUrl } from "../../lib/storage.js";
 import { notify } from "../../services/notification.service.js";
 import { getGroup } from "../settings/service.js";
 import { STATE_OPTIONS } from "../settings/definitions.js";
+import env from "../../../config/env.js";
 
 /**
  * Orders service — shared by customer storefront checkout/account and admin sales order page.
@@ -112,7 +114,7 @@ function toShippingAddress(snap) {
 }
 
 /** Formatter for storefront Customer DTO */
-export function toStorefrontOrderDto(order, shipment) {
+export function toStorefrontOrderDto(order, shipment, extra = null) {
   const latestReturn = (order.returns || []).sort(
     (a, b) => new Date(b.created_at) - new Date(a.created_at)
   )[0];
@@ -221,6 +223,7 @@ export function toStorefrontOrderDto(order, shipment) {
     canReturn,
     returnRequest,
     cancelReason: order.cancel_reason || undefined,
+    razorpay: extra?.razorpay || order.razorpay || undefined,
   };
 }
 
@@ -517,8 +520,9 @@ export async function createCustomerOrder(customerId, data) {
     const orderNumber = await generateOrderNumber(tx);
 
     const isCod = data.paymentMethod === "cod";
-    const initialStatus = isCod ? "pending_payment" : "confirmed";
-    const paymentStatus = isCod ? "pending" : "paid";
+    const isOnline = data.paymentMethod === "razorpay";
+    const initialStatus = isOnline ? "pending_payment" : "confirmed";
+    const paymentStatus = isOnline ? "pending" : (isCod ? "pending" : "paid");
     const paymentMethod = ["cod", "emi", "razorpay"].includes(String(data.paymentMethod).toLowerCase())
       ? String(data.paymentMethod).toLowerCase()
       : "cod";
@@ -598,27 +602,227 @@ export async function createCustomerOrder(customerId, data) {
       include: ORDER_INCLUDE,
     });
 
+    if (data.shippingAddress) {
+      const s = data.shippingAddress;
+      const count = await tx.address.count({ where: { customer_id: BigInt(customerId) } });
+      if (count === 0 && (s.addressLine1 || s.line1) && s.pincode) {
+        await tx.address.create({
+          data: {
+            customer_id: BigInt(customerId),
+            name: s.name || customer.name || "Customer",
+            phone: s.phone || customer.mobile || "",
+            organisation_name: s.clinicHospitalName || null,
+            line1: s.addressLine1 || s.line1 || "",
+            line2: s.addressLine2 || s.line2 || null,
+            city: s.city || "",
+            state: s.state || "",
+            pincode: s.pincode || "",
+            is_default: true,
+            type: "clinic",
+          },
+        });
+      }
+      if ((!customer.name && s.name) || (!customer.mobile && s.phone)) {
+        await tx.customer.update({
+          where: { id: BigInt(customerId) },
+          data: {
+            name: customer.name || s.name || undefined,
+            mobile: customer.mobile || s.phone || undefined,
+          },
+        });
+      }
+    }
+
     return created;
   });
 
-  // Asynchronous notification
+  let razorpayInfo = null;
+  if (data.paymentMethod === "razorpay") {
+    const keyId = env.razorpay?.keyId || process.env.RAZORPAY_KEY_ID || "rzp_test_TmsfO3hloFEA31";
+    const keySecret = env.razorpay?.keySecret || process.env.RAZORPAY_KEY_SECRET || "1xt3UXSTLfyVhQa3G9SSVIKY";
+
+    try {
+      const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+      const rzpRes = await fetch("https://api.razorpay.com/v1/orders", {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: Number(order.total_paise),
+          currency: "INR",
+          receipt: order.order_number,
+          notes: {
+            orderId: String(order.id),
+            orderNumber: order.order_number,
+            customerId: String(customerId),
+          },
+        }),
+      });
+
+      if (rzpRes.ok) {
+        const rzpData = await rzpRes.json();
+        razorpayInfo = {
+          keyId,
+          orderId: rzpData.id,
+          amount: rzpData.amount,
+          currency: rzpData.currency,
+        };
+
+        await prisma.payment.create({
+          data: {
+            order_id: order.id,
+            purpose: "order",
+            gateway: "razorpay",
+            gateway_order_id: rzpData.id,
+            amount_paise: order.total_paise,
+            status: "created",
+            raw_response: rzpData,
+          },
+        });
+      } else {
+        const errText = await rzpRes.text();
+        console.error("Razorpay order creation failed:", errText);
+      }
+    } catch (err) {
+      console.error("Razorpay network error:", err);
+    }
+  }
+
+  // Asynchronous notification for COD (online orders notify upon successful payment verification)
+  if (data.paymentMethod === "cod") {
+    try {
+      notify("order_placed", {
+        email: customer.email,
+        mobile: customer.mobile,
+        vars: {
+          customer_name: customer.name || data.shippingAddress.name,
+          order_number: order.order_number,
+          total: (Number(order.total_paise) / 100).toLocaleString("en-IN"),
+        },
+        entityType: "order",
+        entityId: order.id,
+      });
+    } catch (err) {
+      // Non-blocking
+    }
+  }
+
+  return toStorefrontOrderDto(order, null, { razorpay: razorpayInfo });
+}
+
+export async function verifyCustomerOrderPayment(
+  customerId,
+  orderId,
+  { razorpayPaymentId, razorpayOrderId, razorpaySignature }
+) {
+  if (!razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
+    throw ApiError.badRequest("Missing payment verification parameters");
+  }
+
+  const keySecret = env.razorpay?.keySecret || process.env.RAZORPAY_KEY_SECRET || "1xt3UXSTLfyVhQa3G9SSVIKY";
+  const expectedSignature = crypto
+    .createHmac("sha256", keySecret)
+    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+    .digest("hex");
+
+  if (expectedSignature !== razorpaySignature) {
+    throw ApiError.badRequest("Invalid payment signature");
+  }
+
+  let oId;
   try {
+    oId = BigInt(orderId);
+  } catch {
+    const found = await prisma.order.findUnique({ where: { order_number: orderId } });
+    if (!found) throw ApiError.notFound("Order not found");
+    oId = found.id;
+  }
+
+  const order = await prisma.order.findFirst({
+    where: {
+      id: oId,
+      customer_id: BigInt(customerId),
+    },
+    include: ORDER_INCLUDE,
+  });
+
+  if (!order) {
+    throw ApiError.notFound("Order not found");
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const o = await tx.order.update({
+      where: { id: order.id },
+      data: {
+        status: "confirmed",
+        payment_status: "paid",
+        confirmed_at: new Date(),
+      },
+      include: ORDER_INCLUDE,
+    });
+
+    const existingPayment = await tx.payment.findFirst({
+      where: { gateway_order_id: razorpayOrderId },
+    });
+
+    if (existingPayment) {
+      await tx.payment.update({
+        where: { id: existingPayment.id },
+        data: {
+          gateway_payment_id: razorpayPaymentId,
+          status: "captured",
+          captured_at: new Date(),
+        },
+      });
+    } else {
+      await tx.payment.create({
+        data: {
+          order_id: order.id,
+          purpose: "order",
+          gateway: "razorpay",
+          gateway_order_id: razorpayOrderId,
+          gateway_payment_id: razorpayPaymentId,
+          amount_paise: order.total_paise,
+          status: "captured",
+          captured_at: new Date(),
+        },
+      });
+    }
+
+    await tx.orderStatusHistory.create({
+      data: {
+        order_id: order.id,
+        from_status: order.status,
+        to_status: "confirmed",
+        actor_type: "customer",
+        actor_id: BigInt(customerId),
+        note: `Online Razorpay payment verified (ID: ${razorpayPaymentId})`,
+      },
+    });
+
+    return o;
+  });
+
+  try {
+    const customer = await prisma.customer.findUnique({ where: { id: BigInt(customerId) } });
     notify("order_placed", {
-      email: customer.email,
-      mobile: customer.mobile,
+      email: customer?.email,
+      mobile: customer?.mobile,
       vars: {
-        customer_name: customer.name || data.shippingAddress.name,
-        order_number: order.order_number,
-        total: (Number(order.total_paise) / 100).toLocaleString("en-IN"),
+        customer_name: customer?.name || updated.shipping_address?.name || "Customer",
+        order_number: updated.order_number,
+        total: (Number(updated.total_paise) / 100).toLocaleString("en-IN"),
       },
       entityType: "order",
-      entityId: order.id,
+      entityId: updated.id,
     });
   } catch (err) {
     // Non-blocking
   }
 
-  return toStorefrontOrderDto(order, null);
+  return toStorefrontOrderDto(updated, null);
 }
 
 export async function listCustomerOrders(customerId) {
