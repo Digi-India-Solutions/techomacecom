@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Logo from '@/components/common/Logo';
 import Image from 'next/image';
-import { Phone, Mail, MapPin, Clock, ChevronDown, Landmark, CalendarClock } from 'lucide-react';
+import { Phone, Mail, MapPin, Clock, ChevronDown, Landmark, CalendarClock, Store } from 'lucide-react';
 import { useCatalogCategories } from '@/lib/hooks/useCatalogCategories';
 
 type FooterLink = { label: string; href: string };
@@ -14,6 +14,7 @@ const COLUMNS: { title: string; links: FooterLink[] }[] = [
   {
     title: 'Services',
     links: [
+      { label: 'Sell on Buy Denmed', href: '/sell' },
       { label: 'Equipment on Rent', href: '/rent' },
       { label: 'Home Sleep Test', href: '/sleep-test' },
       { label: 'Bulk & Institutional Orders', href: '/bulk-enquiry' },
@@ -154,6 +155,16 @@ export const Footer: React.FC = () => {
                 </span>
               </li>
             </ul>
+
+            <div className="mt-5 pt-4 border-t border-[#2A2E35]">
+              <Link
+                href="/sell"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1D5FAF] hover:bg-[#174E90] text-white text-xs font-bold font-heading transition-all shadow-md active:scale-95"
+              >
+                <Store className="w-4 h-4 text-[#93C5FD]" />
+                <span>Sell on Buy Denmed</span>
+              </Link>
+            </div>
           </div>
 
           {columns.map((col) => (

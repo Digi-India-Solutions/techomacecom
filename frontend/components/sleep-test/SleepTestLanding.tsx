@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { 
@@ -34,6 +34,10 @@ import {
 import Logo from '@/components/common/Logo';
 import { submitEnquiry } from '@/lib/api';
 import { useToastStore } from '@/lib/store';
+import SleepRiskSection from './SleepRiskSection';
+import SleepQuizPopup from './SleepQuizPopup';
+import SleepQuizModal from './SleepQuizModal';
+import SignupOfferPopup from '@/components/auth/SignupOfferPopup';
 
 interface FormState {
   fullName: string;
@@ -158,6 +162,7 @@ const FAQS_DATA = [
 export const SleepTestLanding: React.FC = () => {
   const { addToast } = useToastStore();
   const formRef = useRef<HTMLDivElement>(null);
+  const [isQuizOpen, setIsQuizOpen] = useState(false);
 
   const [formData, setFormData] = useState<FormState>({
     fullName: '',
@@ -784,6 +789,12 @@ export const SleepTestLanding: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* ========================================================
+          3b. RISK QUIZ TEASER ("Spot the Signs and Assess Your Risk")
+          → opens quiz modal inline
+          ======================================================== */}
+      <SleepRiskSection onOpenQuiz={() => setIsQuizOpen(true)} />
 
       {/* ========================================================
           4. SYMPTOMS SECTION ("Do you have these symptoms?")
@@ -1428,6 +1439,15 @@ export const SleepTestLanding: React.FC = () => {
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* Opens once per visit: invites the visitor to the risk quiz first */}
+      <SleepQuizPopup onOpenQuiz={() => setIsQuizOpen(true)} />
+
+      {/* Full STOP-BANG quiz modal — opened by SleepRiskSection or the invite popup */}
+      {isQuizOpen && <SleepQuizModal onClose={() => setIsQuizOpen(false)} />}
+
+      {/* Sign-up / login offer popup — shows to signed-out visitors after 15 s */}
+      <SignupOfferPopup />
     </div>
   );
 };

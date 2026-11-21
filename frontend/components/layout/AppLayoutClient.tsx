@@ -9,6 +9,7 @@ import MobileDrawer from '@/components/layout/MobileDrawer';
 import CartDrawer from '@/components/cart/CartDrawer';
 import AuthModal from '@/components/auth/AuthModal';
 import SessionSync from '@/components/auth/SessionSync';
+import SignupOfferPopup from '@/components/auth/SignupOfferPopup';
 import PincodeModal from '@/components/common/PincodeModal';
 import WhatsAppButton from '@/components/common/WhatsAppButton';
 import ToastContainer from '@/components/common/ToastContainer';
@@ -26,6 +27,9 @@ export const AppLayoutClient: React.FC<AppLayoutClientProps> = ({ children }) =>
     return (
       <div className="min-h-screen flex flex-col bg-[#F6F9FD] text-[#12263F] antialiased selection:bg-[#1D5FAF] selection:text-white">
         <main className="flex-1">{children}</main>
+        {/* Auth support needed by SignupOfferPopup inside SleepTestLanding */}
+        <AuthModal />
+        <SessionSync />
         <ToastContainer />
       </div>
     );
@@ -57,6 +61,9 @@ export const AppLayoutClient: React.FC<AppLayoutClientProps> = ({ children }) =>
       {/* Global Auth Modal + session check against the API */}
       <AuthModal />
       <SessionSync />
+
+      {/* "Sign up & save" offer — signed-out visitors, after 15 s on the site */}
+      <SignupOfferPopup />
 
       {/* Global Pincode Check Modal */}
       <PincodeModal />

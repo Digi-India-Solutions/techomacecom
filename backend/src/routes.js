@@ -10,6 +10,7 @@ import inventoryRoutes from "./modules/inventory/routes.js";
 import productRoutes from "./modules/products/routes.js";
 import rentalUnitRoutes from "./modules/rental-units/routes.js";
 import bannerRoutes from "./modules/banners/routes.js";
+import { publicEnquiryRoutes, adminEnquiryRoutes } from "./modules/enquiries/routes.js";
 
 /**
  * All API routes live under /api/v1 (document §12).
@@ -22,6 +23,7 @@ const api = Router();
 api.use("/auth", customerAuthRoutes); // email + password sign-up / sign-in, forgot password, profile, signed-in devices
 api.use("/account", accountRoutes); // addresses, GST details, profile photo
 api.use("/banners", bannerRoutes); // public hero banners for storefront
+api.use("/enquiries", publicEnquiryRoutes); // sleep-test callback form (+ risk quiz answers)
 api.use(storefrontCatalogRoutes); // /categories, /brands, /products, /search (public, read-only)
 
 // ---- Admin ----
@@ -39,6 +41,7 @@ admin.use("/products-basic", productRoutes);
 admin.use("/inventory", inventoryRoutes); // stock, warehouses, movements
 admin.use("/rental-units", rentalUnitRoutes); // serialized rental equipment units
 admin.use("/banners", bannerRoutes); // hero banners & marketing management
+admin.use("/enquiries", adminEnquiryRoutes); // leads from public forms (enquiries.view)
 api.use("/admin", admin);
 
 export default api;
