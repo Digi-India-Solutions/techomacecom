@@ -33,6 +33,8 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
   };
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {
   const { slug } = await params;
   const { sub } = await searchParams;

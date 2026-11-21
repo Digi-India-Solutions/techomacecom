@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   description: 'Fast-moving medical equipment, ICU mobility, autoclaves, and dental units trending across hospitals and clinics.'
 };
 
+export const dynamic = 'force-dynamic';
+
 export default async function HotSellingPage() {
   const [productsData, banners, brands] = await Promise.all([
     getProducts({ featured: true, limit: 36 }),

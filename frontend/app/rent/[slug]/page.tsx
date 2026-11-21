@@ -32,6 +32,8 @@ export async function generateMetadata({ params }: RentalProductPageProps): Prom
   };
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function RentalProductPage({ params }: RentalProductPageProps) {
   const { slug } = await params;
   const product = await getProductBySlug(slug);

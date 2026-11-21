@@ -26,6 +26,8 @@ export async function generateMetadata({ params }: RentalDetailPageProps): Promi
   };
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function RentalDetailPage({ params }: RentalDetailPageProps) {
   const { id } = await params;
   const rental = await getRentalById(id);

@@ -17,6 +17,8 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
   };
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { q = '' } = await searchParams;
   const data = await getProducts({ query: q, limit: 30 });

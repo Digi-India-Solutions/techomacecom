@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   description: 'Save up to 40% on dental consumables, hospital autoclaves, oxygen concentrators, and exclusive coupon codes for verified doctors.'
 };
 
+export const dynamic = 'force-dynamic';
+
 export default async function OffersPage() {
   const [deals, discounted, banners] = await Promise.all([
     getDealsOfTheDay(),

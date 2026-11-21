@@ -29,6 +29,8 @@ import BlogPreviewSection from '@/components/home/BlogPreviewSection';
 import NewsletterSection from '@/components/home/NewsletterSection';
 import PromoBannerGrid from '@/components/home/PromoBannerGrid';
 
+export const dynamic = 'force-dynamic';
+
 export default async function HomePage() {
   const [
     homepageConfig,
