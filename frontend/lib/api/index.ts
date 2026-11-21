@@ -27,6 +27,7 @@ import {
 // import { sendLoginOtp, verifyLoginOtp } from './customerAuth'; // mobile OTP sign-in disabled
 import { getBrandBySlug, getCategoryBySlug } from './catalog';
 import { apiPost, errorMessage } from './backend';
+import { getLiveBlogPosts, getLiveBlogPostBySlug, getFaqs, getCmsPage, listCmsPages } from './cms';
 
 // Read base URL from NEXT_PUBLIC_API_URL if configured for real REST backend
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';

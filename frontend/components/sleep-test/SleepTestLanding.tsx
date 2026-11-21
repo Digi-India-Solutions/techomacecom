@@ -38,6 +38,8 @@ import SleepRiskSection from './SleepRiskSection';
 import SleepQuizPopup from './SleepQuizPopup';
 import SleepQuizModal from './SleepQuizModal';
 import SignupOfferPopup from '@/components/auth/SignupOfferPopup';
+import { useSiteSettings } from '@/lib/settings/store';
+import { whatsappUrl } from '@/lib/settings/format';
 
 interface FormState {
   fullName: string;

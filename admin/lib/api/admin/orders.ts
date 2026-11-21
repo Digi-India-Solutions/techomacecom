@@ -5,7 +5,7 @@ import type {
   OrderStatus,
   ReturnRequest,
 } from '@/types/admin';
-import { adminFetch, mockDelay } from './client';
+import { adminFetch, adminGet, adminPatch, adminPost, mockDelay } from './client';
 import { PRODUCT_IMAGES } from './mockData';
 
 let ordersStore: Order[] = [
