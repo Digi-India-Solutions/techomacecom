@@ -1,10 +1,8 @@
 import React from 'react';
 import { Metadata } from 'next';
-import Link from 'next/link';
+import { getCmsPage } from '@/lib/api/cms';
 import { getSiteSettings } from '@/lib/settings/server';
 import { formatTime } from '@/lib/settings/format';
-import { Truck, ShieldCheck, Clock, MapPin } from 'lucide-react';
-import { getCmsPage } from '@/lib/api/cms';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -20,10 +18,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ShippingPolicyPage() {
-  const page = await getCmsPage('shipping-policy');
+  const [page, { shipping }] = await Promise.all([
+    getCmsPage('shipping-policy'),
+    getSiteSettings(),
+  ]);
 
-export default async function ShippingPolicyPage() {
-  const { shipping } = await getSiteSettings();
   return (
     <div className="max-w-[1100px] mx-auto px-4 sm:px-6 py-10 space-y-8">
       <div className="bg-white p-8 rounded-3xl border border-[#DCE6F2] shadow-xs space-y-4">
@@ -53,36 +52,36 @@ export default async function ShippingPolicyPage() {
               </p>
             </section>
 
-        <section className="space-y-2">
-          <h2 className="font-bold text-base text-[#12263F]">2. Free Shipping Threshold</h2>
-          <p>
-            {shipping.flatShippingCharge === 0 || shipping.freeShippingAbove === 0 ? (
-              <>Delivery is <strong className="text-[#12263F]">free on every order</strong> anywhere we ship in India.</>
-            ) : (
-              <>
-                Orders with a value of <strong className="text-[#12263F]">₹{shipping.freeShippingAbove.toLocaleString('en-IN')}</strong> or more qualify for{' '}
-                <strong className="text-[#12263F]">free doorstep delivery</strong>. Below this, a flat shipping charge of ₹{shipping.flatShippingCharge.toLocaleString('en-IN')} is applied at checkout.
-              </>
-            )}
-            {shipping.codEnabled && (
-              <>
-                {' '}Cash on delivery is available on eligible PIN codes for orders up to ₹{shipping.codMaxOrderValue.toLocaleString('en-IN')}
-                {shipping.codCharge > 0 ? ` (₹${shipping.codCharge.toLocaleString('en-IN')} handling charge)` : ''}.
-              </>
-            )}
-          </p>
-        </section>
+            <section className="space-y-2">
+              <h2 className="font-bold text-base text-[#12263F]">2. Free Shipping Threshold</h2>
+              <p>
+                {shipping.flatShippingCharge === 0 || shipping.freeShippingAbove === 0 ? (
+                  <>Delivery is <strong className="text-[#12263F]">free on every order</strong> anywhere we ship in India.</>
+                ) : (
+                  <>
+                    Orders with a value of <strong className="text-[#12263F]">₹{shipping.freeShippingAbove.toLocaleString('en-IN')}</strong> or more qualify for{' '}
+                    <strong className="text-[#12263F]">free doorstep delivery</strong>. Below this, a flat shipping charge of ₹{shipping.flatShippingCharge.toLocaleString('en-IN')} is applied at checkout.
+                  </>
+                )}
+                {shipping.codEnabled && (
+                  <>
+                    {' '}Cash on delivery is available on eligible PIN codes for orders up to ₹{shipping.codMaxOrderValue.toLocaleString('en-IN')}
+                    {shipping.codCharge > 0 ? ` (₹${shipping.codCharge.toLocaleString('en-IN')} handling charge)` : ''}.
+                  </>
+                )}
+              </p>
+            </section>
 
-        <section className="space-y-2">
-          <h2 className="font-bold text-base text-[#12263F]">3. Estimated Transit Times</h2>
-          <ul className="list-disc pl-5 space-y-1">
-            <li><strong className="text-[#12263F]">Standard delivery:</strong> {shipping.defaultDeliveryDays} business days. Orders placed before {formatTime(shipping.dispatchCutoffTime)} are dispatched the same working day. Enter your PIN code on any product page for an exact estimate.</li>
-            <li><strong className="text-[#12263F]">Delhi NCR:</strong> Same-day or Next-day dispatch (within 24 hours).</li>
-            <li><strong className="text-[#12263F]">Metro Cities (Mumbai, Bengaluru, Hyderabad, Chennai, Kolkata):</strong> 2 to 3 business days via priority air cargo.</li>
-            <li><strong className="text-[#12263F]">Tier 2 & Tier 3 Regional Centers:</strong> 3 to 5 business days.</li>
-            <li><strong className="text-[#12263F]">Heavy Operatory Units (Chairs, Compressors):</strong> Shipped via surface transport in 4 to 7 business days with physical offloading support.</li>
-          </ul>
-        </section>
+            <section className="space-y-2">
+              <h2 className="font-bold text-base text-[#12263F]">3. Estimated Transit Times</h2>
+              <ul className="list-disc pl-5 space-y-1">
+                <li><strong className="text-[#12263F]">Standard delivery:</strong> {shipping.defaultDeliveryDays} business days. Orders placed before {formatTime(shipping.dispatchCutoffTime)} are dispatched the same working day. Enter your PIN code on any product page for an exact estimate.</li>
+                <li><strong className="text-[#12263F]">Delhi NCR:</strong> Same-day or Next-day dispatch (within 24 hours).</li>
+                <li><strong className="text-[#12263F]">Metro Cities (Mumbai, Bengaluru, Hyderabad, Chennai, Kolkata):</strong> 2 to 3 business days via priority air cargo.</li>
+                <li><strong className="text-[#12263F]">Tier 2 &amp; Tier 3 Regional Centers:</strong> 3 to 5 business days.</li>
+                <li><strong className="text-[#12263F]">Heavy Operatory Units (Chairs, Compressors):</strong> Shipped via surface transport in 4 to 7 business days with physical offloading support.</li>
+              </ul>
+            </section>
 
             <section className="space-y-2">
               <h2 className="font-bold text-base text-[#12263F]">4. Fragile &amp; Heavy Equipment Crating</h2>
