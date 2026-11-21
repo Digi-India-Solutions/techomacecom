@@ -4,8 +4,10 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ShieldCheck, Check, ArrowRight, Clock, Wrench } from 'lucide-react';
+import { useSiteSettings } from '@/lib/settings/store';
 
 export const RentEquipmentPromo: React.FC = () => {
+  const { store } = useSiteSettings();
   const rentalBenefits = [
     'Zero CapEx: Start with low monthly rental instead of huge upfront expense',
     'Free Regular Maintenance & Filter Replacements included',
@@ -48,7 +50,7 @@ export const RentEquipmentPromo: React.FC = () => {
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <a
-                href="tel:+919811234567"
+                href={store.supportPhoneHref}
                 className="px-5 py-3.5 bg-white border border-[#1D5FAF] hover:bg-[#EAF2FC] text-[#1D5FAF] font-semibold text-xs sm:text-sm rounded-xl transition-colors"
               >
                 Speak with Rental Coordinator

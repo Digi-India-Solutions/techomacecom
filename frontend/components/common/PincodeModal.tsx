@@ -4,11 +4,13 @@ import React, { useState } from 'react';
 import { usePincodeStore, useToastStore } from '@/lib/store';
 import { checkPincodeServiceability } from '@/lib/api';
 import { MapPin, X, CheckCircle, Truck, AlertCircle, ArrowRight } from 'lucide-react';
+import { useSiteSettings } from '@/lib/settings/store';
 
 export const PincodeModal: React.FC = () => {
   const { pincode, isPincodeModalOpen, setPincodeModalOpen, setPincode } = usePincodeStore();
   const { addToast } = useToastStore();
 
+  const settings = useSiteSettings();
   const [inputPin, setInputPin] = useState(pincode || '');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
@@ -116,14 +118,19 @@ export const PincodeModal: React.FC = () => {
             <div className="p-3.5 bg-[#16A34A]/5 rounded-xl border border-[#16A34A]/30 space-y-1.5">
               <div className="flex items-center gap-2 text-[#12263F] font-semibold text-sm">
                 <CheckCircle className="w-4 h-4 text-[#16A34A]" />
-                Serviceable in {result.city}, {result.state}
+                Serviceable in {[result.city, result.state].filter(Boolean).join(', ')}
               </div>
               <div className="flex items-center gap-2 text-xs text-[#16A34A]">
                 <Truck className="w-4 h-4" />
                 Estimated Delivery: <span className="font-semibold">{result.deliveryDays}</span>
               </div>
               <div className="text-[12px] text-[#16A34A]">
-                ✓ Free shipping on orders over ₹1,999 • Cash on Delivery Available
+                {[
+                  settings.shipping.freeShippingAbove > 0 && settings.shipping.flatShippingCharge > 0
+                    ? `✓ Free shipping on orders over ₹${settings.shipping.freeShippingAbove.toLocaleString('en-IN')}`
+                    : '✓ Free shipping',
+                  result.codAvailable ? 'Cash on Delivery available' : 'Prepaid orders only'
+                ].join(' • ')}
               </div>
             </div>
           )}

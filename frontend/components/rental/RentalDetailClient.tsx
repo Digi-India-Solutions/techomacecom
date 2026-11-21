@@ -27,12 +27,14 @@ import {
   Layers,
   FileText
 } from 'lucide-react';
+import { useSiteSettings } from '@/lib/settings/store';
 
 interface RentalDetailClientProps {
   product: Product;
 }
 
 export default function RentalDetailClient({ product }: RentalDetailClientProps) {
+  const { store, rental: rentalRules } = useSiteSettings();
   const router = useRouter();
   const { setDraft } = useRentalStore();
   const { addToast } = useToastStore();
@@ -160,7 +162,7 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
     addToast({
       type: 'info',
       title: 'Rental Plan Configured',
-      message: `Proceeding to KYC verification and booking for ${product.name.slice(0, 30)}...`
+      message: `Proceeding to booking for ${product.name.slice(0, 30)}...`
     });
 
     router.push('/rent/checkout');
@@ -499,6 +501,12 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
                     <span className="text-[11px] text-[#5B6B82] font-normal">
                       Includes ₹{securityDeposit.toLocaleString('en-IN')} 100% refundable deposit
                     </span>
+                    {rentalRules.lateFeePerDay > 0 && (
+                      <span className="text-[11px] text-[#5B6B82] font-normal block">
+                        Late return: ₹{rentalRules.lateFeePerDay.toLocaleString('en-IN')}/day
+                        {rentalRules.gracePeriodDays > 0 ? ` after ${rentalRules.gracePeriodDays} grace day${rentalRules.gracePeriodDays === 1 ? '' : 's'}` : ''}
+                      </span>
+                    )}
                   </div>
                   <span className="font-black text-xl text-[#1D5FAF]">
                     ₹{totalPayableNow.toLocaleString('en-IN')}
@@ -521,11 +529,11 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
             {/* Assistance Helpline */}
             <div className="text-center pt-2">
               <a
-                href="tel:+919811234567"
+                href={store.supportPhoneHref}
                 className="inline-flex items-center gap-1.5 text-xs text-[#5B6B82] hover:text-[#1D5FAF] font-semibold"
               >
                 <PhoneCall className="w-3.5 h-3.5 text-[#1D5FAF]" />
-                <span>Questions? Call our Clinical Rental Desk: +91 98112 34567</span>
+                <span>Questions? Call our Clinical Rental Desk: {store.supportPhone}</span>
               </a>
             </div>
           </div>

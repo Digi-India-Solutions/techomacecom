@@ -600,7 +600,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 4500,
     securityDeposit: 10000,
     deliveryPickupCharge: 500,
-    rentalKycRequired: true,
     images: [
       { url: '/images/prod_oxygen_main.jpg', alt: 'Front view with digital flow display', type: 'main' },
       { url: '/images/prod_oxygen_angle.jpg', alt: '45 degree side angle profile', type: 'angle' },
@@ -678,7 +677,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 5000,
     securityDeposit: 12000,
     deliveryPickupCharge: 500,
-    rentalKycRequired: true,
     images: [
       { url: '/images/prod_cpap_main.jpg', alt: 'Front view with color display and integrated humidifier', type: 'main' },
       { url: '/images/prod_cpap_angle.jpg', alt: '45 degree angled side perspective', type: 'angle' },
@@ -922,7 +920,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 12500,
     securityDeposit: 30000,
     deliveryPickupCharge: 1500,
-    rentalKycRequired: true,
     images: [
       { url: '/images/prod_autoclave_main.jpg', alt: 'Front view with stainless steel chamber door', type: 'main' },
       { url: '/images/prod_autoclave_angle.jpg', alt: '45 degree angled perspective on white background', type: 'angle' },
@@ -1224,7 +1221,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 5500,
     securityDeposit: 12000,
     deliveryPickupCharge: 600,
-    rentalKycRequired: true,
     images: [
       { url: '/images/bento_monitoring_vitals_1793803410618.jpg', alt: 'Multi-parameter patient monitor front view on white background', type: 'main' },
       { url: '/images/prod_bp_angle.jpg', alt: '45 degree side view of display screen', type: 'angle' },
@@ -1290,7 +1286,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 6000,
     securityDeposit: 15000,
     deliveryPickupCharge: 800,
-    rentalKycRequired: true,
     images: [
       { url: '/images/prod_wheelchair_main.jpg', alt: 'Front centered view on white background', type: 'main' },
       { url: '/images/prod_wheelchair_angle.jpg', alt: '45 degree side view of frame and wheels', type: 'angle' },
@@ -1912,7 +1907,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 9500,
     securityDeposit: 25000,
     deliveryPickupCharge: 1200,
-    rentalKycRequired: true,
     images: [
       { url: '/images/prod_autoclave_main.jpg', alt: 'Front view with stainless steel chamber door', type: 'main' },
       { url: '/images/prod_autoclave_angle.jpg', alt: '45 degree angled perspective on white background', type: 'angle' },
@@ -2027,7 +2021,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 3200,
     securityDeposit: 8000,
     deliveryPickupCharge: 500,
-    rentalKycRequired: true,
     images: [
       { url: '/images/bento_monitoring_vitals_1793803410618.jpg', alt: 'Multi-parameter patient monitor front view on white background', type: 'main' },
       { url: '/images/prod_bp_angle.jpg', alt: '45 degree side view of display screen', type: 'angle' },
@@ -2145,7 +2138,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 2500,
     securityDeposit: 5000,
     deliveryPickupCharge: 400,
-    rentalKycRequired: true,
     images: [
       { url: '/images/prod_wheelchair_main.jpg', alt: 'Front centered view on white background', type: 'main' },
       { url: '/images/prod_wheelchair_angle.jpg', alt: '45 degree side view of frame and wheels', type: 'angle' },
@@ -2482,7 +2474,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 8500,
     securityDeposit: 20000,
     deliveryPickupCharge: 500,
-    rentalKycRequired: true,
     images: [
       { url: '/images/prod_oxygen_main.jpg', alt: 'Front view with digital flow display', type: 'main' },
       { url: '/images/prod_oxygen_angle.jpg', alt: '45 degree side angle profile', type: 'angle' },
@@ -2549,7 +2540,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 6500,
     securityDeposit: 15000,
     deliveryPickupCharge: 500,
-    rentalKycRequired: true,
     images: [
       { url: '/images/prod_cpap_main.jpg', alt: 'Front view with color display and integrated humidifier', type: 'main' },
       { url: '/images/prod_cpap_angle.jpg', alt: '45 degree angled side perspective', type: 'angle' },
@@ -2616,7 +2606,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 7500,
     securityDeposit: 15000,
     deliveryPickupCharge: 1000,
-    rentalKycRequired: true,
     images: [
       { url: '/images/bento_homecare_mobility_1793803387668.jpg', alt: '5-Function motorized ICU hospital bed on white background', type: 'main' },
       { url: '/images/prod_wheelchair_angle.jpg', alt: '45 degree angle showing split foldaway side rails', type: 'angle' },
@@ -2680,7 +2669,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 1800,
     securityDeposit: 3500,
     deliveryPickupCharge: 350,
-    rentalKycRequired: true,
     images: [
       { url: '/images/prod_suction_machine_1793803542649.jpg', alt: 'Heavy-duty phlegm suction machine on white background', type: 'main' },
       { url: '/images/prod_oxygen_angle.jpg', alt: '45 degree side profile showing collection canister', type: 'angle' },
@@ -2742,7 +2730,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 12000,
     securityDeposit: 25000,
     deliveryPickupCharge: 1200,
-    rentalKycRequired: true,
     images: [
       { url: '/images/bento_monitoring_vitals_1793803410618.jpg', alt: 'BPL Relife 700 Defibrillator with adult and pediatric paddles', type: 'main' },
       { url: '/images/prod_bp_angle.jpg', alt: 'Screen view with high resolution energy charge readout', type: 'angle' },
@@ -2847,7 +2834,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 3500,
     securityDeposit: 8000,
     deliveryPickupCharge: 500,
-    rentalKycRequired: true,
     images: [
       { url: '/images/bento_monitoring_vitals_1793803410618.jpg', alt: 'BPL Acura V Volumetric IV Infusion Pump front view', type: 'main' },
       { url: '/images/prod_bp_detail.jpg', alt: 'Digital keypad with infusion rate display', type: 'detail' }
@@ -2901,7 +2887,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 24000,
     securityDeposit: 50000,
     deliveryPickupCharge: 1500,
-    rentalKycRequired: true,
     images: [
       { url: '/images/bento_cpap_bipap_1793803386703.jpg', alt: 'ResMed Astral 150 ventilator display unit', type: 'main' },
       { url: '/images/prod_cpap_angle.jpg', alt: 'Profile showing valve circuitry and dual battery bays', type: 'angle' },
@@ -2955,7 +2940,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 2800,
     securityDeposit: 6000,
     deliveryPickupCharge: 500,
-    rentalKycRequired: true,
     images: [
       { url: '/images/prod_suction_machine_1793803542649.jpg', alt: 'BPL MediVac Dual Jar Theater Suction Machine on mobile castors', type: 'main' },
       { url: '/images/prod_autoclave_detail.jpg', alt: 'Vacuum gauge and foot switch pedal', type: 'detail' }
@@ -3008,7 +2992,6 @@ export const MOCK_PRODUCTS: Product[] = [
     rentPricePerMonth: 4500,
     securityDeposit: 10000,
     deliveryPickupCharge: 600,
-    rentalKycRequired: true,
     images: [
       { url: '/images/bento_monitoring_vitals_1793803410618.jpg', alt: 'Contec 12.1-inch color monitor displaying real-time ECG and vitals', type: 'main' },
       { url: '/images/prod_bp_angle.jpg', alt: 'Side profile showing patient connector interfaces', type: 'angle' },
@@ -3345,13 +3328,6 @@ export const MOCK_RENTALS: Rental[] = [
       state: 'Uttar Pradesh',
       isDefault: true
     },
-    kycDocuments: {
-      verified: true,
-      idProofFront: 'Aadhaar_Card_Front_Verified.pdf',
-      idProofBack: 'Aadhaar_Card_Back_Verified.pdf',
-      addressProof: 'Clinic_Establishment_Certificate.pdf',
-      doctorPrescription: 'Rx_OxygenTherapy_DrMalhotra.pdf'
-    },
     payments: [
       {
         id: 'pay-rnt-01',
@@ -3391,11 +3367,6 @@ export const MOCK_RENTALS: Rental[] = [
       state: 'Uttar Pradesh',
       isDefault: true
     },
-    kycDocuments: {
-      verified: true,
-      idProofFront: 'Aadhaar_Card_Front_Verified.pdf',
-      addressProof: 'Clinic_Establishment_Certificate.pdf'
-    },
     payments: [
       {
         id: 'pay-rnt-02',
@@ -3432,12 +3403,6 @@ export const MOCK_RENTALS: Rental[] = [
       city: 'Noida',
       state: 'Uttar Pradesh',
       isDefault: true
-    },
-    kycDocuments: {
-      verified: false,
-      idProofFront: 'Aadhaar_Card_Uploaded.pdf',
-      addressProof: 'Electricity_Bill_Uploaded.pdf',
-      doctorPrescription: 'SleepStudy_Rx_CPAP_Titration.pdf'
     },
     payments: [
       {

@@ -10,6 +10,8 @@ import inventoryRoutes from "./modules/inventory/routes.js";
 import productRoutes from "./modules/products/routes.js";
 import rentalUnitRoutes from "./modules/rental-units/routes.js";
 import bannerRoutes from "./modules/banners/routes.js";
+import { adminSettingsRoutes, publicSettingsRoutes } from "./modules/settings/routes.js";
+import { adminOrdersRoutes, adminReturnsRoutes, storefrontOrdersRoutes } from "./modules/orders/index.js";
 
 /**
  * All API routes live under /api/v1 (document §12).
@@ -21,7 +23,9 @@ const api = Router();
 // ---- Storefront ----
 api.use("/auth", customerAuthRoutes); // email + password sign-up / sign-in, forgot password, profile, signed-in devices
 api.use("/account", accountRoutes); // addresses, GST details, profile photo
+api.use("/orders", storefrontOrdersRoutes); // customer orders (create, list, detail)
 api.use("/banners", bannerRoutes); // public hero banners for storefront
+api.use(publicSettingsRoutes); // /settings/public (store details, fees, rules) · /pincodes/:pincode
 api.use(storefrontCatalogRoutes); // /categories, /brands, /products, /search (public, read-only)
 
 // ---- Admin ----
@@ -38,7 +42,10 @@ admin.use(adminCatalogRoutes);
 admin.use("/products-basic", productRoutes);
 admin.use("/inventory", inventoryRoutes); // stock, warehouses, movements
 admin.use("/rental-units", rentalUnitRoutes); // serialized rental equipment units
+admin.use("/orders", adminOrdersRoutes); // sales orders & fulfilment
+admin.use("/returns", adminReturnsRoutes); // RMA returns & refund processing
 admin.use("/banners", bannerRoutes); // hero banners & marketing management
+admin.use("/settings", adminSettingsRoutes); // store, shipping, tax & invoice, notifications, rental
 api.use("/admin", admin);
 
 export default api;

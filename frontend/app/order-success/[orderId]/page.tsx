@@ -16,8 +16,10 @@ import {
   Phone
 } from 'lucide-react';
 import { useUserStore } from '@/lib/store';
+import { useSiteSettings } from '@/lib/settings/store';
 
 export default function OrderSuccessPage() {
+  const { store } = useSiteSettings();
   const params = useParams();
   const orderId = (params?.orderId as string) || 'BDM-2026-89102';
   const { user } = useUserStore();
@@ -47,7 +49,7 @@ GSTIN: ${user?.gstDetails?.gstin || '09AAACM1234F1Z8'}
 -----------------------------------------------
 Status: Payment Verified (Razorpay / Pre-authorized)
 Thank you for equipping your healthcare facility through Buy Denmed.
-Support Helpline: +91 98112 34567 | support@buydenmed.com
+Support Helpline: ${store.supportPhone} | ${store.supportEmail}
 -----------------------------------------------`;
 
     const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
@@ -156,10 +158,10 @@ Support Helpline: +91 98112 34567 | support@buydenmed.com
             <span>Need prompt assistance with delivery or calibration?</span>
           </div>
           <a
-            href="tel:+919811234567"
+            href={store.supportPhoneHref}
             className="font-bold text-[#12263F] hover:text-[#1D5FAF] transition-colors"
           >
-            Call Fulfillment Desk: +91 98112 34567
+            Call Fulfillment Desk: {store.supportPhone}
           </a>
         </div>
       </div>

@@ -5,7 +5,7 @@ import { ConfirmationSkeleton } from '@/components/skeletons/PageSkeletons';
 
 export const metadata: Metadata = {
   title: 'Rental Booking Confirmed | Buy Denmed',
-  description: 'Your medical equipment rental booking has been received and is pending KYC & biomedical approval.'
+  description: 'Your medical equipment rental booking has been received and is being confirmed by our rental team.'
 };
 
 export default function RentalSuccessPage() {

@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import SleepTestLanding from '@/components/sleep-test/SleepTestLanding';
+import { getSiteSettings } from '@/lib/settings/server';
 
 export const metadata: Metadata = {
   title: 'Sleep Study at Home — Diagnose Sleep Apnea in Bed | Buy Denmed',
@@ -105,7 +106,6 @@ const MEDICAL_BUSINESS_SCHEMA = {
   '@type': 'MedicalBusiness',
   name: 'Buy Denmed Sleep Diagnostics India',
   description: 'Pan-India at-home sleep apnea testing, Level 2 and Level 3 polysomnography, and respiratory care equipment.',
-  telephone: '+91-9811234567',
   url: 'https://buydenmed.com/sleep-test',
   currenciesAccepted: 'INR',
   paymentAccepted: 'Direct Bank Transfer, UPI, Credit Card, Debit Card',
@@ -130,7 +130,10 @@ const MEDICAL_BUSINESS_SCHEMA = {
   }
 };
 
-export default function SleepTestPage() {
+export default async function SleepTestPage() {
+  // Phone number in the structured data comes from Settings → Store
+  const { store } = await getSiteSettings();
+  const businessSchema = { ...MEDICAL_BUSINESS_SCHEMA, name: `${store.brandName} Sleep Diagnostics India`, telephone: store.supportPhone };
   return (
     <>
       {/* Schema.org FAQPage structured data */}
@@ -141,7 +144,7 @@ export default function SleepTestPage() {
       {/* Schema.org MedicalBusiness structured data */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(MEDICAL_BUSINESS_SCHEMA) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(businessSchema) }}
       />
 
       <SleepTestLanding />

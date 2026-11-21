@@ -23,12 +23,16 @@ import {
   Check,
   X
 } from 'lucide-react';
+import { useSiteSettings } from '@/lib/settings/store';
 
 interface RentalDetailViewProps {
   initialRental: Rental;
 }
 
 export default function RentalDetailView({ initialRental }: RentalDetailViewProps) {
+  const { store, rental: rentalRules } = useSiteSettings();
+  // Settings → Rental → deposit refund promise
+  const refundWindow = `${rentalRules.depositRefundDays} day${rentalRules.depositRefundDays === 1 ? '' : 's'}`;
   const { rentals, extendRental, scheduleReturn } = useRentalStore();
   const { addToast } = useToastStore();
 
@@ -151,9 +155,9 @@ TRANSACTIONS:
 ${rental.payments.map((p) => `- ${p.date}: ₹${p.amount.toLocaleString('en-IN')} via ${p.method} (Ref: ${p.transactionId || 'N/A'})`).join('\n')}
 
 TERMS:
-1. 100% Security Deposit will be refunded to client within 48 to 72 hours following equipment pickup and functional verification.
+1. 100% Security Deposit will be refunded to client within ${refundWindow} following equipment pickup and functional verification.
 2. 100% Free biomedical maintenance, periodic calibration check, and emergency breakdown replacement are covered under this contract.
-Support Helpline: +91 98112 34567 | care@buydenmed.com
+Support Helpline: ${store.supportPhone} | ${store.supportEmail}
 =============================================================`;
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -295,7 +299,7 @@ Support Helpline: +91 98112 34567 | care@buydenmed.com
                 <p className="text-emerald-700 leading-relaxed">
                   {rental.status === 'deposit_refunded'
                     ? 'Deposit has been refunded back to your bank account.'
-                    : '100% of this deposit will be refunded within 48 hours following equipment return pickup.'}
+                    : `100% of this deposit will be refunded within ${refundWindow} following equipment return pickup.`}
                 </p>
               </div>
             </div>
@@ -338,8 +342,8 @@ Support Helpline: +91 98112 34567 | care@buydenmed.com
               done: true
             },
             {
-              title: '2. KYC & Clinical Prescription Verification',
-              desc: 'Identity and delivery location approved by biomedical officer.',
+              title: '2. Booking Confirmed',
+              desc: 'Availability and delivery slot confirmed by our rental desk.',
               done: rental.status !== 'pending_approval'
             },
             {
@@ -543,7 +547,7 @@ Support Helpline: +91 98112 34567 | care@buydenmed.com
                   <span>₹{rental.deposit.toLocaleString('en-IN')} Refund</span>
                 </div>
                 <p className="text-[12px] leading-relaxed">
-                  Upon collection, our courier generates a digital inspection clearance. 100% of your security deposit is refunded to your payment account within 48 hours.
+                  Upon collection, our courier generates a digital inspection clearance. 100% of your security deposit is refunded to your payment account within {refundWindow}.
                 </p>
               </div>
             </div>

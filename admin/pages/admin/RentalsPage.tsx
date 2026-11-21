@@ -47,10 +47,7 @@ export function RentalsPage() {
   const initialFilter = searchParams.get('filter');
   const initialStatusParam = searchParams.get('status');
 
-  const mappedStatus: 'all' | RentalStatus =
-    initialFilter === 'kyc_pending'
-      ? 'pending_approval'
-      : (RENTAL_STATUS_TABS.find((t) => t.key === initialStatusParam)?.key ?? 'all');
+  const mappedStatus: 'all' | RentalStatus = RENTAL_STATUS_TABS.find((t) => t.key === initialStatusParam)?.key ?? 'all';
 
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -310,7 +307,7 @@ export function RentalsPage() {
         <div>
           <h1 className="text-2xl font-bold text-[#12263F] tracking-tight">Rentals</h1>
           <p className="mt-0.5 text-sm text-[#5B6B82]">
-            Verify KYC &amp; prescriptions, assign serial units, approve extensions, inspect returns, and refund deposits.
+            Approve bookings, assign serial units, approve extensions, inspect returns, and refund deposits.
           </p>
         </div>
 

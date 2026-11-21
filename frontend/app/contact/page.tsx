@@ -2,17 +2,14 @@
 
 import React, { useState } from 'react';
 import { useToastStore } from '@/lib/store';
+import { useSiteSettings } from '@/lib/settings/store';
+import { formatTime, mailto } from '@/lib/settings/format';
 import { Phone, Mail, MapPin, Clock, Send, MessageCircle } from 'lucide-react';
 
 export default function ContactPage() {
+  const { store } = useSiteSettings();
   const { addToast } = useToastStore();
-  const [formData, setFormData] = useState({
-    name: 'Dr. Vikram Malhotra',
-    email: 'dr.vikram@malhotraclinic.com',
-    phone: '9811234567',
-    subject: 'Equipment Installation Inquiry',
-    message: 'Need assistance scheduling installation for our new dental operatory unit.'
-  });
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', subject: '', message: '' });
   const [submitted, setSubmitted] = useState(false);
   const [ticketId, setTicketId] = useState('89201');
 
@@ -52,46 +49,59 @@ export default function ContactPage() {
               <div className="flex items-start gap-3">
                 <Phone className="w-4 h-4 text-[#1D5FAF] shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-bold text-[#12263F]">+91 98112 34567</div>
-                  <div className="text-[#5B6B82]">Toll Free: 1800-212-3366</div>
+                  <a href={store.supportPhoneHref} className="block font-bold text-[#12263F] hover:text-[#1D5FAF]">{store.supportPhone}</a>
+                  {store.tollFreePhone && (
+                    <a href={store.tollFreePhoneHref} className="block text-[#5B6B82] hover:text-[#1D5FAF]">Toll Free: {store.tollFreePhone}</a>
+                  )}
+                  {store.salesPhone && (
+                    <a href={store.salesPhoneHref} className="block text-[#5B6B82] hover:text-[#1D5FAF]">Office: {store.salesPhone}</a>
+                  )}
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
                 <Mail className="w-4 h-4 text-[#1D5FAF] shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-bold text-[#12263F]">support@buydenmed.com</div>
-                  <div className="text-[#5B6B82]">orders@buydenmed.com</div>
+                  <a href={mailto(store.supportEmail)} className="block font-bold text-[#12263F] hover:text-[#1D5FAF]">{store.supportEmail}</a>
+                  {store.salesEmail !== store.supportEmail && (
+                    <a href={mailto(store.salesEmail)} className="block text-[#5B6B82] hover:text-[#1D5FAF]">{store.salesEmail}</a>
+                  )}
                 </div>
               </div>
 
               <div className="flex items-start gap-3">
                 <Clock className="w-4 h-4 text-[#1D5FAF] shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-bold text-[#12263F]">Monday - Saturday</div>
-                  <div className="text-[#5B6B82]">9:00 AM - 7:30 PM IST</div>
+                  <div className="font-bold text-[#12263F]">{store.supportHours.openOnSunday ? 'All days' : 'Monday - Saturday'}</div>
+                  <div className="text-[#5B6B82]">
+                    {formatTime(store.supportHours.open)} - {formatTime(store.supportHours.close)} IST
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Regional Fulfillment Hubs */}
+          {/* Registered office — Settings → Store */}
           <div className="bg-white p-6 rounded-2xl border border-[#DCE6F2] shadow-xs space-y-3 text-xs">
-            <h3 className="font-bold text-sm text-[#12263F] border-b border-[#DCE6F2] pb-2">
-              Regional Fulfillment Hubs
-            </h3>
-            <div>
-              <div className="font-bold text-[#12263F]">North Hub (HQ):</div>
-              <div className="text-[#5B6B82]">Okhla Industrial Area Phase-III, New Delhi - 110020</div>
+            <h3 className="font-bold text-sm text-[#12263F] border-b border-[#DCE6F2] pb-2">Registered Office</h3>
+            <div className="flex items-start gap-3">
+              <MapPin className="w-4 h-4 text-[#1D5FAF] shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold text-[#12263F]">{store.storeName}</div>
+                <div className="text-[#5B6B82] whitespace-pre-line">{store.address}</div>
+                {store.gstin && <div className="text-[#5B6B82] mt-1">GSTIN: {store.gstin}</div>}
+                {store.mapUrl && (
+                  <a href={store.mapUrl} target="_blank" rel="noopener noreferrer" className="inline-block mt-1.5 font-semibold text-[#1D5FAF] hover:underline">
+                    Open in Google Maps
+                  </a>
+                )}
+              </div>
             </div>
-            <div>
-              <div className="font-bold text-[#12263F]">West Hub:</div>
-              <div className="text-[#5B6B82]">MIDC Industrial Area, Andheri East, Mumbai - 400093</div>
-            </div>
-            <div>
-              <div className="font-bold text-[#12263F]">South Hub:</div>
-              <div className="text-[#5B6B82]">Peenya Industrial Area, Bengaluru - 560058</div>
-            </div>
+            {store.whatsappLink && (
+              <a href={store.whatsappLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-[#16A34A] hover:underline">
+                <MessageCircle className="w-4 h-4" /> WhatsApp {store.whatsappNumber}
+              </a>
+            )}
           </div>
         </div>
 

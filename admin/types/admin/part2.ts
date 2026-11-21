@@ -61,6 +61,23 @@ export interface OrderShipment {
   shippedAt: string;
 }
 
+export interface OrderSellerDetails {
+  name: string;
+  brandName?: string;
+  address: string;
+  gstin?: string;
+  supportPhone?: string;
+  supportEmail?: string;
+  logoUrl?: string | null;
+  invoicePrefix?: string;
+  invoiceNumberDigits?: number;
+  dispatchStateCode?: string;
+  dispatchStateName?: string;
+  signatoryName?: string;
+  signatoryUrl?: string | null;
+  footerTerms?: string;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -76,6 +93,7 @@ export interface Order {
   discount: number;
   couponCode?: string;
   shippingCharge: number;
+  codCharge?: number;
   gstTotal: number;
   total: number;
   paymentMethod: OrderPaymentMethod;
@@ -84,6 +102,9 @@ export interface Order {
   emiPlan?: string;
   orderStatus: OrderStatus;
   shipment?: OrderShipment;
+  invoiceNumber?: string;
+  invoiceUrl?: string;
+  seller?: OrderSellerDetails;
   cancelReason?: string;
   timeline: OrderTimelineEvent[];
   internalNotes: string[];
@@ -146,18 +167,6 @@ export type RentalStatus =
   | 'deposit_refunded'
   | 'cancelled';
 
-export type KycDocStatus = 'pending' | 'approved' | 'rejected' | 'reupload_requested';
-
-export interface KycDocument {
-  id: string;
-  label: string;
-  docType: 'Aadhaar Card' | 'PAN Card' | 'Address Proof' | 'Doctor Prescription';
-  imageUrl: string;
-  status: KycDocStatus;
-  rejectionReason?: string;
-  uploadedAt: string;
-}
-
 export interface RentalLedgerEntry {
   id: string;
   type: 'rent' | 'deposit' | 'delivery_charge' | 'extension' | 'deduction' | 'refund';
@@ -204,8 +213,6 @@ export interface RentalBooking {
   depositAmount: number;
   depositStatus: 'held' | 'pending' | 'partial_refunded' | 'refunded';
   amountPaid: number;
-  kycStatus: KycDocStatus;
-  kycDocs: KycDocument[];
   shipment?: {
     courier: string;
     awb: string;
@@ -437,30 +444,55 @@ export interface BlogPost {
 }
 
 // --- SETTINGS ---
+/** Settings → Notifications: one event's template (backend modules/settings/notifications.service.js). */
 export interface NotificationTemplate {
-  eventKey: string;
+  event: string;
   label: string;
-  smsEnabled: boolean;
-  whatsappEnabled: boolean;
-  emailEnabled: boolean;
-  template: string;
+  group: string;
   variables: string[];
+  /** Message used for SMS, WhatsApp and the email body */
+  body: string;
+  /** Email subject */
+  subject: string;
+  sms: { active: boolean; templateId: string };
+  whatsapp: { active: boolean; templateId: string };
+  email: { active: boolean };
+  /** Body rendered with sample values (read-only, from the API) */
+  preview?: string;
 }
 
+export interface NotificationChannelStatus {
+  email: string;
+  sms: string;
+  whatsapp: string;
+}
+
+/** Settings tabs as the API returns them — money in rupees, images as URLs. */
 export interface AdminSettings {
   store: {
     storeName: string;
-    logoUrl: string;
-    faviconUrl: string;
+    brandName: string;
+    tagline: string;
+    logoPath: string;
+    footerLogoPath: string;
+    faviconPath: string;
     supportPhone: string;
     salesPhone: string;
+    tollFreePhone: string;
     supportEmail: string;
+    salesEmail: string;
     whatsappNumber: string;
     address: string;
+    mapUrl: string;
     gstin: string;
+    supportOpenTime: string;
+    supportCloseTime: string;
+    openOnSunday: boolean;
     instagramUrl: string;
+    facebookUrl: string;
     linkedinUrl: string;
     youtubeUrl: string;
+    twitterUrl: string;
   };
   shipping: {
     flatShippingCharge: number;
@@ -468,31 +500,72 @@ export interface AdminSettings {
     codEnabled: boolean;
     codMaxOrderValue: number;
     codCharge: number;
-    serviceablePincodesCount: number;
-    shiprocketEmail: string;
-    shiprocketApiTokenMasked: string;
+    defaultDeliveryDays: string;
+    dispatchCutoffTime: string;
   };
-  payments: {
-    razorpayKeyId: string;
-    razorpayKeySecretMasked: string;
-    mode: 'test' | 'live';
-    emiEnabledGlobally: boolean;
-    minOrderForEmi: number;
-  };
-  taxInvoice: {
+  tax: {
     gstEnabled: boolean;
-    defaultStateCode: string;
+    pricesIncludeGst: boolean;
+    defaultGstRate: number;
+    dispatchStateCode: string;
     invoicePrefix: string;
     nextInvoiceNumber: number;
+    invoiceNumberDigits: number;
     footerTerms: string;
-    signatoryImageUrl: string;
+    signatoryName: string;
+    signatoryPath: string;
   };
-  notifications: NotificationTemplate[];
   rental: {
-    defaultReminderDaysBeforeDue: number;
-    overdueLateFeePerDay: number;
-    requiredKycDocTypes: ('Aadhaar Card' | 'PAN Card' | 'Address Proof' | 'Doctor Prescription')[];
+    reminderDaysBeforeDue: number;
+    lateFeePerDay: number;
+    gracePeriodDays: number;
+    depositRefundDays: number;
   };
+  images: { logo: string | null; footerLogo: string | null; favicon: string | null; signatory: string | null };
+  options: {
+    states: { code: string; name: string }[];
+    gstRates: number[];
+  };
+}
+
+export type SettingsGroup = 'store' | 'shipping' | 'tax' | 'rental';
+export type SettingsImage = 'logo' | 'footerLogo' | 'favicon' | 'signatory';
+
+export interface PincodeSummary {
+  total: number;
+  active: number;
+  codAvailable: number;
+  lastUpdatedAt: string | null;
+  restricted: boolean;
+}
+
+export interface PincodeRow {
+  pincode: string;
+  city: string;
+  state: string;
+  codAvailable: boolean;
+  deliveryDays: string;
+  active: boolean;
+}
+
+export interface PincodeImportResult {
+  mode: 'merge' | 'replace';
+  imported: number;
+  skipped: number;
+  errors: { line: number; message: string }[];
+  before: number;
+  after: number;
+  summary: PincodeSummary;
+}
+
+export interface NotificationLogRow {
+  id: string;
+  event: string;
+  channel: 'sms' | 'whatsapp' | 'email';
+  recipient: string;
+  status: 'queued' | 'sent' | 'failed';
+  error: string | null;
+  at: string;
 }
 
 // --- STAFF, ROLES & ACTIVITY LOG ---

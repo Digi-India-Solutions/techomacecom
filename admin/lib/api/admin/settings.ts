@@ -1,136 +1,132 @@
-import type { AdminSettings } from '@/types/admin';
-import { mockDelay } from './client';
-import { PRODUCT_IMAGES } from './mockData';
+import type {
+  AdminSettings,
+  NotificationChannelStatus,
+  NotificationLogRow,
+  NotificationTemplate,
+  PincodeImportResult,
+  PincodeRow,
+  PincodeSummary,
+  SettingsGroup,
+  SettingsImage,
+} from '@/types/admin';
+import { adminDelete, adminFetch, adminGet, adminPost, adminPut, getApiBaseUrl, type ListMeta } from './client';
 
-let settingsStore: AdminSettings = {
-  store: {
-    storeName: 'Buy Denmed Healthcare Pvt Ltd',
-    logoUrl: PRODUCT_IMAGES.oxygenConcentrator,
-    faviconUrl: PRODUCT_IMAGES.oxygenConcentrator,
-    supportPhone: '+91 11 4089 2210',
-    salesPhone: '+91 98110 42100',
-    supportEmail: 'care@buydenmed.in',
-    whatsappNumber: '+91 98110 42100',
-    address: 'Plot B-114, Okhla Industrial Area Phase II, New Delhi 110020',
-    gstin: '07AABCB8129D1Z4',
-    instagramUrl: 'https://instagram.com/buydenmed',
-    linkedinUrl: 'https://linkedin.com/company/buydenmed',
-    youtubeUrl: 'https://youtube.com/@buydenmed',
-  },
-  shipping: {
-    flatShippingCharge: 250,
-    freeShippingAbove: 10000,
-    codEnabled: true,
-    codMaxOrderValue: 50000,
-    codCharge: 150,
-    serviceablePincodesCount: 19420,
-    shiprocketEmail: 'logistics@buydenmed.in',
-    shiprocketApiTokenMasked: 'sr_live_••••••••••••••••8f4a',
-  },
-  payments: {
-    razorpayKeyId: 'rzp_live_BDM99281740xK',
-    razorpayKeySecretMasked: '••••••••••••••••••••••••91a2',
-    mode: 'live',
-    emiEnabledGlobally: true,
-    minOrderForEmi: 10000,
-  },
-  taxInvoice: {
-    gstEnabled: true,
-    defaultStateCode: '07 - Delhi',
-    invoicePrefix: 'BDM/26-27/',
-    nextInvoiceNumber: 8842,
-    footerTerms:
-      '1. Subject to New Delhi jurisdiction. 2. Manufacturer warranty applies per serial number. 3. Input Tax Credit available for valid B2B GSTIN.',
-    signatoryImageUrl: '',
-  },
-  notifications: [
-    {
-      eventKey: 'order_placed',
-      label: 'Order Placed',
-      smsEnabled: true,
-      whatsappEnabled: true,
-      emailEnabled: true,
-      template: 'Hi {{customer_name}}, your Buy Denmed order {{order_number}} of ₹{{total}} is confirmed!',
-      variables: ['{{customer_name}}', '{{order_number}}', '{{total}}'],
-    },
-    {
-      eventKey: 'order_shipped',
-      label: 'Order Shipped',
-      smsEnabled: true,
-      whatsappEnabled: true,
-      emailEnabled: true,
-      template: 'Order {{order_number}} shipped via {{courier}}. Track AWB {{awb}}: {{tracking_url}}',
-      variables: ['{{order_number}}', '{{courier}}', '{{awb}}', '{{tracking_url}}'],
-    },
-    {
-      eventKey: 'order_delivered',
-      label: 'Order Delivered',
-      smsEnabled: false,
-      whatsappEnabled: true,
-      emailEnabled: true,
-      template: 'Your Buy Denmed order {{order_number}} has been delivered. Download your GST invoice from My Orders.',
-      variables: ['{{customer_name}}', '{{order_number}}'],
-    },
-    {
-      eventKey: 'rental_approved',
-      label: 'Rental Approved',
-      smsEnabled: true,
-      whatsappEnabled: true,
-      emailEnabled: true,
-      template: 'KYC approved for rental {{rental_number}} ({{product_name}}). Unit {{serial_number}} will dispatch shortly.',
-      variables: ['{{rental_number}}', '{{product_name}}', '{{serial_number}}'],
-    },
-    {
-      eventKey: 'rental_due_reminder',
-      label: 'Rental Due Reminder',
-      smsEnabled: true,
-      whatsappEnabled: true,
-      emailEnabled: false,
-      template: 'Reminder: Your rental {{rental_number}} is due on {{end_date}}. Reply EXTEND to renew or schedule pickup.',
-      variables: ['{{rental_number}}', '{{end_date}}', '{{customer_name}}'],
-    },
-    {
-      eventKey: 'rental_overdue',
-      label: 'Rental Overdue Alert',
-      smsEnabled: true,
-      whatsappEnabled: true,
-      emailEnabled: true,
-      template: 'Urgent: Rental {{rental_number}} is overdue since {{end_date}}. Late fee ₹{{late_fee}}/day applies.',
-      variables: ['{{rental_number}}', '{{end_date}}', '{{late_fee}}'],
-    },
-    {
-      eventKey: 'deposit_refunded',
-      label: 'Deposit Refunded',
-      smsEnabled: true,
-      whatsappEnabled: true,
-      emailEnabled: true,
-      template: 'Security deposit refund of ₹{{refund_amount}} for {{rental_number}} processed (Ref: {{reference}}).',
-      variables: ['{{rental_number}}', '{{refund_amount}}', '{{reference}}'],
-    },
-    {
-      eventKey: 'enquiry_received',
-      label: 'Enquiry Received',
-      smsEnabled: false,
-      whatsappEnabled: true,
-      emailEnabled: true,
-      template: 'Thanks {{customer_name}}! Our specialist received enquiry {{enquiry_number}} and will call within 2 hours.',
-      variables: ['{{customer_name}}', '{{enquiry_number}}'],
-    },
-  ],
-  rental: {
-    defaultReminderDaysBeforeDue: 3,
-    overdueLateFeePerDay: 250,
-    requiredKycDocTypes: ['Aadhaar Card', 'Address Proof', 'Doctor Prescription'],
-  },
+/**
+ * Settings — backend/src/modules/settings (/api/v1/admin/settings/*).
+ * Store, Shipping, Tax & Invoice and Rental are saved one tab at a time; the storefront
+ * reads the public part from /api/v1/settings/public.
+ */
+
+export const getAdminSettings = async (): Promise<AdminSettings> => {
+  try {
+    return await adminGet<AdminSettings>('/admin/settings');
+  } catch (err) {
+    try {
+      const pubRes = await fetch(`${getApiBaseUrl()}/settings/public`).then((r) => r.json());
+      if (pubRes?.success && pubRes.data) {
+        return {
+          store: {
+            ...pubRes.data.store,
+            logoPath: '',
+            footerLogoPath: '',
+            faviconPath: '',
+            supportOpenTime: pubRes.data.store.supportHours?.open || '09:00',
+            supportCloseTime: pubRes.data.store.supportHours?.close || '19:30',
+            openOnSunday: pubRes.data.store.supportHours?.openOnSunday || false,
+            instagramUrl: pubRes.data.store.social?.instagram || '',
+            facebookUrl: pubRes.data.store.social?.facebook || '',
+            linkedinUrl: pubRes.data.store.social?.linkedin || '',
+            youtubeUrl: pubRes.data.store.social?.youtube || '',
+            twitterUrl: pubRes.data.store.social?.twitter || '',
+          },
+          shipping: pubRes.data.shipping,
+          tax: {
+            ...pubRes.data.tax,
+            invoicePrefix: 'BDM/26-27/',
+            nextInvoiceNumber: 1,
+            invoiceNumberDigits: 4,
+            footerTerms: pubRes.data.tax.invoiceFooterTerms || '',
+            signatoryPath: '',
+          },
+          rental: pubRes.data.rental,
+          images: {
+            logo: pubRes.data.store.logoUrl,
+            footerLogo: pubRes.data.store.footerLogoUrl,
+            favicon: pubRes.data.store.faviconUrl,
+            signatory: pubRes.data.tax.signatoryUrl,
+          },
+          options: {
+            states: [{ code: pubRes.data.tax.dispatchStateCode, name: pubRes.data.tax.dispatchState }],
+            gstRates: [0, 5, 12, 18, 28],
+          },
+        } as AdminSettings;
+      }
+    } catch {
+      // Fallback failed, throw original error
+    }
+    throw err;
+  }
 };
 
-export async function getAdminSettings(): Promise<AdminSettings> {
-  await mockDelay(110);
-  return structuredClone(settingsStore);
+/** Saves one tab. Returns every tab again plus which fields changed. */
+export const saveSettingsGroup = <G extends SettingsGroup>(group: G, values: AdminSettings[G]) =>
+  adminPut<AdminSettings & { changed: string[]; message: string }>(`/admin/settings/${group}`, values);
+
+export async function uploadSettingsImage(name: SettingsImage, file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  return adminPut<{ name: SettingsImage; path: string; url: string; width: number; height: number; bytes: number }>(
+    `/admin/settings/images/${name}`,
+    form
+  );
 }
 
-export async function saveAdminSettings(next: AdminSettings): Promise<AdminSettings> {
-  await mockDelay(180);
-  settingsStore = structuredClone(next);
-  return structuredClone(settingsStore);
+export const removeSettingsImage = (name: SettingsImage) => adminDelete<{ message: string }>(`/admin/settings/images/${name}`);
+
+// ---- Serviceable PIN codes ----
+
+export const getPincodeSummary = () => adminGet<PincodeSummary>('/admin/settings/pincodes/summary');
+
+export async function listPincodes(q = '', page = 1, limit = 20): Promise<{ rows: PincodeRow[]; meta?: ListMeta }> {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit), ...(q ? { q } : {}) });
+  const { data, meta } = await adminFetch<PincodeRow[]>(`/admin/settings/pincodes?${params}`);
+  return { rows: data, meta };
 }
+
+export async function importPincodesCsv(file: File, mode: 'merge' | 'replace') {
+  const form = new FormData();
+  form.append('mode', mode);
+  form.append('file', file);
+  return adminPost<PincodeImportResult>('/admin/settings/pincodes/import', form);
+}
+
+export const clearPincodes = () => adminDelete<{ removed: number; summary: PincodeSummary }>('/admin/settings/pincodes');
+
+/** Downloads the current list as CSV (uses the session cookie). */
+export async function downloadPincodesCsv() {
+  const res = await fetch(`${getApiBaseUrl()}/admin/settings/pincodes/export`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Could not download the PIN code list');
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: 'serviceable-pincodes.csv' });
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---- Notifications ----
+
+export const getNotificationTemplates = () =>
+  adminGet<{ events: NotificationTemplate[]; channels: NotificationChannelStatus }>('/admin/settings/notifications');
+
+export const saveNotificationTemplates = (events: NotificationTemplate[]) =>
+  adminPut<{ events: NotificationTemplate[]; channels: NotificationChannelStatus; changed: string[]; message: string }>(
+    '/admin/settings/notifications',
+    { events: events.map(({ preview: _preview, label: _label, group: _group, variables: _vars, ...rest }) => rest) }
+  );
+
+export const sendTestNotification = (event: string, channel: 'email' | 'sms' | 'whatsapp') =>
+  adminPost<{ channel: string; recipient: string; status: 'sent' | 'failed'; error?: string }>(
+    `/admin/settings/notifications/${event}/test`,
+    { channel }
+  );
+
+export const getNotificationLogs = () => adminGet<NotificationLogRow[]>('/admin/settings/notifications/logs');

@@ -156,11 +156,10 @@ export const productSchema = z
         plans: z.array(rentalPlanSchema).max(3).optional().default([]),
         securityDeposit: amountOrZero,
         deliveryPickupCharge: amountOrZero,
-        kycRequired: z.boolean().optional().default(true),
         prescriptionRequired: z.boolean().optional().default(false),
       })
       .optional()
-      .default({ enabled: false, plans: [], securityDeposit: 0n, deliveryPickupCharge: 0n, kycRequired: true, prescriptionRequired: false }),
+      .default({ enabled: false, plans: [], securityDeposit: 0n, deliveryPickupCharge: 0n, prescriptionRequired: false }),
 
     seoTitle: optionalText(200),
     seoDescription: optionalText(320),

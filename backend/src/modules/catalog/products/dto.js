@@ -70,7 +70,6 @@ function rentalSettings(product) {
     plans,
     securityDepositPaise: first?.security_deposit_paise ?? 0n,
     deliveryPickupPaise: first?.delivery_pickup_paise ?? 0n,
-    kycRequired: first?.kyc_required ?? true,
     prescriptionRequired: first?.prescription_required ?? false,
   };
 }
@@ -158,7 +157,6 @@ export function toAdminProduct(product, categoryPath = "") {
       })),
       securityDeposit: paiseToRupees(rental.securityDepositPaise),
       deliveryPickupCharge: paiseToRupees(rental.deliveryPickupPaise),
-      kycRequired: rental.kycRequired,
       prescriptionRequired: rental.prescriptionRequired,
     },
     seoTitle: product.meta_title || "",
@@ -252,7 +250,6 @@ export function toStorefrontProduct(product, category, { detail = false } = {}) 
     })),
     securityDeposit: activePlans.length ? paiseToRupees(rental.securityDepositPaise) : undefined,
     deliveryPickupCharge: activePlans.length ? paiseToRupees(rental.deliveryPickupPaise) : undefined,
-    rentalKycRequired: activePlans.length ? rental.kycRequired : undefined,
     rentalPrescriptionRequired: activePlans.length ? rental.prescriptionRequired : undefined,
     images: detail ? images : images.slice(0, 2),
     thumbnail,

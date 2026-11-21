@@ -3,8 +3,8 @@ import { Metadata } from 'next';
 import RentalCheckoutClient from '@/components/rental/RentalCheckoutClient';
 
 export const metadata: Metadata = {
-  title: 'Rental Booking & KYC Verification | Buy Denmed',
-  description: 'Complete your medical equipment rental booking with verified KYC and secure Razorpay payment.'
+  title: 'Rental Booking & Payment | Buy Denmed',
+  description: 'Complete your medical equipment rental booking with secure Razorpay payment.'
 };
 
 export default function RentalCheckoutPage() {

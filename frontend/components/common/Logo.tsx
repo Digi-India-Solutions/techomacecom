@@ -1,6 +1,9 @@
+'use client';
+
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useSiteSettings } from '@/lib/settings/store';
 
 interface LogoProps {
   variant?: 'light' | 'dark';
@@ -9,6 +12,8 @@ interface LogoProps {
   centerWordmark?: boolean;
   showTagline?: boolean;
   className?: string;
+  /** footer uses Settings → Store → Footer logo (falls back to the header logo) */
+  placement?: 'header' | 'footer';
 }
 
 export const Logo: React.FC<LogoProps> = ({
@@ -16,9 +21,14 @@ export const Logo: React.FC<LogoProps> = ({
   size = 'md',
   showTagline = true,
   centerWordmark = false,
-  className = ''
+  className = '',
+  placement = 'header'
 }) => {
   const isDark = variant === 'dark';
+  const { store } = useSiteSettings();
+  // Uploaded in admin → Settings → Store; otherwise the bundled logo
+  const uploaded = placement === 'footer' ? store.footerLogoUrl : store.logoUrl;
+  const src = uploaded || '/assets/aistudio/logo_transparent.png';
 
   const heightClasses =
     size === 'sm'
@@ -33,12 +43,12 @@ export const Logo: React.FC<LogoProps> = ({
     <Link
       href="/"
       className={`inline-flex items-center gap-3 select-none group transition-opacity hover:opacity-95 shrink-0 whitespace-nowrap ${className}`}
-      title="Buy Denmed - Medical & Dental Direct"
+      title={`${store.brandName} - ${store.tagline}`}
     >
-      <div className={`relative ${heightClasses} w-auto flex items-center shrink-0 ${centerWordmark ? '-translate-y-[14%]' : ''}`}>
+      <div className={`relative ${heightClasses} w-auto flex items-center shrink-0 ${centerWordmark && !uploaded ? '-translate-y-[14%]' : ''}`}>
         <Image
-          src="/assets/aistudio/logo_transparent.png"
-          alt="Buy Denmed Logo"
+          src={src}
+          alt={`${store.brandName} logo`}
           width={220}
           height={44}
           priority
@@ -54,7 +64,7 @@ export const Logo: React.FC<LogoProps> = ({
               : 'text-[#5B6B82] border-[#DCE6F2]'
           }`}
         >
-          Medical &amp; Dental Direct
+          {store.tagline}
         </span>
       )}
     </Link>

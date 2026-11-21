@@ -5,9 +5,12 @@ import { X, MessageCircle } from 'lucide-react';
 import { useUserStore } from '@/lib/store';
 import Logo from '@/components/common/Logo';
 import CustomerAuthForm from './CustomerAuthForm';
+import { useSiteSettings } from '@/lib/settings/store';
+import { whatsappUrl } from '@/lib/settings/format';
 
 /** Global sign-in / sign-up modal (opened via useUserStore.setAuthModalOpen). */
 export const AuthModal: React.FC = () => {
+  const { store } = useSiteSettings();
   const { isAuthModalOpen, setAuthModalOpen } = useUserStore();
 
   if (!isAuthModalOpen) return null;
@@ -45,7 +48,7 @@ export const AuthModal: React.FC = () => {
 
           <div className="mt-5 pt-4 border-t border-[#DCE6F2] text-center space-y-2">
             <a
-              href="https://wa.me/919811234567?text=Hi%20Buy%20Denmed,%20I%20need%20assistance%20logging%20in"
+              href={whatsappUrl(store, 'Hi Buy Denmed, I need assistance logging in')}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-[#5B6B82] hover:text-[#16A34A] transition-colors font-medium"

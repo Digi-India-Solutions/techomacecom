@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Product, Variant, CartItem, User, Address, Coupon, Rental, RentalPlan, RentalPayment } from '@/types';
 import { MOCK_RENTALS } from '@/lib/mock/data';
+import { getSiteSettingsSnapshot } from '@/lib/settings/store';
 
 // =======================
 // CART STORE
@@ -19,8 +20,12 @@ interface CartState {
   setIsCartOpen: (open: boolean) => void;
   getSubtotal: () => number;
   getDiscount: () => number;
+  /** Settings → Shipping: flat charge below the free-shipping amount */
   getShippingFee: () => number;
+  /** Settings → Tax: GST in the cart — part of the price when prices include GST, else added on top */
   getGstAmount: () => number;
+  /** Rupees still needed for free shipping (0 = already free) */
+  getAmountToFreeShipping: () => number;
   getTotal: () => number;
   getItemCount: () => number;
 }
@@ -132,24 +137,41 @@ export const useCartStore = create<CartState>()(
 
       getShippingFee: () => {
         const subtotal = get().getSubtotal();
-        if (subtotal === 0 || subtotal >= 1999) return 0;
-        return 149; // Flat standard shipping under ₹1,999
+        const { shipping } = getSiteSettingsSnapshot();
+        if (subtotal === 0) return 0;
+        if (shipping.freeShippingAbove > 0 && subtotal >= shipping.freeShippingAbove) return 0;
+        return shipping.flatShippingCharge;
+      },
+
+      getAmountToFreeShipping: () => {
+        const { shipping } = getSiteSettingsSnapshot();
+        if (shipping.freeShippingAbove <= 0 || shipping.flatShippingCharge <= 0) return 0;
+        return Math.max(0, shipping.freeShippingAbove - get().getSubtotal());
       },
 
       getGstAmount: () => {
+        const { tax } = getSiteSettingsSnapshot();
+        if (!tax.gstEnabled) return 0;
         const subtotal = get().getSubtotal();
-        const discount = get().getDiscount();
-        const taxable = Math.max(0, subtotal - discount);
-        // Weighted composite average medical/dental equipment GST is ~12%
-        return Math.round(taxable * 0.12);
+        if (subtotal <= 0) return 0;
+        // Spread a coupon over the lines in proportion, then use each product's own GST rate
+        const afterDiscount = Math.max(0, subtotal - get().getDiscount()) / subtotal;
+        const gst = get().items.reduce((sum, item) => {
+          const line = item.price * item.quantity * afterDiscount;
+          const rate = typeof item.product?.gstRate === 'number' ? item.product.gstRate : tax.defaultGstRate;
+          return sum + (tax.pricesIncludeGst ? (line * rate) / (100 + rate) : (line * rate) / 100);
+        }, 0);
+        return Math.round(gst);
       },
 
       getTotal: () => {
         const subtotal = get().getSubtotal();
         const discount = get().getDiscount();
         const shipping = get().getShippingFee();
-        const gst = get().getGstAmount();
-        return Math.max(0, subtotal - discount + shipping + gst);
+        const { tax } = getSiteSettingsSnapshot();
+        // GST-inclusive prices already contain the tax; otherwise it is added here
+        const gstOnTop = tax.gstEnabled && !tax.pricesIncludeGst ? get().getGstAmount() : 0;
+        return Math.max(0, subtotal - discount + shipping + gstOnTop);
       },
 
       getItemCount: () => {
@@ -341,12 +363,6 @@ export interface RentalDraft {
   gstAmount: number;
   totalPayable: number;
   address?: Address;
-  kycDocuments?: {
-    idProofFront?: string;
-    idProofBack?: string;
-    addressProof?: string;
-    doctorPrescription?: string;
-  };
 }
 
 interface RentalState {
@@ -354,7 +370,6 @@ interface RentalState {
   draft: RentalDraft | null;
   setDraft: (draft: RentalDraft) => void;
   updateDraftAddress: (address: Address) => void;
-  updateDraftKyc: (kyc: RentalDraft['kycDocuments']) => void;
   clearDraft: () => void;
   addRental: (rental: Rental) => void;
   extendRental: (rentalId: string, extraDuration: number, extraRent: number, payment: RentalPayment) => void;
@@ -372,12 +387,6 @@ export const useRentalStore = create<RentalState>()(
       updateDraftAddress: (address) =>
         set((state) => ({
           draft: state.draft ? { ...state.draft, address } : null
-        })),
-      updateDraftKyc: (kycDocuments) =>
-        set((state) => ({
-          draft: state.draft
-            ? { ...state.draft, kycDocuments: { ...state.draft.kycDocuments, ...kycDocuments } }
-            : null
         })),
       clearDraft: () => set({ draft: null }),
 

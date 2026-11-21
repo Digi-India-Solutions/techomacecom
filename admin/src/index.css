@@ -40,3 +40,14 @@
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* Settings page: hide the up/down spinner arrows on number inputs */
+.settings-form input[type='number']::-webkit-outer-spin-button,
+.settings-form input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.settings-form input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

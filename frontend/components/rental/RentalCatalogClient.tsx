@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { useToastStore } from '@/lib/store';
 import SkeletonImage from '@/components/common/SkeletonImage';
+import { useSiteSettings } from '@/lib/settings/store';
+import { whatsappUrl } from '@/lib/settings/format';
 
 interface RentalCatalogClientProps {
   products: Product[];
@@ -45,10 +47,6 @@ const FAQS = [
   {
     q: 'How does the refundable security deposit work?',
     a: 'Every rental item requires a one-time refundable security deposit. When you schedule a return and our logistics team inspects the equipment for operational intactness, 100% of your deposit is credited back to your original payment method (bank account or card) within 48 to 72 business hours.'
-  },
-  {
-    q: 'What KYC documents are required to rent medical equipment?',
-    a: 'Under Indian medical safety norms, we require a government ID proof (Aadhaar Card, Passport, or Voter ID), an address proof (electricity bill, rent agreement, or hospital registration), and a doctor’s prescription (mandatory for high-pressure oxygen, CPAP, and BiPAP devices).'
   },
   {
     q: 'How are equipment sanitized before delivery?',
@@ -69,6 +67,9 @@ const FAQS = [
 ];
 
 export default function RentalCatalogClient({ products }: RentalCatalogClientProps) {
+  const { store, rental: rentalRules } = useSiteSettings();
+  // Settings → Rental → deposit refund promise
+  const refundWindow = `${rentalRules.depositRefundDays} day${rentalRules.depositRefundDays === 1 ? '' : 's'}`;
   const { addToast } = useToastStore();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -169,7 +170,7 @@ export default function RentalCatalogClient({ products }: RentalCatalogClientPro
             </button>
 
             <a
-              href="https://wa.me/919811234567?text=Hello%20Buy%20Denmed,%20I%20would%20like%20to%20inquire%20about%20medical%20equipment%20rental."
+              href={whatsappUrl(store, 'Hello Buy Denmed, I would like to inquire about medical equipment rental.')}
               target="_blank"
               rel="noopener noreferrer"
               className="px-5 py-3.5 bg-[#25D366] hover:bg-[#20BD5A] text-white font-semibold text-xs sm:text-sm rounded-xl transition-all flex items-center gap-2"
@@ -212,7 +213,7 @@ export default function RentalCatalogClient({ products }: RentalCatalogClientPro
           {
             icon: RotateCcw,
             title: 'Refundable Deposit',
-            desc: '100% returned to your account within 48h of return'
+            desc: `100% returned to your account within ${refundWindow} of return`
           },
           {
             icon: Truck,
@@ -321,11 +322,6 @@ export default function RentalCatalogClient({ products }: RentalCatalogClientPro
                       <span className="bg-[#1D5FAF] text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow-xs font-heading">
                         Available on Rent
                       </span>
-                      {product.rentalKycRequired && (
-                        <span className="bg-[#0B2545] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded font-heading">
-                          KYC Required
-                        </span>
-                      )}
                     </div>
 
                     <div className="relative w-full h-full">
@@ -430,8 +426,8 @@ export default function RentalCatalogClient({ products }: RentalCatalogClientPro
             },
             {
               step: '03',
-              title: 'Upload KYC & Pay',
-              desc: 'Provide basic ID and clinic/address proof, then pay rent + refundable deposit securely via Razorpay.',
+              title: 'Confirm & Pay',
+              desc: 'Add your delivery address, then pay rent + refundable deposit securely via Razorpay.',
               icon: FileCheck
             },
             {
@@ -471,7 +467,7 @@ export default function RentalCatalogClient({ products }: RentalCatalogClientPro
             Frequently Asked Rental Questions
           </h2>
           <p className="text-xs text-[#5B6B82] font-body">
-            Everything you need to know about deposits, KYC, sanitization, and returns
+            Everything you need to know about deposits, sanitization, and returns
           </p>
         </div>
 
@@ -527,13 +523,13 @@ export default function RentalCatalogClient({ products }: RentalCatalogClientPro
             <span>Request Instant Callback</span>
           </button>
           <a
-            href="https://wa.me/919811234567?text=Hello%20Buy%20Denmed,%20I%20urgently%20need%20medical%20equipment%20on%20rent."
+            href={whatsappUrl(store, 'Hello Buy Denmed, I urgently need medical equipment on rent.')}
             target="_blank"
             rel="noopener noreferrer"
             className="px-5 py-3 bg-[#25D366] hover:bg-[#20BD5A] text-white font-bold text-xs sm:text-sm rounded-xl transition-all flex items-center gap-2 font-heading"
           >
             <MessageCircle className="w-4 h-4" />
-            <span>WhatsApp (+91 98112 34567)</span>
+            <span>WhatsApp ({store.whatsappNumber})</span>
           </a>
         </div>
       </section>

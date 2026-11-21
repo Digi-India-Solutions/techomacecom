@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { HelpCircle, ChevronDown, ShieldCheck, Truck, CreditCard, Bed } from 'lucide-react';
+import { useSiteSettings } from '@/lib/settings/store';
 
 interface FaqItem {
   q: string;
@@ -44,11 +45,12 @@ const FAQS: FaqItem[] = [
   {
     category: 'Warranties & AMC',
     q: 'How do warranty claims and repairs work?',
-    a: 'All equipment is backed by comprehensive manufacturer warranties ranging from 1 to 3 years. Buy Denmed also coordinates certified on-site service engineers for major equipment. In case of issues, contact our support desk at +91 98112 34567.'
+    a: 'All equipment is backed by comprehensive manufacturer warranties ranging from 1 to 3 years. Buy Denmed also coordinates certified on-site service engineers for major equipment. In case of issues, call our support desk using the number at the bottom of this page.'
   }
 ];
 
 export default function FaqPage() {
+  const { store } = useSiteSettings();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
   const [selectedCat, setSelectedCat] = useState<string>('All');
 
@@ -133,10 +135,10 @@ export default function FaqPage() {
             Contact Support Desk
           </Link>
           <a
-            href="tel:+919811234567"
+            href={store.supportPhoneHref}
             className="px-5 py-2.5 bg-[#1D5FAF] hover:bg-[#174E90] text-white text-xs font-bold rounded-xl"
           >
-            Call: +91 98112 34567
+            Call: {store.supportPhone}
           </a>
         </div>
       </div>
