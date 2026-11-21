@@ -100,7 +100,7 @@ function describeError(error) {
 async function start() {
   try {
     await connectDB();
-    const server = app.listen(PORT, () => {
+    const server = app.listen(PORT, '127.0.0.1', () => {
       console.log(`Server running on http://localhost:${PORT} (${env.nodeEnv})`);
       console.log(`API base: http://localhost:${PORT}/api/v1`);
       console.log(`CORS allowed origins: ${allowedOrigins.join(", ") || "none"}`);

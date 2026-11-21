@@ -51,6 +51,6 @@
   "devDependencies": {
     "cross-env": "^10.1.0",
     "nodemon": "^3.1.14",
-    "prisma": "^8.0.0-rc.34"
+    "prisma": "6.19.3"
   }
 }
