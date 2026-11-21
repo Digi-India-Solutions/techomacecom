@@ -38,15 +38,6 @@ export const WhatsAppButton: React.FC = () => {
     const t = setInterval(tick, 60_000);
     return () => clearInterval(t);
   }, [hours]);
-    const timer = setTimeout(() => {
-      setOnline(isSupportOnline());
-    }, 0);
-    const t = setInterval(() => setOnline(isSupportOnline()), 60_000);
-    return () => {
-      clearTimeout(timer);
-      clearInterval(t);
-    };
-  }, []);
 
   // Close on Escape / outside click; focus the input when opened
   useEffect(() => {
@@ -174,11 +165,13 @@ export const WhatsAppButton: React.FC = () => {
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Type your requirement…"
                 className="flex-1 min-w-0 text-[13px] px-3.5 py-2.5 bg-[#F3F6FA] border border-transparent text-[#12263F] rounded-full focus:outline-none focus:bg-white focus:border-[#25D366] transition-colors"
+                suppressHydrationWarning
               />
               <button
                 type="submit"
                 className="w-10 h-10 shrink-0 rounded-full bg-[#25D366] hover:bg-[#1EBE5A] text-white flex items-center justify-center transition-colors cursor-pointer"
                 aria-label="Send on WhatsApp"
+                suppressHydrationWarning
               >
                 <Send className="w-4 h-4 -ml-0.5" />
               </button>
@@ -197,6 +190,7 @@ export const WhatsAppButton: React.FC = () => {
         aria-expanded={isOpen}
         aria-label={isOpen ? 'Close chat' : 'Need advice? Chat with us on WhatsApp'}
         className="pointer-events-auto group flex items-center bg-white text-[#12263F] p-1.5 rounded-full border border-[#DCE6F2] shadow-[0_10px_30px_-8px_rgba(11,37,69,0.35)] hover:shadow-[0_14px_36px_-8px_rgba(11,37,69,0.45)] hover:-translate-y-0.5 transition-[box-shadow,transform] duration-300 cursor-pointer"
+        suppressHydrationWarning
       >
         <span className="relative w-11 h-11 rounded-full bg-[#25D366] text-white flex items-center justify-center shrink-0">
           {!isOpen && <span className="absolute inset-0 rounded-full bg-[#25D366] opacity-40 animate-ping [animation-duration:2.5s]" />}

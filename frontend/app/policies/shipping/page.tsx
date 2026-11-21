@@ -20,10 +20,10 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ShippingPolicyPage() {
-  const page = await getCmsPage('shipping-policy');
-
-export default async function ShippingPolicyPage() {
-  const { shipping } = await getSiteSettings();
+  const [page, { shipping }] = await Promise.all([
+    getCmsPage('shipping-policy'),
+    getSiteSettings(),
+  ]);
   return (
     <div className="max-w-[1100px] mx-auto px-4 sm:px-6 py-10 space-y-8">
       <div className="bg-white p-8 rounded-3xl border border-[#DCE6F2] shadow-xs space-y-4">
