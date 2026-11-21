@@ -33,7 +33,7 @@ datasource db {
 model AdminUser {
   id                        BigInt    @id @default(autoincrement())
   name                      String    @db.VarChar(120)
-  email                     String    @unique @db.Citext
+  email                     String    @unique @db.VarChar(255)
   mobile                    String?   @db.VarChar(15)
   password_hash             String?
   role_id                   BigInt
@@ -136,7 +136,7 @@ model OtpRequest {
 /// email address whose owner actually received the code.
 model EmailOtp {
   id                      BigInt    @id @default(autoincrement())
-  email                   String    @db.Citext
+  email                   String    @db.VarChar(255)
   purpose                 String    @default("signup") @db.VarChar(20) // signup
   otp_hash                String    @db.VarChar(64)
   expires_at              DateTime  @db.Timestamptz(6)
@@ -244,7 +244,7 @@ model Customer {
   // Document: NOT NULL. Nullable here so "Continue with Google" can create an
   // account before a mobile is added; unique when present.
   mobile                      String?   @unique @db.VarChar(15)
-  email                       String?   @unique @db.Citext
+  email                       String?   @unique @db.VarChar(255)
   status                      String    @default("active") // active | blocked
   customer_type               String    @default("individual") // + added: doctor | clinic_admin | procurement | individual
   google_id                   String?   @unique @db.VarChar(64) // + added: Google "sub"
@@ -1131,7 +1131,7 @@ model Enquiry {
   type              String // sleep_test | bulk | contact
   name              String    @db.VarChar(120)
   mobile            String    @db.VarChar(15)
-  email             String?   @db.Citext
+  email             String?   @db.VarChar(255)
   city              String?   @db.VarChar(80)
   details           Json? // test_type, preferred_date, products, quantity, organisation
   message           String?

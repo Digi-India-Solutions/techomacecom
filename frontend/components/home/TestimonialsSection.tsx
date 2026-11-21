@@ -5,7 +5,11 @@ import { Star, ShieldCheck } from 'lucide-react';
 import CardCarousel, { TESTIMONIAL_SLIDE } from '@/components/common/CardCarousel';
 import { MOCK_REVIEWS } from '@/lib/mock/data';
 
-export const TestimonialsSection: React.FC = () => {
+interface TestimonialsSectionProps {
+  title?: string;
+}
+
+export const TestimonialsSection: React.FC<TestimonialsSectionProps> = ({ title = 'What Doctors & Patients Say' }) => {
 
   return (
     <section className="my-10 sm:my-14">
@@ -13,7 +17,7 @@ export const TestimonialsSection: React.FC = () => {
         <div className="flex items-end justify-between mb-5 sm:mb-6">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-[#12263F] font-heading relative inline-block">
-              What Doctors &amp; Patients Say
+              {title || 'What Doctors & Patients Say'}
               <span className="absolute bottom-[-4px] left-0 w-10 h-[3px] bg-[#1D5FAF] rounded-full" />
             </h2>
             <p className="text-xs sm:text-sm text-[#5B6B82] font-body mt-2">

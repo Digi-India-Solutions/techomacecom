@@ -30,3 +30,8 @@ export async function requestReturn(req, res) {
   const result = await returnsService.createCustomerReturn(req.customer.id, req.params.id, req.body);
   return ok(res, result, { status: 201 });
 }
+
+export async function verifyPayment(req, res) {
+  const order = await service.verifyCustomerOrderPayment(req.customer.id, req.params.id, req.body);
+  return ok(res, order);
+}

@@ -366,7 +366,6 @@ export function CategoriesPage() {
               </div>
               <p className="text-xs text-[#5B6B82] truncate">
                 /{node.slug} · {node.showInMenu ? 'In Menu' : 'Hidden from Menu'}
-                {node.showOnHomepage ? ' · Homepage Featured' : ''}
               </p>
             </div>
           </div>
@@ -461,7 +460,7 @@ export function CategoriesPage() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         title={form.id ? `Edit Category: ${form.name}` : 'Create Category'}
-        subtitle="Configure hierarchy, menu visibility, banners, and SEO metadata"
+        subtitle="Configure hierarchy, menu visibility, and SEO metadata"
         footer={
           <>
             <button
@@ -556,31 +555,6 @@ export function CategoriesPage() {
             {renderImagePreview('imageUrl', 'Card image')}
           </FormField>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FormField label="Desktop Banner (16:5)">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) =>
-                  handleFilePreview(e.target.files?.[0], 'desktopBannerUrl')
-                }
-                className="block w-full text-xs text-[#5B6B82] file:mr-2 file:rounded-md file:border file:border-[#DCE6F2] file:bg-[#F6F9FD] file:px-2.5 file:py-1 file:text-xs"
-              />
-              {renderImagePreview('desktopBannerUrl', 'Desktop banner')}
-            </FormField>
-            <FormField label="Mobile Banner (4:3)">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) =>
-                  handleFilePreview(e.target.files?.[0], 'mobileBannerUrl')
-                }
-                className="block w-full text-xs text-[#5B6B82] file:mr-2 file:rounded-md file:border file:border-[#DCE6F2] file:bg-[#F6F9FD] file:px-2.5 file:py-1 file:text-xs"
-              />
-              {renderImagePreview('mobileBannerUrl', 'Mobile banner')}
-            </FormField>
-          </div>
-
           <FormField label="Description">
             <textarea
               value={form.description}
@@ -608,7 +582,7 @@ export function CategoriesPage() {
               </select>
             </FormField>
 
-            <div className="space-y-2 pt-5">
+            <div className="pt-5">
               <label className="flex items-center gap-2 text-xs font-medium text-[#12263F] cursor-pointer">
                 <input
                   type="checkbox"
@@ -619,20 +593,6 @@ export function CategoriesPage() {
                   className="rounded border-[#DCE6F2] text-[#1D5FAF]"
                 />
                 Show in navigation menu
-              </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-[#12263F] cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.showOnHomepage}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      showOnHomepage: e.target.checked,
-                    }))
-                  }
-                  className="rounded border-[#DCE6F2] text-[#1D5FAF]"
-                />
-                Show on homepage
               </label>
             </div>
           </div>

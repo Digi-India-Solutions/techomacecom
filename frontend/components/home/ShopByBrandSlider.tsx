@@ -8,9 +8,10 @@ import { ChevronRight, ChevronLeft } from 'lucide-react';
 
 interface ShopByBrandSliderProps {
   brands: Brand[];
+  title?: string;
 }
 
-export const ShopByBrandSlider: React.FC<ShopByBrandSliderProps> = ({ brands }) => {
+export const ShopByBrandSlider: React.FC<ShopByBrandSliderProps> = ({ brands, title = 'Shop by Brands' }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scrollLeft = () => {
@@ -32,7 +33,7 @@ export const ShopByBrandSlider: React.FC<ShopByBrandSliderProps> = ({ brands }) 
         <div className="flex items-end justify-between mb-5 sm:mb-6">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-[#12263F] font-heading relative inline-block">
-              Shop by Brands
+              {title || 'Shop by Brands'}
               <span className="absolute bottom-[-4px] left-0 w-10 h-[3px] bg-[#1D5FAF] rounded-full" />
             </h2>
             <p className="text-xs sm:text-sm text-[#5B6B82] font-body mt-2">
@@ -73,38 +74,40 @@ export const ShopByBrandSlider: React.FC<ShopByBrandSliderProps> = ({ brands }) 
         {/* Brand tiles slider */}
         <div
           ref={scrollRef}
-          className="flex items-stretch gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 scroll-smooth no-scrollbar"
+          className="flex items-start gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 scroll-smooth no-scrollbar"
         >
           {brands.map((brand) => (
             <Link
               key={brand.id}
               href={`/brand/${brand.slug}`}
-              className="group shrink-0 w-36 sm:w-44 bg-white rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] p-3 flex flex-col items-center text-center shadow-xs hover:shadow-md transition-all duration-300 hover:-translate-y-1"
+              className="group shrink-0 w-36 sm:w-44 flex flex-col items-center text-center cursor-pointer"
             >
-              {/* Brand Logo surface */}
-              <div className="w-full h-24 sm:h-28 rounded-xl bg-white mb-2.5 flex items-center justify-center overflow-hidden group-hover:scale-105 transition-transform">
+              {/* Brand Logo Box */}
+              <div className="w-full h-24 sm:h-28 rounded-2xl bg-white border border-[#DCE6F2] group-hover:border-[#1D5FAF] p-3 flex items-center justify-center shadow-xs group-hover:shadow-md transition-all duration-300 group-hover:-translate-y-1 overflow-hidden">
                 {brand.logo || brand.logoUrl ? (
                   <div className="relative w-full h-full flex items-center justify-center">
                     <Image
                       src={brand.logoUrl || brand.logo}
                       alt={brand.name}
                       fill
-                      className="object-contain"
+                      className="object-contain transition-transform duration-300 group-hover:scale-105"
                       sizes="(max-width: 640px) 160px, 200px"
                       referrerPolicy="no-referrer"
                     />
                   </div>
                 ) : (
-                  <span className="font-heading font-bold text-sm text-[#12263F] uppercase tracking-wider truncate px-1">
-                    {brand.name.slice(0, 10)}
-                  </span>
+                  <div className="w-12 h-12 rounded-xl bg-[#EAF2FC] text-[#1D5FAF] flex items-center justify-center font-heading font-bold text-base transition-transform duration-300 group-hover:scale-110">
+                    {brand.name.slice(0, 2).toUpperCase()}
+                  </div>
                 )}
               </div>
 
-              {/* Brand Name */}
-              <h3 className="font-heading font-semibold text-xs sm:text-sm text-[#12263F] group-hover:text-[#1D5FAF] transition-colors line-clamp-1 w-full">
-                {brand.name}
-              </h3>
+              {/* Brand Name - Below the Box */}
+              <div className="w-full mt-2.5 text-center px-1">
+                <h3 className="font-heading font-bold text-xs sm:text-sm text-[#12263F] group-hover:text-[#1D5FAF] transition-colors line-clamp-1">
+                  {brand.name}
+                </h3>
+              </div>
             </Link>
           ))}
         </div>

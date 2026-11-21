@@ -6,6 +6,7 @@ import ListingPageLayout from '@/components/listing/ListingPageLayout';
 
 interface CategoryListingClientProps {
   category: Category;
+  parentCategory?: Category | null;
   initialProducts: Product[];
   brands: Brand[];
   initialSubCategory?: string;
@@ -14,6 +15,7 @@ interface CategoryListingClientProps {
 
 export const CategoryListingClient: React.FC<CategoryListingClientProps> = ({
   category,
+  parentCategory,
   initialProducts,
   brands,
   initialSubCategory,
@@ -113,6 +115,16 @@ export const CategoryListingClient: React.FC<CategoryListingClientProps> = ({
     ctaText: b.ctaText || 'Browse Catalog'
   }));
 
+  const subCategoriesToDisplay = category.subCategories && category.subCategories.length > 0
+    ? category.subCategories
+    : parentCategory?.subCategories || [];
+
+  const parentCategoryInfo = parentCategory
+    ? { name: parentCategory.name, slug: parentCategory.slug }
+    : (category.breadcrumbs && category.breadcrumbs.length > 1
+        ? { name: category.breadcrumbs[category.breadcrumbs.length - 2].name, slug: category.breadcrumbs[category.breadcrumbs.length - 2].slug }
+        : null);
+
   return (
     <ListingPageLayout
       title={category.name}
@@ -129,6 +141,9 @@ export const CategoryListingClient: React.FC<CategoryListingClientProps> = ({
       banners={pageBanners}
       products={initialProducts}
       brands={brands}
+      subCategories={subCategoriesToDisplay}
+      currentCategorySlug={category.slug}
+      parentCategory={parentCategoryInfo}
       initialSubCategory={initialSubCategory}
     />
   );

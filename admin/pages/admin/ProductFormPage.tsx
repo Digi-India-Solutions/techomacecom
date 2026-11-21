@@ -380,16 +380,28 @@ export function ProductFormPage() {
       return;
     }
 
+    const hasRentalPlans = (form.rental.plans || []).length > 0;
+    const rentOn = Boolean(form.rental.enabled || form.showAvailableOnRent) && hasRentalPlans;
+
+    const basePayload: ProductFormPayload = {
+      ...form,
+      showAvailableOnRent: rentOn,
+      rental: {
+        ...form.rental,
+        enabled: rentOn,
+      },
+    };
+
     const payloadToSave: ProductFormPayload =
       hasVariants && defaultVariant
         ? {
-            ...form,
+            ...basePayload,
             price: defaultVariant.price,
             mrp: defaultVariant.mrp,
             stock: defaultVariant.stock,
             variants: form.variants.map((v, idx) => ({ ...v, sortOrder: idx })),
           }
-        : form;
+        : basePayload;
 
     setSaving(true);
     try {
@@ -1477,6 +1489,32 @@ export function ProductFormPage() {
 
         {activeTab === 'rental' && (
           <div className="space-y-6">
+            {/* Master Switch on Rental Tab */}
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-[#1D5FAF]/30 bg-[#EAF2FC]/60 p-4">
+              <div>
+                <p className="text-sm font-semibold text-[#12263F]">Enable Rental for this Product</p>
+                <p className="mt-0.5 text-xs text-[#5B6B82]">
+                  Allows customers to rent this equipment on daily, weekly, or monthly plans. If no plans are added, rental will stay off.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.rental.enabled || form.showAvailableOnRent}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsDirty(true);
+                    setForm((prev) => ({
+                      ...prev,
+                      showAvailableOnRent: checked,
+                      rental: { ...prev.rental, enabled: checked },
+                    }));
+                  }}
+                  className="h-4 w-4 rounded border-[#DCE6F2] text-[#1D5FAF] focus:ring-[#1D5FAF]"
+                />
+              </label>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-base font-semibold text-[#12263F]">Rental Plans &amp; Terms</h3>
@@ -1487,7 +1525,7 @@ export function ProductFormPage() {
               <button
                 type="button"
                 onClick={addRentalPlan}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#174D8F] cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Add Rental Plan
@@ -1495,8 +1533,36 @@ export function ProductFormPage() {
             </div>
 
             {form.rental.plans.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[#DCE6F2] bg-[#F6F9FD] p-6 text-center text-xs text-[#5B6B82]">
-                Add at least one Daily, Weekly, or Monthly rental plan.
+              <div className="rounded-xl border border-dashed border-[#DCE6F2] bg-[#F6F9FD] p-6 text-center space-y-3">
+                <p className="text-xs text-[#5B6B82]">
+                  No rental plans configured yet. Click below to add a rental plan (e.g. Monthly rate), or turn off rental.
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={addRentalPlan}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#174D8F] cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Rental Plan
+                  </button>
+                  {(form.rental.enabled || form.showAvailableOnRent) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsDirty(true);
+                        setForm((prev) => ({
+                          ...prev,
+                          showAvailableOnRent: false,
+                          rental: { ...prev.rental, enabled: false },
+                        }));
+                      }}
+                      className="rounded-lg border border-[#DCE6F2] bg-white px-3.5 py-2 text-xs font-semibold text-[#12263F] hover:bg-[#F6F9FD] cursor-pointer"
+                    >
+                      Turn Off Rental
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="space-y-2.5">

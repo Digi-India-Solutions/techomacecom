@@ -184,10 +184,12 @@ export const productSchema = z
       ctx.addIssue({ code: "custom", path: ["variants"], message: "At least one variant must be active" });
     }
 
-    const rentOn = p.rental.enabled || p.showAvailableOnRent;
-    if (rentOn && p.rental.plans.length === 0) {
-      ctx.addIssue({ code: "custom", path: ["rental", "plans"], message: "Add at least one rental plan, or turn rent off" });
+    // If no rental plans are configured, automatically disable rent instead of blocking the save
+    if (p.rental.plans.length === 0) {
+      p.rental.enabled = false;
+      p.showAvailableOnRent = false;
     }
+    const rentOn = (p.rental.enabled || p.showAvailableOnRent) && p.rental.plans.length > 0;
     const periods = new Set();
     p.rental.plans.forEach((plan, i) => {
       if (plan.minDuration > plan.maxDuration) {

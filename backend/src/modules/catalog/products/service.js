@@ -170,7 +170,7 @@ function planVariants(data) {
 }
 
 function productColumns(data, slug) {
-  const rentOn = data.rental.enabled || data.showAvailableOnRent;
+  const rentOn = Boolean(data.rental.enabled || data.showAvailableOnRent) && (data.rental.plans || []).length > 0;
   return {
     name: data.name,
     slug,
@@ -350,7 +350,7 @@ async function replaceImagesAndSpecs(tx, productId, data) {
 
 /** One rental_plans row per period. Plans with rentals attached are deactivated, never deleted. */
 async function syncRentalPlans(tx, productId, data) {
-  const rentOn = data.rental.enabled || data.showAvailableOnRent;
+  const rentOn = Boolean(data.rental.enabled || data.showAvailableOnRent) && (data.rental.plans || []).length > 0;
   const existing = await tx.rentalPlan.findMany({ where: { product_id: productId } });
   const wanted = new Map(data.rental.plans.map((p) => [p.durationType, p]));
   const shared = {

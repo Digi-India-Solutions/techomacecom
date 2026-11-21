@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { Product, Brand, Category, PageBanner } from '@/types';
+import { Product, Brand, Category, SubCategory, PageBanner } from '@/types';
 import ProductCard from '@/components/product/ProductCard';
 import PageBannerSlider from '@/components/common/PageBannerSlider';
 import { 
@@ -14,7 +14,9 @@ import {
   RotateCcw, 
   Star, 
   Check, 
-  Search 
+  Search,
+  FolderTree,
+  Layers
 } from 'lucide-react';
 
 export interface ListingPageLayoutProps {
@@ -27,6 +29,9 @@ export interface ListingPageLayoutProps {
   products: Product[];
   brands?: Brand[];
   categories?: Category[];
+  subCategories?: SubCategory[];
+  currentCategorySlug?: string;
+  parentCategory?: { name: string; slug: string } | null;
   initialSubCategory?: string;
 }
 
@@ -40,6 +45,9 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
   products,
   brands = [],
   categories = [],
+  subCategories = [],
+  currentCategorySlug = '',
+  parentCategory = null,
   initialSubCategory = ''
 }) => {
   // Filters state
@@ -60,7 +68,7 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
 
   // Popover open states
   const [activePopover, setActivePopover] = useState<
-    'brand' | 'category' | 'price' | 'discount' | 'rating' | null
+    'subcategory' | 'brand' | 'category' | 'price' | 'discount' | 'rating' | null
   >(null);
   const [brandSearch, setBrandSearch] = useState<string>('');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState<boolean>(false);
@@ -91,7 +99,13 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
         (p) =>
           p.subCategorySlug === selectedSubCategory ||
           p.subCategory === selectedSubCategory ||
-          (p.categoryPath || []).some((c) => c.slug === selectedSubCategory)
+          p.leafCategoryId === selectedSubCategory ||
+          (p.categoryPath || []).some(
+            (c) =>
+              c.slug === selectedSubCategory ||
+              c.id === selectedSubCategory ||
+              c.name.toLowerCase() === selectedSubCategory.toLowerCase()
+          )
       );
     }
 
@@ -249,6 +263,118 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
         </div>
       </div>
 
+      {/* 2.5 SUBCATEGORIES STRIP */}
+      {subCategories && subCategories.length > 0 && (
+        <div className="bg-[#F8FAFC] border border-[#DCE6F2] rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#EAF2FC] text-[#1D5FAF] flex items-center justify-center shrink-0">
+                <Layers className="w-4.5 h-4.5 text-[#1D5FAF]" />
+              </div>
+              <div>
+                <h2 className="font-heading font-bold text-sm sm:text-base text-[#12263F]">
+                  {parentCategory ? `Subcategories in ${parentCategory.name}` : `Subcategories in ${title}`}
+                </h2>
+                <p className="text-xs text-[#5B6B82] font-body">
+                  Select a subcategory to browse specific equipment & instruments
+                </p>
+              </div>
+            </div>
+
+            <span className="text-xs font-semibold text-[#174E90] bg-[#EAF2FC] px-3 py-1 rounded-full font-heading">
+              {subCategories.length} {subCategories.length === 1 ? 'Subcategory' : 'Subcategories'}
+            </span>
+          </div>
+
+          {/* Cards Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3 pt-1">
+            {/* "All" Card */}
+            {parentCategory ? (
+              <Link
+                href={`/category/${parentCategory.slug}`}
+                className={`group p-3 rounded-xl border transition-all duration-200 flex flex-col items-center text-center cursor-pointer ${
+                  !selectedSubCategory && currentCategorySlug === parentCategory.slug
+                    ? 'border-[#1D5FAF] bg-white ring-2 ring-[#1D5FAF]/30 shadow-xs'
+                    : 'border-[#DCE6F2] bg-white hover:border-[#1D5FAF] hover:shadow-xs'
+                }`}
+              >
+                <div className="w-12 h-12 rounded-xl bg-[#EAF2FC] text-[#1D5FAF] flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                  <Layers className="w-6 h-6 text-[#1D5FAF]" />
+                </div>
+                <span className="text-xs font-bold text-[#12263F] group-hover:text-[#1D5FAF] font-heading line-clamp-1">
+                  All {parentCategory.name}
+                </span>
+                <span className="text-[11px] text-[#5B6B82] font-body mt-0.5">
+                  View All
+                </span>
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSubCategory('');
+                  setCurrentPage(1);
+                }}
+                className={`group p-3 rounded-xl border transition-all duration-200 flex flex-col items-center text-center cursor-pointer ${
+                  !selectedSubCategory
+                    ? 'border-[#1D5FAF] bg-white ring-2 ring-[#1D5FAF]/30 shadow-xs'
+                    : 'border-[#DCE6F2] bg-white hover:border-[#1D5FAF] hover:shadow-xs'
+                }`}
+              >
+                <div className="w-12 h-12 rounded-xl bg-[#EAF2FC] text-[#1D5FAF] flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
+                  <Layers className="w-6 h-6 text-[#1D5FAF]" />
+                </div>
+                <span className="text-xs font-bold text-[#12263F] group-hover:text-[#1D5FAF] font-heading line-clamp-1">
+                  All Products
+                </span>
+                <span className="text-[11px] text-[#5B6B82] font-body mt-0.5">
+                  {products.length} Products
+                </span>
+              </button>
+            )}
+
+            {/* Subcategories list */}
+            {subCategories.map((sub) => {
+              const isActive = selectedSubCategory === sub.slug || currentCategorySlug === sub.slug;
+              const subImg = sub.image || sub.icon;
+
+              return (
+                <Link
+                  key={sub.id}
+                  href={`/category/${sub.slug}`}
+                  className={`group p-3 rounded-xl border transition-all duration-200 flex flex-col items-center text-center cursor-pointer ${
+                    isActive
+                      ? 'border-[#1D5FAF] bg-white ring-2 ring-[#1D5FAF]/30 shadow-xs'
+                      : 'border-[#DCE6F2] bg-white hover:border-[#1D5FAF] hover:shadow-xs'
+                  }`}
+                >
+                  <div className="relative w-12 h-12 rounded-xl bg-[#EAF2FC] text-[#1D5FAF] flex items-center justify-center mb-2 overflow-hidden group-hover:scale-105 transition-transform">
+                    {subImg ? (
+                      <img
+                        src={subImg}
+                        alt={sub.name}
+                        className="w-full h-full object-contain p-1"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <FolderTree className="w-6 h-6 text-[#1D5FAF]" />
+                    )}
+                  </div>
+                  <span className={`text-xs font-bold font-heading line-clamp-1 ${
+                    isActive ? 'text-[#1D5FAF]' : 'text-[#12263F] group-hover:text-[#1D5FAF]'
+                  }`}>
+                    {sub.name}
+                  </span>
+                  <span className="text-[11px] text-[#5B6B82] font-body mt-0.5">
+                    {sub.itemCount !== undefined ? `${sub.itemCount} Products` : 'Browse'}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* 3. FILTER BAR WITH OUTLINED PILL BUTTONS & SORT DROPDOWN */}
       <div ref={filterBarRef} className="space-y-3">
         <div className="bg-white p-3.5 rounded-2xl border border-[#DCE6F2] shadow-xs flex flex-wrap items-center justify-between gap-3">
@@ -257,6 +383,71 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
             <span className="text-[12px] font-bold text-[#5B6B82] uppercase tracking-wider font-heading mr-1">
               FILTERS BY:
             </span>
+
+            {/* Subcategories Popover Pill */}
+            {subCategories && subCategories.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setActivePopover(activePopover === 'subcategory' ? null : 'subcategory')}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-1.5 transition-all cursor-pointer font-heading ${
+                    selectedSubCategory
+                      ? 'border-[#1D5FAF] bg-[#EAF2FC] text-[#174E90]'
+                      : 'border-[#DCE6F2] bg-white text-[#12263F] hover:border-[#1D5FAF]'
+                  }`}
+                >
+                  <span>
+                    Subcategory {selectedSubCategory ? `(${subCategories.find((s) => s.slug === selectedSubCategory)?.name || selectedSubCategory})` : ''}
+                  </span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${activePopover === 'subcategory' ? 'rotate-180' : ''}`} />
+                </button>
+
+                {activePopover === 'subcategory' && (
+                  <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-[#DCE6F2] p-2 z-30 animate-in fade-in space-y-1 font-body text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSubCategory('');
+                        setActivePopover(null);
+                        setCurrentPage(1);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                        !selectedSubCategory
+                          ? 'bg-[#EAF2FC] text-[#174E90] font-bold'
+                          : 'text-[#12263F] hover:bg-[#F6F9FD]'
+                      }`}
+                    >
+                      <span>All Subcategories</span>
+                      {!selectedSubCategory && <Check className="w-3.5 h-3.5" />}
+                    </button>
+                    {subCategories.map((sub) => (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSubCategory(selectedSubCategory === sub.slug ? '' : sub.slug);
+                          setActivePopover(null);
+                          setCurrentPage(1);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                          selectedSubCategory === sub.slug
+                            ? 'bg-[#EAF2FC] text-[#174E90] font-bold'
+                            : 'text-[#12263F] hover:bg-[#F6F9FD]'
+                        }`}
+                      >
+                        <span className="truncate">{sub.name}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {sub.itemCount !== undefined && (
+                            <span className="text-[11px] text-[#5B6B82]">({sub.itemCount})</span>
+                          )}
+                          {selectedSubCategory === sub.slug && <Check className="w-3.5 h-3.5 text-[#1D5FAF]" />}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Brands Popover Pill */}
             {brands.length > 0 && (
@@ -479,6 +670,21 @@ export const ListingPageLayout: React.FC<ListingPageLayoutProps> = ({
         {hasActiveFilters && (
           <div className="flex items-center gap-2 flex-wrap text-xs font-body pt-1">
             <span className="text-[#5B6B82] text-[12px] font-semibold">Active:</span>
+
+            {selectedSubCategory && (
+              <span className="inline-flex items-center gap-1 bg-[#EAF2FC] text-[#174E90] border border-[#1D5FAF]/20 px-2.5 py-1 rounded-full font-medium">
+                <span>
+                  Subcategory: {subCategories?.find((s) => s.slug === selectedSubCategory)?.name || selectedSubCategory}
+                </span>
+                <button
+                  onClick={() => setSelectedSubCategory('')}
+                  className="hover:text-[#0B2545] cursor-pointer"
+                  aria-label="Remove subcategory filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
 
             {selectedBrands.map((bId) => {
               const brand = brands.find((b) => b.id === bId);

@@ -30,6 +30,7 @@ import NewsletterSection from '@/components/home/NewsletterSection';
 import PromoBannerGrid from '@/components/home/PromoBannerGrid';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function HomePage() {
   const [
@@ -80,7 +81,10 @@ export default async function HomePage() {
     .filter((s) => s.visible !== false);
 
   const getSectionConfig = (key: string) => {
-    return homepageConfig.sections.find((item) => item.key === key);
+    const cleanKey = key.toLowerCase().replace(/[-_]/g, '');
+    return homepageConfig.sections.find(
+      (item) => item.key === key || item.key.toLowerCase().replace(/[-_]/g, '') === cleanKey
+    );
   };
 
   const getSectionTitle = (key: string, fallback: string) => {
@@ -129,22 +133,69 @@ export default async function HomePage() {
   // Helper to match categories selected by Admin in Homepage Sections
   const resolveCuratedCategories = (
     key: string,
-    fallback: Category[]
+    fallback: Category[],
+    exactOnly: boolean = false
   ): Category[] => {
     const sec = getSectionConfig(key);
     const selectedIds = sec?.selectedIds || sec?.targetIds;
     const baseList = categories.length > 0 ? categories : fallback;
-    if (!selectedIds || selectedIds.length === 0) return baseList;
+    if (!selectedIds || selectedIds.length === 0) {
+      return exactOnly ? baseList.slice(0, 6) : baseList;
+    }
+
+    // Flatten all category levels (Level 1, Level 2, Level 3) so any admin-selected category matches
+    const flatPool: Category[] = [];
+    const seenIds = new Set<string>();
+
+    const addCat = (c: Category) => {
+      if (!c || seenIds.has(String(c.id))) return;
+      seenIds.add(String(c.id));
+      flatPool.push(c);
+    };
+
+    categories.forEach((cat) => {
+      addCat(cat);
+      if (Array.isArray(cat.subCategories)) {
+        cat.subCategories.forEach((sub) => {
+          addCat({
+            id: String(sub.id),
+            name: sub.name,
+            slug: sub.slug,
+            icon: sub.icon || cat.icon || '',
+            image: sub.image || cat.image || '',
+            description: cat.description || '',
+            itemCount: sub.itemCount || 0,
+            subCategories: [],
+            bannerDesktop: cat.bannerDesktop,
+          });
+          if (Array.isArray(sub.children)) {
+            sub.children.forEach((child) => {
+              addCat({
+                id: String(child.id),
+                name: child.name,
+                slug: child.slug,
+                icon: sub.icon || cat.icon || '',
+                image: sub.image || cat.image || '',
+                description: cat.description || '',
+                itemCount: child.itemCount || 0,
+                subCategories: [],
+                bannerDesktop: cat.bannerDesktop,
+              });
+            });
+          }
+        });
+      }
+    });
 
     const curated: Category[] = [];
     selectedIds.forEach((id) => {
-      const cleanId = String(id).toLowerCase();
-      let match = categories.find(
+      const cleanId = String(id).toLowerCase().trim();
+      let match = flatPool.find(
         (c) => String(c.id).toLowerCase() === cleanId || (c.slug && c.slug.toLowerCase() === cleanId)
       );
       if (!match) {
         const stripped = cleanId.replace(/^cat-/, '').replace(/[-_]/g, '');
-        match = categories.find((c) => {
+        match = flatPool.find((c) => {
           const s = (c.slug || '').toLowerCase().replace(/[-_]/g, '');
           const n = (c.name || '').toLowerCase().replace(/[-_]/g, '');
           if (stripped.includes('respiratory') || stripped.includes('oxygen')) {
@@ -162,10 +213,23 @@ export default async function HomePage() {
           return s.includes(stripped) || n.includes(stripped);
         });
       }
-      if (match && !curated.some((c) => c.id === match!.id)) {
+      if (match && !curated.some((c) => String(c.id) === String(match!.id))) {
         curated.push(match);
       }
     });
+
+    if (exactOnly) {
+      // If fewer than 5 items selected, supplement from pool so Bento layout is full
+      if (curated.length < 5) {
+        for (const c of flatPool) {
+          if (!curated.some((item) => String(item.id) === String(c.id))) {
+            curated.push(c);
+            if (curated.length >= 5) break;
+          }
+        }
+      }
+      return curated.length > 0 ? curated : baseList.slice(0, 6);
+    }
 
     // Append remaining categories from baseList so Top Categories is always rich & complete
     for (const c of baseList) {
@@ -193,13 +257,16 @@ export default async function HomePage() {
           />
         );
       }
-      case 'featured_categories':
+      case 'featured_categories': {
+        const curatedCats = resolveCuratedCategories('featured_categories', homeCategories, true);
         return (
           <FeaturedCategoriesBento
             key="featured_categories"
             title={getSectionTitle('featured_categories', 'Clinical & Homecare Essentials')}
+            categories={curatedCats}
           />
         );
+      }
       case 'deal_of_the_day': {
         // Active deals scheduled in Admin ➔ Marketing ➔ Deal of the Day
         let activeDeals = deals;
@@ -243,9 +310,20 @@ export default async function HomePage() {
         );
       }
       case 'shop_by_brand':
-        return <ShopByBrandSlider key="shop_by_brand" brands={homeBrands} />;
+        return (
+          <ShopByBrandSlider
+            key="shop_by_brand"
+            brands={homeBrands}
+            title={getSectionTitle('shop_by_brand', 'Shop by Brands')}
+          />
+        );
       case 'shop_by_need':
-        return <ShopByNeed key="shop_by_need" />;
+        return (
+          <ShopByNeed
+            key="shop_by_need"
+            title={getSectionTitle('shop_by_need', 'Shop by Medical Need')}
+          />
+        );
       case 'sleep_test_banner':
         return <SleepTestPromo key="sleep_test_banner" />;
       case 'new_arrivals': {
@@ -261,11 +339,27 @@ export default async function HomePage() {
         );
       }
       case 'why_buy_denmed':
-        return <WhyBuyDenmed key="why_buy_denmed" />;
+        return (
+          <WhyBuyDenmed
+            key="why_buy_denmed"
+            title={getSectionTitle('why_buy_denmed', 'Why Doctors & Families Choose Buy Denmed')}
+          />
+        );
       case 'testimonials':
-        return <TestimonialsSection key="testimonials" />;
+        return (
+          <TestimonialsSection
+            key="testimonials"
+            title={getSectionTitle('testimonials', 'What Doctors & Patients Say')}
+          />
+        );
       case 'blog':
-        return <BlogPreviewSection key="blog" posts={blogPosts} />;
+        return (
+          <BlogPreviewSection
+            key="blog"
+            posts={blogPosts}
+            title={getSectionTitle('blog', 'From the Denmed Knowledge Hub')}
+          />
+        );
       default:
         return null;
     }

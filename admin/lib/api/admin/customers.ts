@@ -1,5 +1,5 @@
 import type { CustomerRecord, CustomerStatus } from '@/types/admin';
-import { mockDelay } from './client';
+import { adminGet, adminPatch, adminPost, mockDelay } from './client';
 
 let customersStore: CustomerRecord[] = [
   {
@@ -152,11 +152,26 @@ export async function listCustomers(filters?: {
   status?: 'all' | CustomerStatus;
   city?: string;
 }): Promise<CustomerRecord[]> {
-  await mockDelay(120);
-  let list = [...customersStore];
+  let liveCustomers: CustomerRecord[] = [];
+  try {
+    const params = new URLSearchParams();
+    if (filters?.search) params.set('search', filters.search);
+    if (filters?.status && filters.status !== 'all') params.set('status', filters.status);
+    if (filters?.city && filters.city !== 'all') params.set('city', filters.city);
+    const qs = params.toString();
+    liveCustomers = await adminGet<CustomerRecord[]>(`/admin/customers${qs ? `?${qs}` : ''}`);
+  } catch (err) {
+    console.warn('Falling back to local customers store:', err);
+  }
+
+  // Combine live customers from PostgreSQL (first) with mock customers
+  const liveEmails = new Set(liveCustomers.map((c) => c.email.toLowerCase()).filter(Boolean));
+  const liveMobiles = new Set(liveCustomers.map((c) => c.mobile.replace(/\D/g, '')).filter(Boolean));
+
+  let mockList = [...customersStore];
   if (filters?.search) {
     const q = filters.search.trim().toLowerCase();
-    list = list.filter(
+    mockList = mockList.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.mobile.toLowerCase().includes(q) ||
@@ -165,35 +180,60 @@ export async function listCustomers(filters?: {
     );
   }
   if (filters?.status && filters.status !== 'all') {
-    list = list.filter((c) => c.status === filters.status);
+    mockList = mockList.filter((c) => c.status === filters.status);
   }
   if (filters?.city && filters.city !== 'all') {
-    list = list.filter((c) => c.city === filters.city);
+    const filterCity = filters.city.toLowerCase();
+    mockList = mockList.filter((c) => c.city.toLowerCase() === filterCity);
   }
-  return structuredClone(list);
+
+  const combined = [...liveCustomers];
+  for (const mock of mockList) {
+    const mockMob = mock.mobile.replace(/\D/g, '');
+    if (!liveEmails.has(mock.email.toLowerCase()) && !liveMobiles.has(mockMob)) {
+      combined.push(mock);
+    }
+  }
+
+  return combined;
 }
 
 export async function getCustomerById(id: string): Promise<CustomerRecord | null> {
-  await mockDelay(100);
-  const found = customersStore.find((c) => c.id === id);
-  return found ? structuredClone(found) : null;
+  try {
+    return await adminGet<CustomerRecord>(`/admin/customers/${encodeURIComponent(id)}`);
+  } catch (err) {
+    console.warn('Falling back to local customers store:', err);
+    await mockDelay(100);
+    const found = customersStore.find((c) => c.id === id);
+    return found ? structuredClone(found) : null;
+  }
 }
 
 export async function toggleCustomerBlock(id: string): Promise<CustomerRecord> {
-  await mockDelay(140);
-  const existing = customersStore.find((c) => c.id === id);
-  if (!existing) throw new Error('Customer not found');
-  const nextStatus: CustomerStatus = existing.status === 'active' ? 'blocked' : 'active';
-  const updated: CustomerRecord = { ...existing, status: nextStatus };
-  customersStore = customersStore.map((c) => (c.id === id ? updated : c));
-  return structuredClone(updated);
+  try {
+    return await adminPatch<CustomerRecord>(`/admin/customers/${encodeURIComponent(id)}/status`);
+  } catch (err) {
+    console.warn('Falling back to local customers store:', err);
+    await mockDelay(140);
+    const existing = customersStore.find((c) => c.id === id);
+    if (!existing) throw new Error('Customer not found');
+    const nextStatus: CustomerStatus = existing.status === 'active' ? 'blocked' : 'active';
+    const updated: CustomerRecord = { ...existing, status: nextStatus };
+    customersStore = customersStore.map((c) => (c.id === id ? updated : c));
+    return structuredClone(updated);
+  }
 }
 
 export async function addCustomerNote(id: string, note: string): Promise<CustomerRecord> {
-  await mockDelay(100);
-  const existing = customersStore.find((c) => c.id === id);
-  if (!existing) throw new Error('Customer not found');
-  const updated: CustomerRecord = { ...existing, notes: [note, ...existing.notes] };
-  customersStore = customersStore.map((c) => (c.id === id ? updated : c));
-  return structuredClone(updated);
+  try {
+    return await adminPost<CustomerRecord>(`/admin/customers/${encodeURIComponent(id)}/notes`, { note });
+  } catch (err) {
+    console.warn('Falling back to local customers store:', err);
+    await mockDelay(100);
+    const existing = customersStore.find((c) => c.id === id);
+    if (!existing) throw new Error('Customer not found');
+    const updated: CustomerRecord = { ...existing, notes: [note, ...existing.notes] };
+    customersStore = customersStore.map((c) => (c.id === id ? updated : c));
+    return structuredClone(updated);
+  }
 }
