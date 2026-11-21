@@ -115,7 +115,6 @@ export function formatProduct(p) {
       plans: rentalPlans,
       securityDeposit: firstPlan ? Number(firstPlan.security_deposit_paise) / 100 : 0,
       deliveryPickupCharge: firstPlan ? Number(firstPlan.delivery_pickup_paise) / 100 : 0,
-      kycRequired: firstPlan ? firstPlan.kyc_required : true,
       prescriptionRequired: firstPlan ? firstPlan.prescription_required : false,
     },
     seoTitle: p.meta_title || "",
@@ -486,7 +485,6 @@ export async function createProduct(payload, adminUser) {
             max_periods: plan.maxDuration || 12,
             security_deposit_paise: BigInt(Math.round((payload.rental.securityDeposit || 0) * 100)),
             delivery_pickup_paise: BigInt(Math.round((payload.rental.deliveryPickupCharge || 0) * 100)),
-            kyc_required: payload.rental.kycRequired ?? true,
             prescription_required: payload.rental.prescriptionRequired ?? false,
           },
         });

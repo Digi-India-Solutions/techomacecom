@@ -49,20 +49,19 @@ model AdminUser {
   created_at                DateTime  @default(now()) @db.Timestamptz(6)
   updated_at                DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
-  role                 Role                   @relation(fields: [role_id], references: [id])
-  activity_logs        ActivityLog[]
-  notifications        AdminNotification[]
-  bulk_import_jobs     BulkImportJob[]
-  stock_movements      StockMovement[]
-  unit_service_logs    RentalUnitServiceLog[]
-  refunds              Refund[]
-  kyc_reviewed_rentals Rental[]               @relation("RentalKycReviewer")
-  rental_charges       RentalCharge[]
-  assigned_enquiries   Enquiry[]              @relation("EnquiryAssignee")
-  enquiry_notes        EnquiryNote[]
-  moderated_reviews    Review[]               @relation("ReviewModerator")
-  blog_posts           BlogPost[]
-  auth_sessions        AuthSession[]
+  role               Role                   @relation(fields: [role_id], references: [id])
+  activity_logs      ActivityLog[]
+  notifications      AdminNotification[]
+  bulk_import_jobs   BulkImportJob[]
+  stock_movements    StockMovement[]
+  unit_service_logs  RentalUnitServiceLog[]
+  refunds            Refund[]
+  rental_charges     RentalCharge[]
+  assigned_enquiries Enquiry[]              @relation("EnquiryAssignee")
+  enquiry_notes      EnquiryNote[]
+  moderated_reviews  Review[]               @relation("ReviewModerator")
+  blog_posts         BlogPost[]
+  auth_sessions      AuthSession[]
 
   @@index([role_id])
   @@map("admin_users")
@@ -1000,7 +999,6 @@ model RentalPlan {
   max_periods            Int      @default(12)
   security_deposit_paise BigInt   @default(0) // refundable
   delivery_pickup_paise  BigInt   @default(0)
-  kyc_required           Boolean  @default(true)
   prescription_required  Boolean  @default(false)
   is_active              Boolean  @default(true)
   created_at             DateTime @default(now()) @db.Timestamptz(6)
@@ -1034,8 +1032,6 @@ model Rental {
   end_date             DateTime? @db.Date
   delivery_address     Json // snapshot
   status               String    @default("pending_payment")
-  kyc_status           String    @default("pending") // pending | approved | rejected | reupload_requested
-  kyc_reviewed_by      BigInt?
   return_condition     String? // good | needs_service | damaged
   return_notes         String?
   return_photos        String[]
@@ -1049,9 +1045,7 @@ model Rental {
   product        Product               @relation(fields: [product_id], references: [id])
   plan           RentalPlan            @relation(fields: [rental_plan_id], references: [id])
   unit           RentalUnit?           @relation("RentalAssignedUnit", fields: [rental_unit_id], references: [id], onDelete: SetNull)
-  kyc_reviewer   AdminUser?            @relation("RentalKycReviewer", fields: [kyc_reviewed_by], references: [id], onDelete: SetNull)
   current_for    RentalUnit[]          @relation("UnitCurrentRental")
-  kyc_documents  RentalKycDocument[]
   extensions     RentalExtension[]
   charges        RentalCharge[]
   status_history RentalStatusHistory[]
@@ -1064,24 +1058,6 @@ model Rental {
   @@index([status])
   @@index([rental_unit_id])
   @@map("rentals")
-}
-
-model RentalKycDocument {
-  id            BigInt   @id @default(autoincrement())
-  rental_id     BigInt
-  doc_type      String // id_front | id_back | address_proof | prescription
-  storage_key   String // private bucket key, never a public URL
-  mime_type     String?  @db.VarChar(100)
-  size_bytes    Int?
-  status        String   @default("uploaded") // uploaded | approved | rejected
-  reject_reason String?
-  created_at    DateTime @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
-
-  rental Rental @relation(fields: [rental_id], references: [id], onDelete: Cascade)
-
-  @@index([rental_id])
-  @@map("rental_kyc_documents")
 }
 
 model RentalExtension {
@@ -1403,4 +1379,20 @@ model AuthSession {
   @@index([customer_id])
   @@index([admin_user_id])
   @@map("auth_sessions")
+}
+
+// + added: delivery coverage managed from Settings → Shipping (CSV import).
+// Empty table = deliver everywhere in India. Once rows exist, only listed PIN codes are serviceable.
+model ServiceablePincode {
+  pincode       String   @id @db.Char(6)
+  city          String?  @db.VarChar(80)
+  state         String?  @db.VarChar(80)
+  cod_available Boolean  @default(true)
+  delivery_days String?  @db.VarChar(30) // e.g. "2-4"
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([state])
+  @@map("serviceable_pincodes")
 }

@@ -14,7 +14,7 @@ import env from "../../config/env.js";
  * publicUrl() turns it into a full URL using ASSET_BASE_URL, so moving to a CDN
  * or a new domain later needs no data migration.
  *
- * KYC documents must NOT go here — they get a private, non-served folder with the rentals module.
+ * Never store private documents here — everything under uploads/ is publicly served.
  */
 
 const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");

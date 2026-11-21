@@ -65,6 +65,7 @@ async function fetchOrMock<T>(endpoint: string, mockFallback: () => T | Promise<
 
 // Catalog (categories, brands, products, search) comes from the live API — see ./catalog.ts
 export * from './catalog';
+import { checkPincode } from '@/lib/settings/pincode-api';
 export * from './marketing';
 import {
   getHomepageConfig,
@@ -76,6 +77,7 @@ import {
 /**
  * Check Indian pincode serviceability
  */
+/** Delivery check against Settings → Shipping (backend /pincodes/:pincode). */
 export async function checkPincodeServiceability(pincode: string): Promise<{
   serviceable: boolean;
   city: string;
@@ -83,67 +85,14 @@ export async function checkPincodeServiceability(pincode: string): Promise<{
   deliveryDays: string;
   codAvailable: boolean;
 }> {
-  // Common city pincode lookup simulation for Indian tier 1 & 2 cities
-  const cleanPin = pincode.trim();
-  if (!/^\d{6}$/.test(cleanPin)) {
-    return {
-      serviceable: false,
-      city: '',
-      state: '',
-      deliveryDays: '',
-      codAvailable: false
-    };
-  }
-
-  const prefix = cleanPin.substring(0, 2);
-  let city = 'Delhi NCR';
-  let state = 'Delhi';
-  let deliveryDays = '1-2 Days (Fast Dispatch)';
-
-  if (prefix === '11') {
-    city = 'New Delhi';
-    state = 'Delhi';
-    deliveryDays = 'Same Day / Next Day Delivery';
-  } else if (prefix === '20' || prefix === '12') {
-    city = 'Noida / Gurugram';
-    state = 'NCR';
-    deliveryDays = '1-2 Days Delivery';
-  } else if (prefix === '40') {
-    city = 'Mumbai';
-    state = 'Maharashtra';
-    deliveryDays = '2-3 Days Delivery';
-  } else if (prefix === '56') {
-    city = 'Bengaluru';
-    state = 'Karnataka';
-    deliveryDays = '2-3 Days Delivery';
-  } else if (prefix === '50') {
-    city = 'Hyderabad';
-    state = 'Telangana';
-    deliveryDays = '2-3 Days Delivery';
-  } else if (prefix === '60') {
-    city = 'Chennai';
-    state = 'Tamil Nadu';
-    deliveryDays = '2-4 Days Delivery';
-  } else if (prefix === '70') {
-    city = 'Kolkata';
-    state = 'West Bengal';
-    deliveryDays = '3-4 Days Delivery';
-  } else if (prefix === '38' || prefix === '39') {
-    city = 'Ahmedabad';
-    state = 'Gujarat';
-    deliveryDays = '2-3 Days Delivery';
-  } else {
-    city = 'Regional Hub';
-    state = 'India';
-    deliveryDays = '3-5 Days via Air Cargo';
-  }
-
+  const r = await checkPincode(pincode);
   return {
-    serviceable: true,
-    city,
-    state,
-    deliveryDays,
-    codAvailable: true
+    serviceable: r.serviceable,
+    // No city in the uploaded list → show the PIN itself (e.g. "Deliver to 110020")
+    city: r.city || r.pincode,
+    state: r.state,
+    deliveryDays: r.serviceable ? `${r.deliveryDays} business days` : r.message,
+    codAvailable: r.codAvailable
   };
 }
 
@@ -287,14 +236,27 @@ export async function submitEnquiry(data: {
 //   }
 // }
 
+/**
+ * Customer orders — fetched from the live backend (/api/v1/account/orders).
+ * Falls back to mock data only when the backend is not reachable.
+ */
 export async function getOrders(): Promise<Order[]> {
-  return fetchOrMock('/api/orders', () => [...MOCK_ORDERS]);
+  try {
+    const { fetchOrders } = await import('./orders');
+    return await fetchOrders();
+  } catch {
+    // Backend not available → dev fallback
+    return [...MOCK_ORDERS];
+  }
 }
 
 export async function getOrderById(orderId: string): Promise<Order | null> {
-  return fetchOrMock(`/api/orders/${orderId}`, () => {
+  try {
+    const { fetchOrderById } = await import('./orders');
+    return await fetchOrderById(orderId);
+  } catch {
     return MOCK_ORDERS.find((o) => o.id === orderId || o.orderNumber === orderId) || null;
-  });
+  }
 }
 
 /**
@@ -331,7 +293,6 @@ export async function createRentalBooking(data: Partial<Rental>): Promise<{ succ
         charges: data.charges || { deliveryPickup: 500, gst: 0 },
         status: 'pending_approval',
         address: data.address!,
-        kycDocuments: data.kycDocuments || { verified: false },
         payments: data.payments || [],
         createdAt: new Date().toISOString()
       };
@@ -339,7 +300,7 @@ export async function createRentalBooking(data: Partial<Rental>): Promise<{ succ
       return {
         success: true,
         rental: newRental,
-        message: 'Rental booking created successfully! Biomedical verification and KYC approval in progress.'
+        message: 'Rental booking created successfully! Our team will confirm availability shortly.'
       };
     },
     {

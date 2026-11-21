@@ -35,15 +35,6 @@ let notificationsStore: AdminNotification[] = [
     createdAt: '2026-11-17T08:25:00Z',
   },
   {
-    id: 'notif-kyc',
-    title: 'Rental KYC Verification Pending',
-    message: '2 KYC documents uploaded for RNT-2026-429 awaiting approval.',
-    severity: 'warning',
-    href: '/admin/rentals/rnt-1',
-    read: false,
-    createdAt: '2026-11-17T08:10:00Z',
-  },
-  {
     id: 'notif-enq',
     title: 'New B2B Enquiry: ENQ-9042',
     message: 'SmileCraft Dental requested bulk quote for 4 chairs & 2 autoclaves.',
@@ -226,13 +217,13 @@ export async function getDashboardOverview(range: DateRangeValue): Promise<Dashb
     })),
     actionNeeded: [
       {
-        id: 'act-kyc',
-        key: 'kyc_pending',
-        title: 'Pending Rental KYC Approvals',
-        description: 'Verify Aadhaar & prescription documents before equipment dispatch',
+        id: 'act-approval',
+        key: 'pending_approval',
+        title: 'Rentals Awaiting Approval',
+        description: 'Confirm availability and assign a serial-numbered unit before dispatch',
         count: 3,
         severity: 'urgent',
-        href: '/admin/rentals?filter=kyc_pending',
+        href: '/admin/rentals?status=pending_approval',
       },
       {
         id: 'act-due-7d',

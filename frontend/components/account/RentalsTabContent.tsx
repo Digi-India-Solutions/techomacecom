@@ -26,12 +26,16 @@ import {
   X,
   MapPin
 } from 'lucide-react';
+import { useSiteSettings } from '@/lib/settings/store';
 
 interface RentalsTabContentProps {
   onBrowseRentals?: () => void;
 }
 
 export default function RentalsTabContent({ onBrowseRentals }: RentalsTabContentProps) {
+  const { store, rental: rentalRules } = useSiteSettings();
+  // Settings → Rental → deposit refund promise
+  const refundWindow = `${rentalRules.depositRefundDays} day${rentalRules.depositRefundDays === 1 ? '' : 's'}`;
   const { rentals, extendRental, scheduleReturn } = useRentalStore();
   const { addToast } = useToastStore();
 
@@ -170,9 +174,9 @@ TRANSACTION RECORDS:
 ${rental.payments.map((p) => `- ${p.date}: ₹${p.amount.toLocaleString('en-IN')} via ${p.method} (Ref: ${p.transactionId || 'N/A'})`).join('\n')}
 
 TERMS & CONDITIONS:
-1. 100% Security Deposit will be refunded to client within 48 to 72 hours following equipment pickup and functional verification.
+1. 100% Security Deposit will be refunded to client within ${refundWindow} following equipment pickup and functional verification.
 2. 100% Free biomedical maintenance, periodic calibration check, and emergency breakdown replacement are covered under this contract.
-3. For service support, contact: +91 98112 34567 | care@buydenmed.com
+3. For service support, contact: ${store.supportPhone} | ${store.supportEmail}
 =============================================================`;
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -476,8 +480,8 @@ TERMS & CONDITIONS:
                     done: true
                   },
                   {
-                    title: '2. KYC Verification & Clinical Prescription Validation',
-                    desc: 'Aadhaar / ID and address proof checked by our medical compliance officer.',
+                    title: '2. Booking Confirmed',
+                    desc: 'Availability and delivery slot confirmed by our rental desk.',
                     done: selectedRental.status !== 'pending_approval'
                   },
                   {
@@ -499,7 +503,7 @@ TERMS & CONDITIONS:
                   },
                   {
                     title: '6. 100% Security Deposit Refund',
-                    desc: 'Deposit credited back to original payment method within 48h.',
+                    desc: `Deposit credited back to original payment method within ${refundWindow}.`,
                     done: selectedRental.status === 'deposit_refunded'
                   }
                 ].map((step, idx) => (
@@ -754,7 +758,7 @@ TERMS & CONDITIONS:
                   <span>₹{rentalToReturn.deposit.toLocaleString('en-IN')} Refund Trigger</span>
                 </div>
                 <p className="text-[12px] leading-relaxed">
-                  Upon functional verification at pickup, 100% of your security deposit is refunded directly to your payment method within 48 hours.
+                  Upon functional verification at pickup, 100% of your security deposit is refunded directly to your payment method within {refundWindow}.
                 </p>
               </div>
             </div>

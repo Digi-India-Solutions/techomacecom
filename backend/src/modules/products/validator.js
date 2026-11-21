@@ -43,7 +43,6 @@ const rentalConfigSchema = z
     plans: z.array(rentalPlanSchema).optional().default([]),
     securityDeposit: z.number().min(0).optional().default(0),
     deliveryPickupCharge: z.number().min(0).optional().default(0),
-    kycRequired: z.boolean().optional().default(true),
     prescriptionRequired: z.boolean().optional().default(false),
   })
   .optional();

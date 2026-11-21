@@ -25,10 +25,15 @@ import { useHydrated } from '@/hooks/use-hydrated';
 import CustomerAuthForm from '@/components/auth/CustomerAuthForm';
 import { logoutCustomer } from '@/lib/api/customerAuth';
 import { CheckoutSkeleton } from '@/components/skeletons/PageSkeletons';
+import { useSiteSettings } from '@/lib/settings/store';
+import { usePincodeCheck } from '@/lib/settings/pincode';
+import { gstinError } from '@/lib/india';
+import { createOrder } from '@/lib/api/orders';
+import { errorMessage } from '@/lib/api/backend';
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, getSubtotal, getDiscount, getShippingFee, getGstAmount, getTotal, clearCart } = useCartStore();
+  const { items, getSubtotal, getDiscount, getShippingFee, getGstAmount, getTotal, clearCart, coupon } = useCartStore();
   const { user, isAuthenticated, logout } = useUserStore();
   const { addToast } = useToastStore();
   const hydrated = useHydrated();
@@ -69,12 +74,31 @@ export default function CheckoutPage() {
   const shipping = getShippingFee();
   const gst = getGstAmount();
   const total = getTotal();
+  const settings = useSiteSettings();
 
-  // Validate Indian GSTIN format
-  const validateGstin = (code: string) => {
-    const regex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-    return regex.test(code.trim().toUpperCase());
-  };
+  // Delivery PIN code → serviceability + COD (Settings → Shipping)
+  const deliveryPincode =
+    selectedAddressId === 'new' || showNewAddressForm
+      ? newAddr.pincode
+      : user?.addresses?.find((a) => a.id === selectedAddressId)?.pincode || '';
+  const { result: pinCheck, loading: pinChecking } = usePincodeCheck(deliveryPincode);
+
+  const { codEnabled, codMaxOrderValue, codCharge } = settings.shipping;
+  const codBlockedReason = !codEnabled
+    ? ''
+    : codMaxOrderValue > 0 && total > codMaxOrderValue
+      ? `Available for orders up to ₹${codMaxOrderValue.toLocaleString('en-IN')}`
+      : pinCheck && !pinCheck.codAvailable
+        ? `Not available for PIN ${pinCheck.pincode}`
+        : '';
+  const codAllowed = codEnabled && !codBlockedReason;
+  const effectiveMethod = paymentMethod === 'cod' && !codAllowed ? 'razorpay' : paymentMethod;
+  const codFee = effectiveMethod === 'cod' ? codCharge : 0;
+  const payable = total + codFee;
+  const gstLabel = settings.tax.pricesIncludeGst ? 'GST (included in price)' : 'GST';
+
+  // GSTIN: format, state code and check digit (same rules as the API)
+  const validateGstin = (code: string) => !gstinError(code);
 
   const handleSwitchAccount = async () => {
     await logoutCustomer();
@@ -91,10 +115,40 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (pinCheck && !pinCheck.serviceable) {
+      addToast({ type: 'error', title: 'Delivery not available', message: `${pinCheck.message}. Please choose another address.` });
+      return;
+    }
+
+    const chosenAddress =
+      selectedAddressId === 'new' || showNewAddressForm
+        ? newAddr
+        : user?.addresses?.find((a) => a.id === selectedAddressId) || newAddr;
+
+    // Validate address fields if entering a new address
+    if (selectedAddressId === 'new' || showNewAddressForm) {
+      if (!chosenAddress.name?.trim()) {
+        addToast({ type: 'error', title: 'Address incomplete', message: 'Please enter doctor or recipient name.' });
+        return;
+      }
+      if (!chosenAddress.phone?.trim()) {
+        addToast({ type: 'error', title: 'Address incomplete', message: 'Please enter a contact phone number.' });
+        return;
+      }
+      if (!chosenAddress.addressLine1?.trim()) {
+        addToast({ type: 'error', title: 'Address incomplete', message: 'Please enter street address / building details.' });
+        return;
+      }
+      if (!chosenAddress.pincode?.trim() || !chosenAddress.city?.trim() || !chosenAddress.state?.trim()) {
+        addToast({ type: 'error', title: 'Address incomplete', message: 'Please enter PIN code, city, and state.' });
+        return;
+      }
+    }
+
     // Validate GSTIN if checked
     if (includeGst) {
       if (!validateGstin(gstin)) {
-        setGstError('Please enter a valid 15-character Indian GSTIN (e.g. 09AAACM1234F1Z8)');
+        setGstError(gstinError(gstin) || 'Please enter a valid GSTIN');
         return;
       }
       if (!legalCompanyName.trim()) {
@@ -106,13 +160,59 @@ export default function CheckoutPage() {
 
     setIsProcessing(true);
 
-    // Simulated payment processing
-    setTimeout(() => {
-      const generatedOrderId = `BDM-${Date.now().toString().slice(-6)}`;
+    try {
+      const order = await createOrder({
+        items: items.map((it) => ({
+          productId: it.productId,
+          variantId: it.variantId,
+          productName: it.product.name,
+          variantName: it.variantName || 'Default',
+          sku: it.product.sku,
+          quantity: it.quantity,
+          unitPrice: it.price,
+          mrp: it.mrp || it.price,
+          imageUrl: it.product.thumbnail || it.product.images?.[0]?.url || '',
+        })),
+        shippingAddress: chosenAddress,
+        billingAddress: {
+          name: includeGst && legalCompanyName ? legalCompanyName : chosenAddress.name,
+          phone: chosenAddress.phone,
+          line1: chosenAddress.addressLine1,
+          line2: chosenAddress.addressLine2,
+          city: chosenAddress.city,
+          state: chosenAddress.state,
+          pincode: chosenAddress.pincode,
+        },
+        gstDetails: includeGst ? {
+          gstin,
+          legalBusinessName: legalCompanyName,
+        } : undefined,
+        paymentMethod: effectiveMethod,
+        subtotal,
+        discount,
+        shipping,
+        codCharge: codFee,
+        tax: gst,
+        total: payable,
+        couponCode: coupon?.code,
+      });
+
       clearCart();
       setIsProcessing(false);
-      router.push(`/order-success/${generatedOrderId}`);
-    }, 1200);
+      addToast({
+        type: 'success',
+        title: 'Order Placed!',
+        message: `Order #${order.orderNumber} successfully booked.`,
+      });
+      router.push(`/order-success/${order.orderNumber || order.id}`);
+    } catch (err) {
+      setIsProcessing(false);
+      addToast({
+        type: 'error',
+        title: 'Order placement failed',
+        message: errorMessage(err, 'Could not complete your order. Please try again.'),
+      });
+    }
   };
 
   if (!hydrated) return <CheckoutSkeleton />;
@@ -339,6 +439,28 @@ export default function CheckoutPage() {
                 </div>
               </div>
             )}
+
+            {/* Delivery estimate for the chosen address */}
+            {/^[1-9]\d{5}$/.test(deliveryPincode) && (
+              <div
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
+                  pinCheck && !pinCheck.serviceable ? 'bg-red-50 text-red-700' : 'bg-[#F6F9FD] text-[#5B6B82]'
+                }`}
+              >
+                {pinCheck && !pinCheck.serviceable ? <AlertCircle className="w-4 h-4 shrink-0" /> : <Truck className="w-4 h-4 shrink-0 text-[#1D5FAF]" />}
+                {pinChecking || !pinCheck ? (
+                  <span>Checking delivery to {deliveryPincode}…</span>
+                ) : pinCheck.serviceable ? (
+                  <span>
+                    Delivers to <strong className="text-[#12263F]">{deliveryPincode}</strong> in{' '}
+                    <strong className="text-[#12263F]">{pinCheck.deliveryDays} business days</strong>
+                    {pinCheck.codAvailable && codEnabled ? ' · Cash on delivery available' : ''}
+                  </span>
+                ) : (
+                  <span>{pinCheck.message} ({deliveryPincode}).</span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* STEP 3: OPTIONAL GST DETAILS FOR BUSINESS INVOICE */}
@@ -435,7 +557,7 @@ export default function CheckoutPage() {
               {/* Razorpay Online */}
               <label
                 className={`p-4 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                  paymentMethod === 'razorpay'
+                  effectiveMethod === 'razorpay'
                     ? 'border-[#1D5FAF] bg-[#EAF2FC]/60 shadow-xs'
                     : 'border-[#DCE6F2] hover:border-[#1D5FAF]/50'
                 }`}
@@ -443,7 +565,7 @@ export default function CheckoutPage() {
                 <input
                   type="radio"
                   name="payment"
-                  checked={paymentMethod === 'razorpay'}
+                  checked={effectiveMethod === 'razorpay'}
                   onChange={() => setPaymentMethod('razorpay')}
                   className="accent-[#1D5FAF] focus:ring-[#1D5FAF] mt-1"
                 />
@@ -469,30 +591,38 @@ export default function CheckoutPage() {
                 </div>
               </label>
 
-              {/* Cash On Delivery */}
-              <label
-                className={`p-4 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
-                  paymentMethod === 'cod'
-                    ? 'border-[#1D5FAF] bg-[#EAF2FC]/60 shadow-xs'
-                    : 'border-[#DCE6F2] hover:border-[#1D5FAF]/50'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="payment"
-                  checked={paymentMethod === 'cod'}
-                  onChange={() => setPaymentMethod('cod')}
-                  className="accent-[#1D5FAF] focus:ring-[#1D5FAF] mt-1"
-                />
-                <div className="flex-1">
-                  <span className="font-bold text-sm text-[#12263F]">
-                    Cash on Delivery (Pay at Clinic / Hospital)
-                  </span>
-                  <p className="text-xs text-[#5B6B82] mt-1">
-                    Pay via cash or UPI QR scanner upon doorstep parcel arrival. Available for verified pincodes.
-                  </p>
-                </div>
-              </label>
+              {/* Cash On Delivery — Settings → Shipping (on/off, order limit, PIN code, charge) */}
+              {codEnabled && (
+                <label
+                  className={`p-4 rounded-xl border flex items-start gap-3 transition-all ${
+                    !codAllowed
+                      ? 'border-[#DCE6F2] opacity-60 cursor-not-allowed'
+                      : effectiveMethod === 'cod'
+                        ? 'border-[#1D5FAF] bg-[#EAF2FC]/60 shadow-xs cursor-pointer'
+                        : 'border-[#DCE6F2] hover:border-[#1D5FAF]/50 cursor-pointer'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="payment"
+                    disabled={!codAllowed}
+                    checked={effectiveMethod === 'cod'}
+                    onChange={() => setPaymentMethod('cod')}
+                    className="accent-[#1D5FAF] focus:ring-[#1D5FAF] mt-1"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-sm text-[#12263F]">Cash on Delivery (Pay at Clinic / Hospital)</span>
+                      {codCharge > 0 && (
+                        <span className="text-[11px] font-semibold text-[#5B6B82]">+₹{codCharge.toLocaleString('en-IN')} handling</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-[#5B6B82] mt-1">
+                      {codBlockedReason || 'Pay via cash or UPI QR scanner when the parcel arrives.'}
+                    </p>
+                  </div>
+                </label>
+              )}
             </div>
           </div>
         </div>
@@ -547,13 +677,21 @@ export default function CheckoutPage() {
                 {shipping === 0 ? <span className="text-[#16A34A] font-bold">FREE</span> : `₹${shipping}`}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span>Estimated GST (12% / 18%)</span>
-              <span className="font-semibold text-[#12263F]">₹{gst.toLocaleString('en-IN')}</span>
-            </div>
+            {settings.tax.gstEnabled && (
+              <div className="flex justify-between">
+                <span>{gstLabel}</span>
+                <span className="font-semibold text-[#12263F]">₹{gst.toLocaleString('en-IN')}</span>
+              </div>
+            )}
+            {codFee > 0 && (
+              <div className="flex justify-between">
+                <span>COD handling charge</span>
+                <span className="font-semibold text-[#12263F]">₹{codFee.toLocaleString('en-IN')}</span>
+              </div>
+            )}
             <div className="flex justify-between text-base font-black text-[#12263F] pt-3 border-t border-[#DCE6F2]">
               <span>Total Payable</span>
-              <span className="text-xl text-[#12263F] font-extrabold">₹{total.toLocaleString('en-IN')}</span>
+              <span className="text-xl text-[#12263F] font-extrabold">₹{payable.toLocaleString('en-IN')}</span>
             </div>
           </div>
 
@@ -567,7 +705,9 @@ export default function CheckoutPage() {
               <span>Securing Authorization with Razorpay...</span>
             ) : (
               <>
-                <span>Place Order & Pay ₹{total.toLocaleString('en-IN')}</span>
+                <span>
+                  {effectiveMethod === 'cod' ? `Place Order · Pay ₹${payable.toLocaleString('en-IN')} on delivery` : `Place Order & Pay ₹${payable.toLocaleString('en-IN')}`}
+                </span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}

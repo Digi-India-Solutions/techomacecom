@@ -12,13 +12,14 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import type { Order } from '@/types/admin';
+import type { AdminSettings, Order } from '@/types/admin';
 import {
   addOrderInternalNote,
   createOrderShipment,
   getOrderById,
   updateOrderStatus,
 } from '@/lib/api/admin/orders';
+import { getAdminSettings } from '@/lib/api/admin/settings';
 import { formatDateTime, formatINR } from '@/lib/api/admin/client';
 import { useAuth } from '@/components/admin/AuthContext';
 import { useToast } from '@/components/admin/ToastProvider';
@@ -49,6 +50,15 @@ export function OrderDetailPage() {
 
   // Invoice modal
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+
+  // Admin store & tax settings
+  const [settings, setSettings] = useState<AdminSettings | null>(null);
+
+  useEffect(() => {
+    getAdminSettings()
+      .then(setSettings)
+      .catch((err) => console.warn('Could not load settings:', err));
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -132,6 +142,56 @@ export function OrderDetailPage() {
   }
 
   const isB2B = Boolean(order.gstDetails?.gstin);
+
+  const seller = order.seller;
+
+  const sellerName =
+    seller?.name ||
+    settings?.store?.storeName ||
+    settings?.store?.brandName ||
+    'Buy Denmed Healthcare Pvt Ltd';
+
+  const sellerAddress =
+    seller?.address ||
+    settings?.store?.address ||
+    '';
+
+  const sellerGstin = seller?.gstin || settings?.store?.gstin || '';
+
+  const sellerPhone =
+    seller?.supportPhone || settings?.store?.supportPhone || '';
+
+  const sellerEmail =
+    seller?.supportEmail || settings?.store?.supportEmail || '';
+
+  const sellerLogo =
+    seller?.logoUrl || settings?.images?.logo || null;
+
+  const invoicePrefix =
+    seller?.invoicePrefix || settings?.tax?.invoicePrefix || 'BDM/26-27/';
+
+  const digits =
+    seller?.invoiceNumberDigits || settings?.tax?.invoiceNumberDigits || 4;
+
+  const numPart = order.orderNumber ? order.orderNumber.replace(/^[^\d]*-?/, '') : '';
+
+  const invoiceNumber =
+    order.invoiceNumber || `${invoicePrefix}${numPart.padStart(digits, '0')}`;
+
+  const dispatchStateName =
+    seller?.dispatchStateName ||
+    settings?.options?.states?.find((s) => s.code === settings?.tax?.dispatchStateCode)?.name ||
+    settings?.tax?.dispatchStateCode ||
+    'Delhi';
+
+  const footerTerms =
+    seller?.footerTerms || settings?.tax?.footerTerms || '';
+
+  const signatoryName =
+    seller?.signatoryName || settings?.tax?.signatoryName || 'Authorised Signatory';
+
+  const signatoryUrl =
+    seller?.signatoryUrl || settings?.images?.signatory || null;
 
   return (
     <div className="space-y-5">
@@ -318,6 +378,12 @@ export function OrderDetailPage() {
                   <span>Shipping</span>
                   <span>{order.shippingCharge === 0 ? 'Free' : formatINR(order.shippingCharge)}</span>
                 </div>
+                {order.codCharge && order.codCharge > 0 ? (
+                  <div className="flex justify-between text-[#5B6B82]">
+                    <span>COD Handling Fee</span>
+                    <span>{formatINR(order.codCharge)}</span>
+                  </div>
+                ) : null}
                 <div className="flex justify-between text-[#5B6B82]">
                   <span>Total GST</span>
                   <span>{formatINR(order.gstTotal)}</span>
@@ -628,9 +694,37 @@ export function OrderDetailPage() {
 
       {/* B2B / B2C GST Invoice Print Preview Modal */}
       {invoiceOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/55 p-4">
-          <div className="w-full max-w-2xl rounded-xl border border-[#DCE6F2] bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-[#DCE6F2] px-5 py-3.5 bg-[#F6F9FD]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/55 p-4 print:p-0 print:bg-white print:static">
+          <style>{`
+            @media print {
+              body * {
+                visibility: hidden;
+              }
+              #printable-invoice, #printable-invoice * {
+                visibility: visible;
+              }
+              #printable-invoice {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 16px;
+                box-shadow: none;
+                border: none;
+                max-height: none !important;
+                overflow: visible !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+            }
+          `}</style>
+          <div
+            id="printable-invoice"
+            className="w-full max-w-2xl rounded-xl border border-[#DCE6F2] bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col print:border-none print:shadow-none"
+          >
+            <div className="no-print flex items-center justify-between border-b border-[#DCE6F2] px-5 py-3.5 bg-[#F6F9FD]">
               <span className="text-sm font-semibold text-[#12263F]">
                 {isB2B ? 'Tax Invoice (B2B GSTIN)' : 'Retail Tax Invoice (B2C)'} — {order.orderNumber}
               </span>
@@ -652,34 +746,66 @@ export function OrderDetailPage() {
                 </button>
               </div>
             </div>
-            <div className="p-6 overflow-y-auto space-y-5 text-xs text-[#12263F]">
+            <div className="p-6 overflow-y-auto space-y-5 text-xs text-[#12263F] print:p-0 print:overflow-visible">
               <div className="flex justify-between border-b border-[#DCE6F2] pb-4">
-                <div>
-                  <h3 className="text-base font-bold text-[#0B2545]">Buy Denmed Healthcare Pvt Ltd</h3>
-                  <p className="text-[#5B6B82]">Plot B-114, Okhla Industrial Area Phase II, New Delhi 110020</p>
-                  <p className="font-mono text-[#5B6B82]">Seller GSTIN: 07AABCB8129D1Z4</p>
+                <div className="max-w-[60%]">
+                  {sellerLogo && (
+                    <img
+                      src={sellerLogo}
+                      alt={sellerName || 'Logo'}
+                      className="h-8 max-w-[180px] mb-2 object-contain"
+                    />
+                  )}
+                  <h3 className="text-base font-bold text-[#0B2545]">{sellerName}</h3>
+                  <p className="text-[#5B6B82] whitespace-pre-line leading-relaxed">{sellerAddress}</p>
+                  {sellerGstin ? (
+                    <p className="font-mono text-[#5B6B82] mt-0.5">Seller GSTIN: {sellerGstin}</p>
+                  ) : null}
+                  {(sellerPhone || sellerEmail) && (
+                    <p className="text-[#5B6B82] mt-0.5">
+                      {[sellerPhone, sellerEmail].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right tabular-nums">
                   <p className="font-bold text-[#1D5FAF]">{isB2B ? 'B2B TAX INVOICE' : 'B2C TAX INVOICE'}</p>
-                  <p>Invoice: BDM/26-27/{order.orderNumber.slice(-4)}</p>
+                  <p className="font-mono font-semibold text-[#12263F]">Invoice: {invoiceNumber}</p>
                   <p>Date: {order.createdAt.slice(0, 10)}</p>
+                  {dispatchStateName && (
+                    <p className="text-[#5B6B82]">Place of Supply: {dispatchStateName}</p>
+                  )}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="font-semibold text-[#5B6B82] uppercase text-[10px]">Billed To</p>
-                  <p className="font-semibold">{order.gstDetails?.companyName || order.billingAddress.name}</p>
-                  <p>{order.billingAddress.line1}, {order.billingAddress.city} - {order.billingAddress.pincode}</p>
+                  <p className="font-semibold text-[#12263F]">
+                    {order.gstDetails?.companyName || order.billingAddress.name}
+                  </p>
+                  <p className="text-[#5B6B82]">
+                    {[order.billingAddress.line1, order.billingAddress.line2].filter(Boolean).join(', ')}
+                  </p>
+                  <p className="text-[#5B6B82]">{order.billingAddress.city} - {order.billingAddress.pincode}</p>
+                  {order.billingAddress.state && (
+                    <p className="text-[#5B6B82]">State: {order.billingAddress.state}</p>
+                  )}
                   {order.gstDetails && (
-                    <p className="font-mono font-semibold text-[#1D5FAF]">Buyer GSTIN: {order.gstDetails.gstin}</p>
+                    <p className="font-mono font-semibold text-[#1D5FAF] mt-0.5">
+                      Buyer GSTIN: {order.gstDetails.gstin}
+                    </p>
                   )}
                 </div>
                 <div>
                   <p className="font-semibold text-[#5B6B82] uppercase text-[10px]">Shipped To</p>
-                  <p className="font-semibold">{order.shippingAddress.name}</p>
-                  <p>{order.shippingAddress.line1}, {order.shippingAddress.city} - {order.shippingAddress.pincode}</p>
-                  <p>State: {order.shippingAddress.state}</p>
+                  <p className="font-semibold text-[#12263F]">{order.shippingAddress.name}</p>
+                  <p className="text-[#5B6B82]">
+                    {[order.shippingAddress.line1, order.shippingAddress.line2].filter(Boolean).join(', ')}
+                  </p>
+                  <p className="text-[#5B6B82]">{order.shippingAddress.city} - {order.shippingAddress.pincode}</p>
+                  {order.shippingAddress.state && (
+                    <p className="text-[#5B6B82]">State: {order.shippingAddress.state}</p>
+                  )}
                 </div>
               </div>
 
@@ -708,12 +834,29 @@ export function OrderDetailPage() {
                 </tbody>
               </table>
 
-              <div className="flex justify-between items-end pt-2">
-                <p className="text-[11px] text-[#5B6B82] max-w-sm">
-                  Certified that the particulars given above are true and correct. Authorized Signatory — Buy Denmed Healthcare Pvt Ltd.
-                </p>
-                <div className="text-right tabular-nums">
-                  <p className="text-[#5B6B82]">Total GST: {formatINR(order.gstTotal)}</p>
+              <div className="flex justify-between items-end pt-2 border-t border-[#DCE6F2]">
+                <div className="text-[11px] text-[#5B6B82] max-w-sm space-y-1">
+                  {footerTerms && (
+                    <p className="whitespace-pre-line leading-relaxed">{footerTerms}</p>
+                  )}
+                  <p>
+                    Certified that the particulars given above are true and correct. Authorized Signatory — {signatoryName || sellerName}.
+                  </p>
+                  {signatoryUrl && (
+                    <img src={signatoryUrl} alt="Signatory" className="h-9 mt-1 object-contain" />
+                  )}
+                </div>
+                <div className="text-right tabular-nums space-y-1">
+                  {order.discount > 0 && (
+                    <p className="text-[#16A34A] text-xs">Discount: -{formatINR(order.discount)}</p>
+                  )}
+                  {order.shippingCharge > 0 && (
+                    <p className="text-[#5B6B82] text-xs">Doorstep Air Shipping: {formatINR(order.shippingCharge)}</p>
+                  )}
+                  {order.codCharge && order.codCharge > 0 ? (
+                    <p className="text-[#5B6B82] text-xs">COD Handling Charge: {formatINR(order.codCharge)}</p>
+                  ) : null}
+                  <p className="text-[#5B6B82] text-xs">Total GST: {formatINR(order.gstTotal)}</p>
                   <p className="text-base font-bold text-[#0B2545]">Invoice Total: {formatINR(order.total)}</p>
                 </div>
               </div>

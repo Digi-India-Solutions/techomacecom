@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { CartSkeleton } from '@/components/skeletons/PageSkeletons';
+import { useSiteSettings } from '@/lib/settings/store';
 
 export default function CartPage() {
   const router = useRouter();
@@ -35,6 +36,7 @@ export default function CartPage() {
   } = useCartStore();
 
   const { addToast } = useToastStore();
+  const settings = useSiteSettings();
   const [couponCode, setCouponCode] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState('');
@@ -244,7 +246,7 @@ export default function CartPage() {
               )}
 
               <div className="flex items-center justify-between">
-                <span>Estimated GST</span>
+                <span>{settings.tax.pricesIncludeGst ? 'GST (included in price)' : 'GST'}</span>
                 <span className="font-semibold text-[#12263F]">
                   ₹{gst.toLocaleString('en-IN')}
                 </span>

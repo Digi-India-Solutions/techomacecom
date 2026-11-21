@@ -92,7 +92,6 @@ const EMPTY_FORM: ProductFormPayload = {
     plans: [],
     securityDeposit: 0,
     deliveryPickupCharge: 0,
-    kycRequired: true,
     prescriptionRequired: false,
   },
   seoTitle: '',
@@ -1455,7 +1454,7 @@ export function ProductFormPage() {
                   Enable Rent &amp; Show &ldquo;Available on Rent&rdquo;
                 </p>
                 <p className="mt-0.5 text-xs text-[#5B6B82]">
-                  Activates the Rental configuration tab for daily/weekly/monthly plans, security deposit, and KYC rules.
+                  Activates the Rental configuration tab for daily/weekly/monthly plans and the security deposit.
                 </p>
               </div>
               <input
@@ -1611,22 +1610,6 @@ export function ProductFormPage() {
                   }
                   className={`${inputClass} tabular-nums`}
                 />
-              </FormField>
-
-              <FormField label="KYC Required">
-                <select
-                  value={form.rental.kycRequired ? 'yes' : 'no'}
-                  onChange={(e) =>
-                    updateField('rental', {
-                      ...form.rental,
-                      kycRequired: e.target.value === 'yes',
-                    })
-                  }
-                  className={selectClass}
-                >
-                  <option value="yes">Yes (Aadhaar / PAN before dispatch)</option>
-                  <option value="no">No</option>
-                </select>
               </FormField>
 
               <FormField label="Doctor Prescription Required">

@@ -296,7 +296,6 @@ export async function executeBulkImport(params: {
           plans: [],
           securityDeposit: 0,
           deliveryPickupCharge: 0,
-          kycRequired: false,
           prescriptionRequired: false,
         },
         seoTitle: `${row.name} | Buy Denmed`,

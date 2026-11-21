@@ -356,7 +356,6 @@ async function syncRentalPlans(tx, productId, data) {
   const shared = {
     security_deposit_paise: data.rental.securityDeposit,
     delivery_pickup_paise: data.rental.deliveryPickupCharge,
-    kyc_required: data.rental.kycRequired,
     prescription_required: data.rental.prescriptionRequired,
     is_active: rentOn,
   };

@@ -2,10 +2,10 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Send, ArrowUpRight, Clock } from 'lucide-react';
+import { useSiteSettings } from '@/lib/settings/store';
+import { formatSupportHours, isSupportOpen, whatsappUrl } from '@/lib/settings/format';
 
-const WHATSAPP_NUMBER = '919811234567'; // Buy Denmed Clinic & Medical Support Helpline
-const OPEN_HOUR = 9; // 9:00 AM IST
-const CLOSE_HOUR = 19.5; // 7:30 PM IST
+// Number, brand and support hours come from admin → Settings → Store
 
 const quickQuestions = [
   'Wholesale quote for dental chairs & autoclaves',
@@ -21,29 +21,23 @@ const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' 
   </svg>
 );
 
-/** True when the clinic support desk is open (Mon–Sat, 9:00–19:30 IST). */
-function isSupportOnline(now = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    weekday: 'short',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false
-  }).formatToParts(now);
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
-  const hour = Number(get('hour')) + Number(get('minute')) / 60;
-  return get('weekday') !== 'Sun' && hour >= OPEN_HOUR && hour < CLOSE_HOUR;
-}
 
 export const WhatsAppButton: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
+  const { store } = useSiteSettings();
+  const hours = store.supportHours;
   // Computed after mount to avoid a server/client hydration mismatch
   const [online, setOnline] = useState<boolean | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const tick = () => setOnline(isSupportOpen(hours));
+    tick();
+    const t = setInterval(tick, 60_000);
+    return () => clearInterval(t);
+  }, [hours]);
     const timer = setTimeout(() => {
       setOnline(isSupportOnline());
     }, 0);
@@ -72,19 +66,22 @@ export const WhatsAppButton: React.FC = () => {
   }, [isOpen]);
 
   const handleSend = (textToSend?: string) => {
-    const finalMsg = (textToSend || message).trim() || 'Hello Buy Denmed, I need medical/dental equipment assistance.';
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(finalMsg)}`, '_blank', 'noopener,noreferrer');
+    const finalMsg = (textToSend || message).trim() || `Hello ${store.brandName}, I need medical/dental equipment assistance.`;
+    window.open(whatsappUrl(store, finalMsg), '_blank', 'noopener,noreferrer');
     setIsOpen(false);
     setMessage('');
   };
 
+
+  // No WhatsApp number saved in Settings → Store: hide the widget
+  if (!store.whatsappLink) return null;
   return (
     <div ref={rootRef} className="fixed bottom-20 lg:bottom-6 left-4 sm:left-6 z-40 flex flex-col items-start pointer-events-none">
       {/* ================= Chat panel ================= */}
       {/* Always mounted so it can animate both in and out */}
       <div
           role="dialog"
-          aria-label="Chat with Buy Denmed on WhatsApp"
+          aria-label={`Chat with ${store.brandName} on WhatsApp`}
           aria-hidden={!isOpen}
           inert={!isOpen}
           className={`mb-3 w-[calc(100vw-32px)] max-w-[360px] bg-white rounded-2xl shadow-[0_24px_60px_-12px_rgba(11,37,69,0.35)] border border-[#DCE6F2] overflow-hidden origin-bottom-left transition-[opacity,transform,visibility] ease-out ${
@@ -116,7 +113,7 @@ export const WhatsAppButton: React.FC = () => {
                 />
               </div>
               <div className="min-w-0">
-                <p className="font-heading font-semibold text-[15px] leading-tight">Buy Denmed Support</p>
+                <p className="font-heading font-semibold text-[15px] leading-tight">{store.brandName} Support</p>
                 <p className="text-[12px] text-slate-300 mt-0.5">
                   {online === null
                     ? 'Equipment specialists'
@@ -135,7 +132,7 @@ export const WhatsAppButton: React.FC = () => {
                 Hi Doctor 👋 Tell us what you&apos;re looking for — we&apos;ll help with pricing, stock, rentals or
                 GST invoices.
               </p>
-              <span className="block text-right text-[10px] text-[#8A97A8] mt-1">Buy Denmed</span>
+              <span className="block text-right text-[10px] text-[#8A97A8] mt-1">{store.brandName}</span>
             </div>
 
             <div>
@@ -188,7 +185,7 @@ export const WhatsAppButton: React.FC = () => {
             </div>
             <p className="flex items-center justify-center gap-1 text-[11px] text-[#8A97A8] mt-2">
               <Clock className="w-3 h-3" />
-              Mon–Sat, 9 AM – 7:30 PM · Opens in WhatsApp
+              {formatSupportHours(hours)} · Opens in WhatsApp
             </p>
           </form>
       </div>

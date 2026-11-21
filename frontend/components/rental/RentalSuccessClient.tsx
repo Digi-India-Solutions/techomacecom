@@ -16,8 +16,12 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useRentalStore, useToastStore } from '@/lib/store';
+import { useSiteSettings } from '@/lib/settings/store';
 
 export default function RentalSuccessClient() {
+  const { store, rental: rentalRules } = useSiteSettings();
+  // Settings → Rental → deposit refund promise
+  const refundWindow = `${rentalRules.depositRefundDays} day${rentalRules.depositRefundDays === 1 ? '' : 's'}`;
   const searchParams = useSearchParams();
   const { addToast } = useToastStore();
   const bookingId = searchParams.get('bookingId') || 'BDM-RNT-2026-88194';
@@ -32,7 +36,7 @@ RENTAL BOOKING CONFIRMATION & DEPOSIT RECEIPT
 =============================================================
 Booking ID: ${rental.bookingNumber}
 Date: ${new Date().toLocaleDateString('en-IN')}
-Status: PENDING APPROVAL (Biomedical & KYC Verification)
+Status: PENDING APPROVAL (Availability & Biomedical Check)
 
 Equipment: ${rental.product.name}
 Brand: ${rental.product.brandName}
@@ -54,9 +58,9 @@ ${rental.address.addressLine1}, ${rental.address.city}, ${rental.address.state} 
 Contact: ${rental.address.name} (${rental.address.phone})
 
 TERMS:
-1. 100% Security Deposit is returned within 48 hours following device inspection upon return.
+1. 100% Security Deposit is returned within ${refundWindow} following device inspection upon return.
 2. 100% Free repair and emergency standby replacement included.
-Support Helpline: +91 98112 34567 | support@buydenmed.com
+Support Helpline: ${store.supportPhone} | ${store.supportEmail}
 =============================================================`;
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -92,7 +96,7 @@ Support Helpline: +91 98112 34567 | support@buydenmed.com
           </h1>
 
           <p className="text-xs text-[#5B6B82] max-w-md mx-auto">
-            Your booking reference is <strong className="text-[#12263F] font-mono">{bookingId}</strong>. Our biomedical team is verifying your KYC and sanitizing the machine for delivery.
+            Your booking reference is <strong className="text-[#12263F] font-mono">{bookingId}</strong>. Our team is confirming availability and sanitizing the machine for delivery.
           </p>
         </div>
 
@@ -156,8 +160,8 @@ Support Helpline: +91 98112 34567 | support@buydenmed.com
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-3.5 bg-[#F6F9FD] rounded-xl border border-[#DCE6F2] space-y-1">
                 <div className="text-[11px] font-black text-[#1D5FAF]">STEP 1 (2-4 Hours)</div>
-                <div className="font-bold text-xs text-[#12263F]">KYC Verification</div>
-                <p className="text-[12px] text-[#5B6B82]">Our medical compliance desk validates your identity proof.</p>
+                <div className="font-bold text-xs text-[#12263F]">Booking Confirmation</div>
+                <p className="text-[12px] text-[#5B6B82]">We confirm stock and your delivery slot by phone.</p>
               </div>
 
               <div className="p-3.5 bg-[#F6F9FD] rounded-xl border border-[#DCE6F2] space-y-1">
@@ -186,10 +190,10 @@ Support Helpline: +91 98112 34567 | support@buydenmed.com
           </div>
         </div>
         <a
-          href="tel:+919811234567"
+          href={store.supportPhoneHref}
           className="px-4 py-2 bg-[#1D5FAF] hover:bg-[#174E90] text-white font-bold rounded-xl whitespace-nowrap transition-colors"
         >
-          Call +91 98112 34567
+          Call {store.supportPhone}
         </a>
       </div>
     </div>

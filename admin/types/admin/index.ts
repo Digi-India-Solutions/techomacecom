@@ -234,7 +234,6 @@ export interface ProductRentalConfig {
   plans: ProductRentalPlan[];
   securityDeposit: number;
   deliveryPickupCharge: number;
-  kycRequired: boolean;
   prescriptionRequired: boolean;
 }
 
