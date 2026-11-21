@@ -5,7 +5,7 @@ import type {
   OrderStatus,
   ReturnRequest,
 } from '@/types/admin';
-import { mockDelay } from './client';
+import { adminFetch, mockDelay } from './client';
 import { PRODUCT_IMAGES } from './mockData';
 
 let ordersStore: Order[] = [
@@ -454,46 +454,71 @@ export async function listOrders(filters?: {
   dateFrom?: string;
   dateTo?: string;
 }): Promise<Order[]> {
-  await mockDelay(130);
-  let list = [...ordersStore];
+  try {
+    const params = new URLSearchParams();
+    if (filters?.search) params.set('search', filters.search);
+    if (filters?.status && filters.status !== 'all') params.set('status', filters.status);
+    if (filters?.paymentMethod && filters.paymentMethod !== 'all') params.set('paymentMethod', filters.paymentMethod);
+    if (filters?.paymentStatus && filters.paymentStatus !== 'all') params.set('paymentStatus', filters.paymentStatus);
+    if (filters?.dateFrom) params.set('dateFrom', filters.dateFrom);
+    if (filters?.dateTo) params.set('dateTo', filters.dateTo);
 
-  if (filters?.search) {
-    const q = filters.search.trim().toLowerCase();
-    list = list.filter(
-      (o) =>
-        o.orderNumber.toLowerCase().includes(q) ||
-        o.customerName.toLowerCase().includes(q) ||
-        o.customerPhone.toLowerCase().includes(q) ||
-        o.items.some((it) => it.sku.toLowerCase().includes(q))
-    );
-  }
-  if (filters?.status && filters.status !== 'all') {
-    list = list.filter((o) => o.orderStatus === filters.status);
-  }
-  if (filters?.paymentMethod && filters.paymentMethod !== 'all') {
-    list = list.filter((o) => o.paymentMethod === filters.paymentMethod);
-  }
-  if (filters?.paymentStatus && filters.paymentStatus !== 'all') {
-    list = list.filter((o) => o.paymentStatus === filters.paymentStatus);
-  }
-  if (filters?.dateFrom) {
-    list = list.filter((o) => o.createdAt.slice(0, 10) >= filters.dateFrom!);
-  }
-  if (filters?.dateTo) {
-    list = list.filter((o) => o.createdAt.slice(0, 10) <= filters.dateTo!);
-  }
+    const qs = params.toString();
+    const { data } = await adminFetch<Order[]>(`/admin/orders${qs ? `?${qs}` : ''}`);
+    return data;
+  } catch (err) {
+    console.warn('Falling back to local orders store:', err);
+    await mockDelay(130);
+    let list = [...ordersStore];
 
-  return structuredClone(list);
+    if (filters?.search) {
+      const q = filters.search.trim().toLowerCase();
+      list = list.filter(
+        (o) =>
+          o.orderNumber.toLowerCase().includes(q) ||
+          o.customerName.toLowerCase().includes(q) ||
+          o.customerPhone.toLowerCase().includes(q) ||
+          o.items.some((it) => it.sku.toLowerCase().includes(q))
+      );
+    }
+    if (filters?.status && filters.status !== 'all') {
+      list = list.filter((o) => o.orderStatus === filters.status);
+    }
+    if (filters?.paymentMethod && filters.paymentMethod !== 'all') {
+      list = list.filter((o) => o.paymentMethod === filters.paymentMethod);
+    }
+    if (filters?.paymentStatus && filters.paymentStatus !== 'all') {
+      list = list.filter((o) => o.paymentStatus === filters.paymentStatus);
+    }
+    if (filters?.dateFrom) {
+      list = list.filter((o) => o.createdAt.slice(0, 10) >= filters.dateFrom!);
+    }
+    if (filters?.dateTo) {
+      list = list.filter((o) => o.createdAt.slice(0, 10) <= filters.dateTo!);
+    }
+
+    return structuredClone(list);
+  }
 }
 
 export async function getAllOrdersForCounts(): Promise<Order[]> {
-  return structuredClone(ordersStore);
+  try {
+    const { data } = await adminFetch<Order[]>('/admin/orders');
+    return data;
+  } catch {
+    return structuredClone(ordersStore);
+  }
 }
 
 export async function getOrderById(id: string): Promise<Order | null> {
-  await mockDelay(100);
-  const found = ordersStore.find((o) => o.id === id);
-  return found ? structuredClone(found) : null;
+  try {
+    const { data } = await adminFetch<Order>(`/admin/orders/${id}`);
+    return data;
+  } catch {
+    await mockDelay(100);
+    const found = ordersStore.find((o) => o.id === id);
+    return found ? structuredClone(found) : null;
+  }
 }
 
 export async function updateOrderStatus(params: {
@@ -502,36 +527,44 @@ export async function updateOrderStatus(params: {
   actor: string;
   note?: string;
 }): Promise<Order> {
-  await mockDelay(160);
-  const existing = ordersStore.find((o) => o.id === params.id);
-  if (!existing) throw new Error('Order not found');
+  try {
+    const { data } = await adminFetch<Order>(`/admin/orders/${params.id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: params.status, note: params.note }),
+    });
+    return data;
+  } catch {
+    await mockDelay(160);
+    const existing = ordersStore.find((o) => o.id === params.id);
+    if (!existing) throw new Error('Order not found');
 
-  const now = new Date().toISOString();
-  const isCancelPrepaid =
-    params.status === 'cancelled' && existing.paymentStatus === 'paid';
+    const now = new Date().toISOString();
+    const isCancelPrepaid =
+      params.status === 'cancelled' && existing.paymentStatus === 'paid';
 
-  const updated: Order = {
-    ...existing,
-    orderStatus: params.status,
-    paymentStatus: isCancelPrepaid ? 'refunded' : existing.paymentStatus,
-    cancelReason: params.status === 'cancelled' ? params.note : existing.cancelReason,
-    updatedAt: now,
-    timeline: [
-      ...existing.timeline,
-      {
-        id: `tl-${Date.now()}`,
-        status: params.status.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-        note: isCancelPrepaid
-          ? `${params.note || 'Cancelled by admin'} · Auto-refund triggered via ${existing.paymentMethod}`
-          : params.note || `Marked as ${params.status}`,
-        actor: params.actor,
-        timestamp: now,
-      },
-    ],
-  };
+    const updated: Order = {
+      ...existing,
+      orderStatus: params.status,
+      paymentStatus: isCancelPrepaid ? 'refunded' : existing.paymentStatus,
+      cancelReason: params.status === 'cancelled' ? params.note : existing.cancelReason,
+      updatedAt: now,
+      timeline: [
+        ...existing.timeline,
+        {
+          id: `tl-${Date.now()}`,
+          status: params.status.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+          note: isCancelPrepaid
+            ? `${params.note || 'Cancelled by admin'} · Auto-refund triggered via ${existing.paymentMethod}`
+            : params.note || `Marked as ${params.status}`,
+          actor: params.actor,
+          timestamp: now,
+        },
+      ],
+    };
 
-  ordersStore = ordersStore.map((o) => (o.id === params.id ? updated : o));
-  return structuredClone(updated);
+    ordersStore = ordersStore.map((o) => (o.id === params.id ? updated : o));
+    return structuredClone(updated);
+  }
 }
 
 export async function createOrderShipment(params: {
@@ -543,84 +576,110 @@ export async function createOrderShipment(params: {
   heightCm: number;
   actor: string;
 }): Promise<Order> {
-  await mockDelay(220);
-  const existing = ordersStore.find((o) => o.id === params.id);
-  if (!existing) throw new Error('Order not found');
+  try {
+    const { data } = await adminFetch<Order>(`/admin/orders/${params.id}/shipment`, {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+    return data;
+  } catch {
+    await mockDelay(220);
+    const existing = ordersStore.find((o) => o.id === params.id);
+    if (!existing) throw new Error('Order not found');
 
-  const awb = `SR${Math.floor(100000000 + Math.random() * 900000000)}`;
-  const now = new Date().toISOString();
+    const awb = `SR${Math.floor(100000000 + Math.random() * 900000000)}`;
+    const now = new Date().toISOString();
 
-  const updated: Order = {
-    ...existing,
-    orderStatus: 'shipped',
-    updatedAt: now,
-    shipment: {
-      courier: params.courier,
-      awb,
-      trackingUrl: `https://shiprocket.co/tracking/${awb}`,
-      weightKg: params.weightKg,
-      lengthCm: params.lengthCm,
-      widthCm: params.widthCm,
-      heightCm: params.heightCm,
-      shippedAt: now,
-    },
-    timeline: [
-      ...existing.timeline,
-      {
-        id: `tl-${Date.now()}`,
-        status: 'Shipped',
-        note: `Shiprocket AWB ${awb} via ${params.courier}`,
-        actor: params.actor,
-        timestamp: now,
+    const updated: Order = {
+      ...existing,
+      orderStatus: 'shipped',
+      updatedAt: now,
+      shipment: {
+        courier: params.courier,
+        awb,
+        trackingUrl: `https://shiprocket.co/tracking/${awb}`,
+        weightKg: params.weightKg,
+        lengthCm: params.lengthCm,
+        widthCm: params.widthCm,
+        heightCm: params.heightCm,
+        shippedAt: now,
       },
-    ],
-  };
+      timeline: [
+        ...existing.timeline,
+        {
+          id: `tl-${Date.now()}`,
+          status: 'Shipped',
+          note: `Shiprocket AWB ${awb} via ${params.courier}`,
+          actor: params.actor,
+          timestamp: now,
+        },
+      ],
+    };
 
-  ordersStore = ordersStore.map((o) => (o.id === params.id ? updated : o));
-  return structuredClone(updated);
+    ordersStore = ordersStore.map((o) => (o.id === params.id ? updated : o));
+    return structuredClone(updated);
+  }
 }
 
 export async function addOrderInternalNote(id: string, note: string): Promise<Order> {
-  await mockDelay(100);
-  const existing = ordersStore.find((o) => o.id === id);
-  if (!existing) throw new Error('Order not found');
-  const updated: Order = {
-    ...existing,
-    internalNotes: [note, ...existing.internalNotes],
-    updatedAt: new Date().toISOString(),
-  };
-  ordersStore = ordersStore.map((o) => (o.id === id ? updated : o));
-  return structuredClone(updated);
+  try {
+    const { data } = await adminFetch<Order>(`/admin/orders/${id}/notes`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    });
+    return data;
+  } catch {
+    await mockDelay(100);
+    const existing = ordersStore.find((o) => o.id === id);
+    if (!existing) throw new Error('Order not found');
+    const updated: Order = {
+      ...existing,
+      internalNotes: [note, ...existing.internalNotes],
+      updatedAt: new Date().toISOString(),
+    };
+    ordersStore = ordersStore.map((o) => (o.id === id ? updated : o));
+    return structuredClone(updated);
+  }
 }
 
 export async function bulkMarkOrdersPacked(ids: string[], actor: string): Promise<void> {
-  await mockDelay(180);
-  const now = new Date().toISOString();
-  ordersStore = ordersStore.map((o) =>
-    ids.includes(o.id) && (o.orderStatus === 'new' || o.orderStatus === 'confirmed')
-      ? {
-          ...o,
-          orderStatus: 'packed',
-          updatedAt: now,
-          timeline: [
-            ...o.timeline,
-            {
-              id: `tl-${Date.now()}-${o.id}`,
-              status: 'Packed',
-              note: 'Bulk marked packed',
-              actor,
-              timestamp: now,
-            },
-          ],
-        }
-      : o
-  );
+  try {
+    await adminFetch('/admin/orders/bulk-packed', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+  } catch {
+    await mockDelay(180);
+    const now = new Date().toISOString();
+    ordersStore = ordersStore.map((o) =>
+      ids.includes(o.id) && (o.orderStatus === 'new' || o.orderStatus === 'confirmed')
+        ? {
+            ...o,
+            orderStatus: 'packed',
+            updatedAt: now,
+            timeline: [
+              ...o.timeline,
+              {
+                id: `tl-${Date.now()}-${o.id}`,
+                status: 'Packed',
+                note: 'Bulk marked packed',
+                actor,
+                timestamp: now,
+              },
+            ],
+          }
+        : o
+    );
+  }
 }
 
 // --- RETURNS & REFUNDS ---
 export async function listReturnRequests(): Promise<ReturnRequest[]> {
-  await mockDelay(120);
-  return structuredClone(returnsStore);
+  try {
+    return await adminGet<ReturnRequest[]>('/returns');
+  } catch {
+    return structuredClone(returnsStore);
+  }
 }
 
 export async function updateReturnRequest(params: {
@@ -630,18 +689,21 @@ export async function updateReturnRequest(params: {
   pickupDate?: string;
   pickupCourier?: string;
 }): Promise<ReturnRequest> {
-  await mockDelay(160);
-  const existing = returnsStore.find((r) => r.id === params.id);
-  if (!existing) throw new Error('Return request not found');
-  const updated: ReturnRequest = {
-    ...existing,
-    status: params.status,
-    adminNote: params.adminNote ?? existing.adminNote,
-    pickupDate: params.pickupDate ?? existing.pickupDate,
-    pickupCourier: params.pickupCourier ?? existing.pickupCourier,
-  };
-  returnsStore = returnsStore.map((r) => (r.id === params.id ? updated : r));
-  return structuredClone(updated);
+  try {
+    return await adminPatch<ReturnRequest>(`/returns/${encodeURIComponent(params.id)}/status`, params);
+  } catch {
+    const existing = returnsStore.find((r) => r.id === params.id);
+    if (!existing) throw new Error('Return request not found');
+    const updated: ReturnRequest = {
+      ...existing,
+      status: params.status,
+      adminNote: params.adminNote ?? existing.adminNote,
+      pickupDate: params.pickupDate ?? existing.pickupDate,
+      pickupCourier: params.pickupCourier ?? existing.pickupCourier,
+    };
+    returnsStore = returnsStore.map((r) => (r.id === params.id ? updated : r));
+    return structuredClone(updated);
+  }
 }
 
 export async function processReturnRefund(params: {
@@ -651,26 +713,29 @@ export async function processReturnRefund(params: {
   reference: string;
   processedBy: string;
 }): Promise<ReturnRequest> {
-  await mockDelay(200);
-  const existing = returnsStore.find((r) => r.id === params.id);
-  if (!existing) throw new Error('Return request not found');
+  try {
+    return await adminPost<ReturnRequest>(`/returns/${encodeURIComponent(params.id)}/refund`, params);
+  } catch {
+    const existing = returnsStore.find((r) => r.id === params.id);
+    if (!existing) throw new Error('Return request not found');
 
-  const updated: ReturnRequest = {
-    ...existing,
-    status: 'refunded',
-    refundHistory: [
-      {
-        id: `ref-${Date.now()}`,
-        amount: params.amount,
-        method: params.method,
-        reference: params.reference || `REF-${Date.now().toString().slice(-6)}`,
-        processedBy: params.processedBy,
-        processedAt: new Date().toISOString(),
-      },
-      ...existing.refundHistory,
-    ],
-  };
+    const updated: ReturnRequest = {
+      ...existing,
+      status: 'refunded',
+      refundHistory: [
+        {
+          id: `ref-${Date.now()}`,
+          amount: params.amount,
+          method: params.method,
+          reference: params.reference || `REF-${Date.now().toString().slice(-6)}`,
+          processedBy: params.processedBy,
+          processedAt: new Date().toISOString(),
+        },
+        ...existing.refundHistory,
+      ],
+    };
 
-  returnsStore = returnsStore.map((r) => (r.id === params.id ? updated : r));
-  return structuredClone(updated);
+    returnsStore = returnsStore.map((r) => (r.id === params.id ? updated : r));
+    return structuredClone(updated);
+  }
 }

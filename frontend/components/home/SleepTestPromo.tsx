@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight, Phone } from 'lucide-react';
+import { useSiteSettings } from '@/lib/settings/store';
 
 const steps = [
   {
@@ -24,6 +25,7 @@ const steps = [
 ];
 
 export const SleepTestPromo: React.FC = () => {
+  const { store } = useSiteSettings();
   return (
     <section className="my-10 sm:my-14">
       <div className="max-w-[1320px] mx-auto px-4 sm:px-6">
@@ -112,14 +114,14 @@ export const SleepTestPromo: React.FC = () => {
               </Link>
 
               <a
-                href="tel:+919811234567"
+                href={store.supportPhoneHref}
                 className="group/call inline-flex items-center gap-2 text-sm text-[#5B6B82] hover:text-[#12263F] transition-colors"
               >
                 <Phone className="w-4 h-4 text-[#1D5FAF]" />
                 <span>
                   Questions? Call{' '}
                   <span className="font-semibold text-[#12263F] underline decoration-[#DCE6F2] decoration-2 underline-offset-4 group-hover/call:decoration-[#1D5FAF] transition-colors">
-                    +91 98112 34567
+                    {store.supportPhone}
                   </span>
                 </span>
               </a>

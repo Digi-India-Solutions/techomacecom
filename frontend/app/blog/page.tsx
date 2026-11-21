@@ -5,6 +5,9 @@ import { getBlogPosts } from '@/lib/api';
 import { BookOpen, Calendar, Clock, ChevronRight, User } from 'lucide-react';
 import SkeletonImage from '@/components/common/SkeletonImage';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: 'Clinical Knowledge Hub & Guides | Buy Denmed India',
   description: 'Evidence-based articles on dental clinic setup, Class B autoclave validation, sleep apnea CPAP titration, and medical procurement.'

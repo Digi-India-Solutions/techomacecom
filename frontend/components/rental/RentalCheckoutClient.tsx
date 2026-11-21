@@ -14,10 +14,7 @@ import { getProductImageUrl } from '@/lib/utils';
 import { 
   Bed, 
   ShieldCheck, 
-  CheckCircle2, 
   MapPin, 
-  FileText, 
-  Upload, 
   CreditCard, 
   Lock, 
   ArrowRight, 
@@ -26,13 +23,11 @@ import {
   Phone, 
   Check, 
   AlertCircle,
-  FileCheck,
-  Building,
   Eye,
-  Trash2,
   Calendar
 } from 'lucide-react';
 import { CheckoutSkeleton } from '@/components/skeletons/PageSkeletons';
+import { useSiteSettings } from '@/lib/settings/store';
 
 export default function RentalCheckoutClient() {
   const router = useRouter();
@@ -40,7 +35,7 @@ export default function RentalCheckoutClient() {
   const { user, isAuthenticated } = useUserStore();
   const { addToast } = useToastStore();
 
-  // Current active step (1 to 4)
+  // Current active step (1 to 3)
   const [currentStep, setCurrentStep] = useState<number>(isAuthenticated ? 2 : 1);
 
   // Fallback initial draft if none exists in localStorage
@@ -70,7 +65,6 @@ export default function RentalCheckoutClient() {
           rentPricePerMonth: 4500,
           securityDeposit: 10000,
           deliveryPickupCharge: 500,
-          rentalKycRequired: true,
           images: [
             { url: '/images/prod_oxygen_main.jpg', alt: 'Philips EverFlo 5L Oxygen Concentrator', type: 'main' }
           ],
@@ -121,20 +115,8 @@ export default function RentalCheckoutClient() {
     isDefault: true
   });
 
-  // STEP 3: KYC DOCUMENTS STATE
-  const [kycDocs, setKycDocs] = useState<{
-    idProofFront: string | null;
-    idProofBack: string | null;
-    addressProof: string | null;
-    doctorPrescription: string | null;
-  }>({
-    idProofFront: 'Aadhaar_Card_Front_Sample.jpg',
-    idProofBack: 'Aadhaar_Card_Back_Sample.jpg',
-    addressProof: 'Clinic_Registration_Proof.pdf',
-    doctorPrescription: null
-  });
-
-  // STEP 4: PAYMENT / RAZORPAY MODAL STATE
+  // STEP 3: PAYMENT / RAZORPAY MODAL STATE
+  const { store, rental: rentalRules } = useSiteSettings();
   const [isRazorpayModalOpen, setIsRazorpayModalOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'netbanking'>('upi');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -177,16 +159,6 @@ export default function RentalCheckoutClient() {
   //   }
   // };
 
-  // Simulated file upload
-  const handleFileUpload = (type: keyof typeof kycDocs, fileName: string) => {
-    setKycDocs((prev) => ({ ...prev, [type]: fileName }));
-    addToast({
-      type: 'success',
-      title: 'Document Uploaded',
-      message: `${fileName} uploaded successfully for verification.`
-    });
-  };
-
   // Final Order Placement
   const handleCompleteRazorpayPayment = async () => {
     if (!draft) return;
@@ -219,13 +191,6 @@ export default function RentalCheckoutClient() {
           gst: draft.gstAmount
         },
         address: selectedAddress,
-        kycDocuments: {
-          idProofFront: kycDocs.idProofFront || undefined,
-          idProofBack: kycDocs.idProofBack || undefined,
-          addressProof: kycDocs.addressProof || undefined,
-          doctorPrescription: kycDocs.doctorPrescription || undefined,
-          verified: false
-        },
         payments: [initialPayment]
       });
 
@@ -254,8 +219,7 @@ export default function RentalCheckoutClient() {
   const steps = [
     { num: 1, title: 'Authentication', icon: User },
     { num: 2, title: 'Delivery Address', icon: MapPin },
-    { num: 3, title: 'KYC Verification', icon: FileCheck },
-    { num: 4, title: 'Review & Pay', icon: CreditCard }
+    { num: 3, title: 'Review & Pay', icon: CreditCard }
   ];
 
   return (
@@ -311,13 +275,13 @@ export default function RentalCheckoutClient() {
             <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#DCE6F2] shadow-sm space-y-5">
               <div className="space-y-1">
                 <div className="text-xs font-bold text-[#1D5FAF] uppercase tracking-wider">
-                  Step 1 of 4
+                  Step 1 of 3
                 </div>
                 <h2 className="text-xl font-black text-[#12263F]">
                   Sign in to continue your rental
                 </h2>
                 <p className="text-xs text-gray-500">
-                  Sign in or create an account to receive contract updates, KYC approval alerts, and delivery tracking.
+                  Sign in or create an account to receive contract updates, booking confirmations, and delivery tracking.
                 </p>
               </div>
 
@@ -409,7 +373,7 @@ export default function RentalCheckoutClient() {
               <div className="flex items-center justify-between border-b border-[#DCE6F2] pb-4">
                 <div className="space-y-1">
                   <div className="text-xs font-bold text-[#1D5FAF] uppercase tracking-wider">
-                    Step 2 of 4
+                    Step 2 of 3
                   </div>
                   <h2 className="text-xl font-black text-[#12263F]">
                     Delivery & Installation Address
@@ -526,209 +490,19 @@ export default function RentalCheckoutClient() {
                   onClick={() => setCurrentStep(3)}
                   className="px-6 py-3 bg-[#1D5FAF] hover:bg-[#174E90] text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5"
                 >
-                  <span>Continue to KYC Upload</span>
+                  <span>Review &amp; Pay</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP 3: KYC UPLOAD */}
+          {/* STEP 3: REVIEW & PAY */}
           {currentStep === 3 && (
             <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#DCE6F2] shadow-sm space-y-6">
               <div className="space-y-1">
                 <div className="text-xs font-bold text-[#1D5FAF] uppercase tracking-wider">
-                  Step 3 of 4
-                </div>
-                <h2 className="text-xl font-black text-[#12263F]">
-                  Government KYC Document Upload
-                </h2>
-                <p className="text-xs text-[#5B6B82]">
-                  Mandatory regulatory compliance for high-value medical & respiratory rentals. Files are encrypted with 256-bit AES.
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                {/* 1. ID Proof Front */}
-                <div className="p-4 rounded-2xl border border-[#DCE6F2] bg-[#F6F9FD] space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileCheck className="w-4 h-4 text-[#1D5FAF]" />
-                      <span className="font-bold text-xs text-[#12263F]">
-                        1. Government ID Proof (Front) *
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-[#5B6B82]">Aadhaar / Voter ID / Passport</span>
-                  </div>
-
-                  {kycDocs.idProofFront ? (
-                    <div className="p-3 bg-white rounded-xl border border-green-200 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 text-green-700 font-semibold truncate">
-                        <CheckCircle2 className="w-4 h-4 shrink-0 text-[#16A34A]" />
-                        <span className="truncate">{kycDocs.idProofFront}</span>
-                      </div>
-                      <button
-                        onClick={() => setKycDocs({ ...kycDocs, idProofFront: null })}
-                        className="text-[#DC2626] hover:text-red-700 p-1"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => handleFileUpload('idProofFront', 'Govt_ID_Front_Verified.pdf')}
-                      className="border-2 border-dashed border-[#DCE6F2] hover:border-[#1D5FAF] rounded-xl p-4 text-center cursor-pointer bg-white transition-colors"
-                    >
-                      <Upload className="w-5 h-5 text-[#5B6B82] mx-auto mb-1" />
-                      <span className="text-xs font-bold text-[#12263F] block">Click to Upload Front Side</span>
-                      <span className="text-[11px] text-[#5B6B82]">PDF, JPG, PNG up to 10MB</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. ID Proof Back */}
-                <div className="p-4 rounded-2xl border border-[#DCE6F2] bg-[#F6F9FD] space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileCheck className="w-4 h-4 text-[#1D5FAF]" />
-                      <span className="font-bold text-xs text-[#12263F]">
-                        2. Government ID Proof (Back) *
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-[#5B6B82]">Showing permanent address</span>
-                  </div>
-
-                  {kycDocs.idProofBack ? (
-                    <div className="p-3 bg-white rounded-xl border border-green-200 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 text-green-700 font-semibold truncate">
-                        <CheckCircle2 className="w-4 h-4 shrink-0 text-[#16A34A]" />
-                        <span className="truncate">{kycDocs.idProofBack}</span>
-                      </div>
-                      <button
-                        onClick={() => setKycDocs({ ...kycDocs, idProofBack: null })}
-                        className="text-[#DC2626] hover:text-red-700 p-1"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => handleFileUpload('idProofBack', 'Govt_ID_Back_Verified.pdf')}
-                      className="border-2 border-dashed border-[#DCE6F2] hover:border-[#1D5FAF] rounded-xl p-4 text-center cursor-pointer bg-white transition-colors"
-                    >
-                      <Upload className="w-5 h-5 text-[#5B6B82] mx-auto mb-1" />
-                      <span className="text-xs font-bold text-[#12263F] block">Click to Upload Back Side</span>
-                      <span className="text-[11px] text-[#5B6B82]">PDF, JPG, PNG up to 10MB</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. Address Proof */}
-                <div className="p-4 rounded-2xl border border-[#DCE6F2] bg-[#F6F9FD] space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Building className="w-4 h-4 text-[#1D5FAF]" />
-                      <span className="font-bold text-xs text-[#12263F]">
-                        3. Address Proof (Clinic / Residence) *
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-[#5B6B82]">Electricity bill / Rent deed / Hospital registration</span>
-                  </div>
-
-                  {kycDocs.addressProof ? (
-                    <div className="p-3 bg-white rounded-xl border border-green-200 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 text-green-700 font-semibold truncate">
-                        <CheckCircle2 className="w-4 h-4 shrink-0 text-[#16A34A]" />
-                        <span className="truncate">{kycDocs.addressProof}</span>
-                      </div>
-                      <button
-                        onClick={() => setKycDocs({ ...kycDocs, addressProof: null })}
-                        className="text-[#DC2626] hover:text-red-700 p-1"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => handleFileUpload('addressProof', 'Electricity_Bill_Latest.pdf')}
-                      className="border-2 border-dashed border-[#DCE6F2] hover:border-[#1D5FAF] rounded-xl p-4 text-center cursor-pointer bg-white transition-colors"
-                    >
-                      <Upload className="w-5 h-5 text-[#5B6B82] mx-auto mb-1" />
-                      <span className="text-xs font-bold text-[#12263F] block">Click to Upload Address Proof</span>
-                      <span className="text-[11px] text-[#5B6B82]">Latest within 3 months</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 4. Optional Doctor's Prescription */}
-                <div className="p-4 rounded-2xl border border-[#DCE6F2] bg-[#F6F9FD] space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-[#1D5FAF]" />
-                      <span className="font-bold text-xs text-[#12263F]">
-                        4. Doctor&apos;s Prescription (Optional)
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-[#5B6B82]">Expedites instant approval</span>
-                  </div>
-
-                  {kycDocs.doctorPrescription ? (
-                    <div className="p-3 bg-white rounded-xl border border-green-200 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 text-green-700 font-semibold truncate">
-                        <CheckCircle2 className="w-4 h-4 shrink-0 text-[#16A34A]" />
-                        <span className="truncate">{kycDocs.doctorPrescription}</span>
-                      </div>
-                      <button
-                        onClick={() => setKycDocs({ ...kycDocs, doctorPrescription: null })}
-                        className="text-[#DC2626] hover:text-red-700 p-1"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => handleFileUpload('doctorPrescription', 'Physician_Prescription_Rx.pdf')}
-                      className="border-2 border-dashed border-[#DCE6F2] hover:border-[#1D5FAF] rounded-xl p-4 text-center cursor-pointer bg-white transition-colors"
-                    >
-                      <Upload className="w-5 h-5 text-[#5B6B82] mx-auto mb-1" />
-                      <span className="text-xs font-bold text-[#12263F] block">Upload Prescription or Clinical Recommendation</span>
-                      <span className="text-[11px] text-[#5B6B82]">PDF, JPG, PNG up to 10MB</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-[#DCE6F2]">
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(2)}
-                  className="px-4 py-2 text-xs font-bold text-[#5B6B82] hover:text-[#12263F] flex items-center gap-1.5"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Back</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(4)}
-                  className="px-6 py-3 bg-[#1D5FAF] hover:bg-[#174E90] text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5"
-                >
-                  <span>Review Contract & Pay</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4: REVIEW & PAY */}
-          {currentStep === 4 && (
-            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#DCE6F2] shadow-sm space-y-6">
-              <div className="space-y-1">
-                <div className="text-xs font-bold text-[#1D5FAF] uppercase tracking-wider">
-                  Step 4 of 4
+                  Step 3 of 3
                 </div>
                 <h2 className="text-xl font-black text-[#12263F]">
                   Review Contract & Pay via Razorpay
@@ -738,7 +512,7 @@ export default function RentalCheckoutClient() {
                 </p>
               </div>
 
-              {/* Delivery & KYC Summary Cards */}
+              {/* Delivery & tenure summary */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div className="p-4 rounded-2xl bg-[#F6F9FD] border border-[#DCE6F2] space-y-1.5">
                   <div className="font-bold text-[#12263F] flex items-center gap-1.5">
@@ -775,7 +549,12 @@ export default function RentalCheckoutClient() {
                     ₹{draft.deposit.toLocaleString('en-IN')} Refundable Deposit Protection
                   </h4>
                   <p className="text-green-800 leading-relaxed">
-                    The security deposit is 100% refundable. When your equipment return is completed, the full ₹{draft.deposit.toLocaleString('en-IN')} is returned back to your original payment method in 48 hours.
+                    The security deposit is 100% refundable. When your equipment return is completed, the full ₹{draft.deposit.toLocaleString('en-IN')} is returned to your original payment method within {rentalRules.depositRefundDays} day{rentalRules.depositRefundDays === 1 ? '' : 's'}.
+                  </p>
+                  <p className="text-green-800 leading-relaxed mt-1.5">
+                    We remind you {rentalRules.reminderDaysBeforeDue} day{rentalRules.reminderDaysBeforeDue === 1 ? '' : 's'} before your rental ends.
+                    {rentalRules.lateFeePerDay > 0 &&
+                      ` Late returns are charged ₹${rentalRules.lateFeePerDay.toLocaleString('en-IN')} per day${rentalRules.gracePeriodDays > 0 ? ` after a ${rentalRules.gracePeriodDays}-day grace period` : ''}.`}
                   </p>
                 </div>
               </div>
@@ -793,11 +572,11 @@ export default function RentalCheckoutClient() {
               <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setCurrentStep(3)}
+                  onClick={() => setCurrentStep(2)}
                   className="px-4 py-2 text-xs font-bold text-gray-600 hover:text-gray-900 flex items-center gap-1.5"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Back to KYC</span>
+                  <span>Back to address</span>
                 </button>
                 <div className="flex items-center gap-2 text-[12px] text-gray-400">
                   <ShieldCheck className="w-4 h-4 text-green-600" />
@@ -891,7 +670,7 @@ export default function RentalCheckoutClient() {
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
-                <span>Deposit refund processed in 48h after return</span>
+                <span>Deposit refunded within {rentalRules.depositRefundDays} day{rentalRules.depositRefundDays === 1 ? '' : 's'} after return</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
@@ -921,7 +700,7 @@ export default function RentalCheckoutClient() {
                 </div>
                 <div>
                   <div className="font-black text-xs text-[#12263F]">Razorpay Trusted Checkout</div>
-                  <div className="text-[11px] text-[#5B6B82]">Buy Denmed Healthcare Pvt Ltd</div>
+                  <div className="text-[11px] text-[#5B6B82]">{store.storeName}</div>
                 </div>
               </div>
               <span className="font-black text-sm text-[#0B2545]">

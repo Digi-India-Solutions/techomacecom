@@ -18,6 +18,8 @@ import {
   CalendarClock,
   Loader2
 } from 'lucide-react';
+import { useSiteSettings } from '@/lib/settings/store';
+import { mailto } from '@/lib/settings/format';
 
 const EQUIPMENT_OPTIONS = [
   'Dental Chairs & Units',
@@ -104,6 +106,7 @@ const SectionTitle: React.FC<{ step: number; title: string; subtitle?: string }>
 );
 
 export default function BulkEnquiryPage() {
+  const { store } = useSiteSettings();
   const { addToast } = useToastStore();
   const [formData, setFormData] = useState<Enquiry>(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
@@ -161,23 +164,23 @@ export default function BulkEnquiryPage() {
 
         <div className="flex flex-col sm:flex-row gap-3 shrink-0">
           <a
-            href="tel:+919811234567"
+            href={store.supportPhoneHref}
             className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white border border-[#DCE6F2] hover:border-[#1D5FAF] transition-colors"
           >
             <Phone className="w-5 h-5 text-[#1D5FAF]" />
             <span className="leading-tight">
               <span className="block text-[12px] text-[#5B6B82]">Call procurement desk</span>
-              <span className="block text-[15px] font-semibold text-[#12263F]">+91 98112 34567</span>
+              <span className="block text-[15px] font-semibold text-[#12263F]">{store.supportPhone}</span>
             </span>
           </a>
           <a
-            href="mailto:orders@buydenmed.com"
+            href={mailto(store.salesEmail)}
             className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white border border-[#DCE6F2] hover:border-[#1D5FAF] transition-colors"
           >
             <Mail className="w-5 h-5 text-[#1D5FAF]" />
             <span className="leading-tight">
               <span className="block text-[12px] text-[#5B6B82]">Email your list</span>
-              <span className="block text-[15px] font-semibold text-[#12263F]">orders@buydenmed.com</span>
+              <span className="block text-[15px] font-semibold text-[#12263F]">{store.salesEmail}</span>
             </span>
           </a>
         </div>

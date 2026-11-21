@@ -105,6 +105,15 @@ export const Footer: React.FC = () => {
     ...COLUMNS
   ];
 
+  const { store } = useSiteSettings();
+  const socials = [
+    { href: store.social.instagram, label: 'Instagram', Icon: Instagram },
+    { href: store.social.facebook, label: 'Facebook', Icon: Facebook },
+    { href: store.social.linkedin, label: 'LinkedIn', Icon: Linkedin },
+    { href: store.social.youtube, label: 'YouTube', Icon: Youtube },
+    { href: store.social.twitter, label: 'X (Twitter)', Icon: Twitter }
+  ].filter((s) => s.href);
+
   return (
     <footer className="bg-[#17191D] text-[#B4BAC3] font-body pb-16 lg:pb-0">
       {/* ── Main columns ───────────────────────────────────────── */}
@@ -112,7 +121,7 @@ export const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-[1.5fr_repeat(4,1fr)] gap-x-8 gap-y-2 md:gap-y-10">
           {/* About + contact */}
           <div className="md:col-span-4 lg:col-span-1 pb-6 md:pb-0 lg:pr-6">
-            <Logo variant="dark" size="md" showTagline={false} />
+            <Logo variant="dark" size="md" showTagline={false} placement="footer" />
             <p className="mt-4 text-[14px] leading-relaxed text-[#9AA1AB] max-w-sm">
               India&apos;s online store for genuine medical and dental equipment, consumables and rentals —
               with GST invoices and pan-India delivery.
@@ -122,37 +131,45 @@ export const Footer: React.FC = () => {
               <li className="flex items-start gap-3">
                 <Phone className="w-4 h-4 mt-0.5 text-[#8B929C] shrink-0" />
                 <span>
-                  <a href="tel:+919811234567" className="text-white hover:underline underline-offset-4">
-                    +91 98112 34567
+                  <a href={store.supportPhoneHref} className="text-white hover:underline underline-offset-4">
+                    {store.supportPhone}
                   </a>
-                  <span className="text-[#5A616B] mx-2">/</span>
-                  <a href="tel:+911149827000" className="hover:text-white hover:underline underline-offset-4">
-                    011-49827000
-                  </a>
+                  {store.salesPhone && (
+                    <>
+                      <span className="text-[#5A616B] mx-2">/</span>
+                      <a href={store.salesPhoneHref} className="hover:text-white hover:underline underline-offset-4">
+                        {store.salesPhone}
+                      </a>
+                    </>
+                  )}
                 </span>
               </li>
               <li className="flex items-start gap-3">
                 <Mail className="w-4 h-4 mt-0.5 text-[#8B929C] shrink-0" />
                 <span className="flex flex-col gap-1">
-                  <a href="mailto:support@buydenmed.com" className="hover:text-white hover:underline underline-offset-4">
-                    support@buydenmed.com
+                  <a href={mailto(store.supportEmail)} className="hover:text-white hover:underline underline-offset-4">
+                    {store.supportEmail}
                   </a>
-                  <a href="mailto:orders@buydenmed.com" className="hover:text-white hover:underline underline-offset-4">
-                    orders@buydenmed.com
-                  </a>
+                  {store.salesEmail !== store.supportEmail && (
+                    <a href={mailto(store.salesEmail)} className="hover:text-white hover:underline underline-offset-4">
+                      {store.salesEmail}
+                    </a>
+                  )}
                 </span>
               </li>
               <li className="flex items-start gap-3">
                 <Clock className="w-4 h-4 mt-0.5 text-[#8B929C] shrink-0" />
-                <span>Mon – Sat, 9:00 AM – 7:30 PM IST</span>
+                <span>{formatSupportHours(store.supportHours)}</span>
               </li>
               <li className="flex items-start gap-3">
                 <MapPin className="w-4 h-4 mt-0.5 text-[#8B929C] shrink-0" />
-                <span className="leading-relaxed">
-                  Okhla Industrial Area Phase-III,
-                  <br />
-                  New Delhi – 110020, India
-                </span>
+                {store.mapUrl ? (
+                  <a href={store.mapUrl} target="_blank" rel="noopener noreferrer" className="leading-relaxed whitespace-pre-line hover:text-white">
+                    {store.address}
+                  </a>
+                ) : (
+                  <span className="leading-relaxed whitespace-pre-line">{store.address}</span>
+                )}
               </li>
             </ul>
 
@@ -241,7 +258,10 @@ export const Footer: React.FC = () => {
       {/* ── Legal bar ──────────────────────────────────────────── */}
       <div className="bg-[#111315] border-t border-[#2A2E35]">
         <div className="max-w-[1320px] mx-auto px-4 sm:px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-[13px] text-[#8B929C]">
-          <p>© {year} Buy Denmed Healthcare Pvt. Ltd. All rights reserved.</p>
+          <p>
+            © {year} {store.storeName}. All rights reserved.
+            {store.gstin && <span className="ml-2 text-[#5A616B]">GSTIN {store.gstin}</span>}
+          </p>
           <nav aria-label="Legal" className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <Link href="/policies/privacy" className="hover:text-white transition-colors">
               Privacy

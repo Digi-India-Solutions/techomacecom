@@ -7,6 +7,7 @@ import { useCartStore, useToastStore } from '@/lib/store';
 import { applyCoupon } from '@/lib/api';
 import { getProductImageUrl } from '@/lib/utils';
 import { X, ShoppingBag, Trash2, Plus, Minus, ArrowRight, Tag, ShieldCheck } from 'lucide-react';
+import { useSiteSettings } from '@/lib/settings/store';
 
 export const CartDrawer: React.FC = () => {
   const {
@@ -20,10 +21,12 @@ export const CartDrawer: React.FC = () => {
     getShippingFee,
     getGstAmount,
     getTotal,
+    getAmountToFreeShipping,
     coupon,
     applyCoupon: setStoreCoupon,
     removeCoupon
   } = useCartStore();
+  const settings = useSiteSettings();
 
   const { addToast } = useToastStore();
   const [couponInput, setCouponInput] = useState('');
@@ -37,6 +40,9 @@ export const CartDrawer: React.FC = () => {
   const shipping = getShippingFee();
   const gst = getGstAmount();
   const total = getTotal();
+  const toFreeShipping = getAmountToFreeShipping();
+  const freeAbove = settings.shipping.freeShippingAbove;
+  const showFreeShippingBar = freeAbove > 0 && settings.shipping.flatShippingCharge > 0;
 
   const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,24 +114,26 @@ export const CartDrawer: React.FC = () => {
               </div>
             ) : (
               <>
-                {/* Free shipping progress indicator */}
+                {/* Free shipping progress indicator (Settings → Shipping) */}
+                {showFreeShippingBar && (
                 <div className="p-3 bg-[#EAF2FC] rounded-xl border border-[#DCE6F2] text-xs">
-                  {subtotal >= 1999 ? (
+                  {toFreeShipping === 0 ? (
                     <span className="text-[#174E90] font-semibold flex items-center gap-1.5">
                       🎉 Free Pan-India Delivery unlocked!
                     </span>
                   ) : (
                     <span className="text-[#12263F]">
-                      Add <strong className="text-[#1D5FAF]">₹{(1999 - subtotal).toLocaleString('en-IN')}</strong> more to get <strong>FREE Pan-India Delivery</strong>
+                      Add <strong className="text-[#1D5FAF]">₹{toFreeShipping.toLocaleString('en-IN')}</strong> more to get <strong>FREE Pan-India Delivery</strong>
                     </span>
                   )}
                   <div className="w-full bg-[#DCE6F2] h-1.5 rounded-full mt-1.5 overflow-hidden">
                     <div
                       className="bg-[#1D5FAF] h-full transition-all duration-300"
-                      style={{ width: `${Math.min(100, (subtotal / 1999) * 100)}%` }}
+                      style={{ width: `${Math.min(100, (subtotal / freeAbove) * 100)}%` }}
                     />
                   </div>
                 </div>
+                )}
 
                 {items.map((item) => (
                   <div
@@ -272,7 +280,7 @@ export const CartDrawer: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Estimated GST (12% / 18%)</span>
+                  <span>{settings.tax.pricesIncludeGst ? 'GST (included in price)' : 'GST'}</span>
                   <span className="font-semibold text-[#12263F]">₹{gst.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-[#12263F] pt-1.5 border-t border-[#DCE6F2]">

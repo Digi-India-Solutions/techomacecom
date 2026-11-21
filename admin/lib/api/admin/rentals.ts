@@ -1,5 +1,4 @@
 import type {
-  KycDocStatus,
   RentalBooking,
   RentalDeductionLine,
   RentalStatus,
@@ -35,25 +34,6 @@ let rentalsStore: RentalBooking[] = [
     depositAmount: 2000,
     depositStatus: 'held',
     amountPaid: 3900,
-    kycStatus: 'pending',
-    kycDocs: [
-      {
-        id: 'kyc-1',
-        label: 'Aadhaar Front & Back',
-        docType: 'Aadhaar Card',
-        imageUrl: PRODUCT_IMAGES.wheelchair,
-        status: 'pending',
-        uploadedAt: '2026-11-17T07:20:00Z',
-      },
-      {
-        id: 'kyc-2',
-        label: 'Electricity Bill (Address Proof)',
-        docType: 'Address Proof',
-        imageUrl: PRODUCT_IMAGES.patientMonitor,
-        status: 'pending',
-        uploadedAt: '2026-11-17T07:22:00Z',
-      },
-    ],
     ledger: [
       {
         id: 'led-1',
@@ -88,7 +68,7 @@ let rentalsStore: RentalBooking[] = [
         id: 'rtl-1',
         event: 'Rental Booking Created',
         actor: 'Customer Checkout',
-        note: 'Paid ₹3,900 via Razorpay UPI; uploaded 2 KYC documents',
+        note: 'Paid ₹3,900 via Razorpay UPI',
         timestamp: '2026-11-17T07:25:00Z',
       },
     ],
@@ -124,25 +104,6 @@ let rentalsStore: RentalBooking[] = [
     depositAmount: 5000,
     depositStatus: 'held',
     amountPaid: 10000,
-    kycStatus: 'approved',
-    kycDocs: [
-      {
-        id: 'kyc-21',
-        label: 'Aadhaar Card',
-        docType: 'Aadhaar Card',
-        imageUrl: PRODUCT_IMAGES.oxygenConcentrator,
-        status: 'approved',
-        uploadedAt: '2026-10-20T10:00:00Z',
-      },
-      {
-        id: 'kyc-22',
-        label: 'Pulmonologist Prescription',
-        docType: 'Doctor Prescription',
-        imageUrl: PRODUCT_IMAGES.patientMonitor,
-        status: 'approved',
-        uploadedAt: '2026-10-20T10:05:00Z',
-      },
-    ],
     shipment: {
       courier: 'Buy Denmed Van Delivery',
       awb: 'BDMV-GGN-9921',
@@ -195,7 +156,7 @@ let rentalsStore: RentalBooking[] = [
     timeline: [
       {
         id: 'rtl-21',
-        event: 'KYC Approved & Unit Assigned',
+        event: 'Approved & Unit Assigned',
         actor: 'Priya Nair',
         note: 'Assigned RU-OXY-001 (MP5L-2026-88410)',
         timestamp: '2026-10-20T12:15:00Z',
@@ -247,17 +208,6 @@ let rentalsStore: RentalBooking[] = [
     depositAmount: 10000,
     depositStatus: 'held',
     amountPaid: 17700,
-    kycStatus: 'approved',
-    kycDocs: [
-      {
-        id: 'kyc-31',
-        label: 'Aadhaar Card',
-        docType: 'Aadhaar Card',
-        imageUrl: PRODUCT_IMAGES.hospitalBed,
-        status: 'approved',
-        uploadedAt: '2026-10-13T09:00:00Z',
-      },
-    ],
     ledger: [
       {
         id: 'led-31',
@@ -336,8 +286,6 @@ let rentalsStore: RentalBooking[] = [
     depositAmount: 5000,
     depositStatus: 'held',
     amountPaid: 10000,
-    kycStatus: 'approved',
-    kycDocs: [],
     returnInfo: {
       pickupDate: '2026-10-30',
       receivedAt: '2026-10-30T17:00:00Z',
@@ -422,61 +370,6 @@ export async function getRentalById(id: string): Promise<RentalBooking | null> {
   await mockDelay(100);
   const found = rentalsStore.find((r) => r.id === id);
   return found ? structuredClone(found) : null;
-}
-
-export async function updateKycDocumentStatus(params: {
-  rentalId: string;
-  docId: string;
-  status: KycDocStatus;
-  reason?: string;
-  actor: string;
-}): Promise<RentalBooking> {
-  await mockDelay(150);
-  const existing = rentalsStore.find((r) => r.id === params.rentalId);
-  if (!existing) throw new Error('Rental booking not found');
-
-  const docs = existing.kycDocs.map((d) =>
-    d.id === params.docId
-      ? { ...d, status: params.status, rejectionReason: params.reason }
-      : d
-  );
-
-  const allApproved = docs.length > 0 && docs.every((d) => d.status === 'approved');
-  const anyRejected = docs.some((d) => d.status === 'rejected');
-  const anyReupload = docs.some((d) => d.status === 'reupload_requested');
-
-  const overallKyc: KycDocStatus = allApproved
-    ? 'approved'
-    : anyRejected
-      ? 'rejected'
-      : anyReupload
-        ? 'reupload_requested'
-        : 'pending';
-
-  const nextStatus: RentalStatus =
-    allApproved && existing.status === 'pending_approval'
-      ? 'approved'
-      : existing.status;
-
-  const updated: RentalBooking = {
-    ...existing,
-    kycDocs: docs,
-    kycStatus: overallKyc,
-    status: nextStatus,
-    timeline: [
-      ...existing.timeline,
-      {
-        id: `rtl-${Date.now()}`,
-        event: `KYC ${params.status.replace('_', ' ')}`,
-        actor: params.actor,
-        note: params.reason || `Updated document status`,
-        timestamp: new Date().toISOString(),
-      },
-    ],
-  };
-
-  rentalsStore = rentalsStore.map((r) => (r.id === params.rentalId ? updated : r));
-  return structuredClone(updated);
 }
 
 export async function assignRentalUnit(params: {

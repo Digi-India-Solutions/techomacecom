@@ -3,27 +3,19 @@ import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   CalendarPlus,
-  CheckCircle2,
   ClipboardCheck,
   Clock,
-  Eye,
-  FileCheck2,
   IndianRupee,
   MessageSquare,
   PackageCheck,
   Plus,
-  RotateCw,
   Send,
   ShieldAlert,
   Trash2,
   Truck,
   X,
-  XCircle,
-  ZoomIn,
-  ZoomOut,
 } from 'lucide-react';
 import type {
-  KycDocument,
   RentalBooking,
   RentalDeductionLine,
   RentalUnit,
@@ -39,7 +31,6 @@ import {
   refundRentalDeposit,
   scheduleRentalReturnPickup,
   sendOverdueReminder,
-  updateKycDocumentStatus,
 } from '@/lib/api/admin/rentals';
 import { listRentalUnits } from '@/lib/api/admin/rentalUnits';
 import { formatDateTime, formatINR, formatShortDate } from '@/lib/api/admin/client';
@@ -59,16 +50,6 @@ export function RentalDetailPage() {
   const [availableUnits, setAvailableUnits] = useState<RentalUnit[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-
-  // KYC Document Viewer (zoom + rotate) & Rejection reason
-  const [viewerDoc, setViewerDoc] = useState<KycDocument | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const [rotation, setRotation] = useState(0);
-  const [kycReasonTarget, setKycReasonTarget] = useState<{
-    docId: string;
-    mode: 'rejected' | 'reupload_requested';
-  } | null>(null);
-  const [kycReason, setKycReason] = useState('');
 
   // Assign unit
   const [selectedUnitId, setSelectedUnitId] = useState('');
@@ -147,49 +128,6 @@ export function RentalDetailPage() {
   }
 
   const actor = user?.name || 'Admin';
-
-  const handleKycApprove = async (docId: string) => {
-    setBusy(true);
-    try {
-      const updated = await updateKycDocumentStatus({
-        rentalId: rental.id,
-        docId,
-        status: 'approved',
-        actor,
-      });
-      setRental(updated);
-      showToast({ title: 'KYC document approved', variant: 'success' });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleKycReasonSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!kycReasonTarget) return;
-    setBusy(true);
-    try {
-      const updated = await updateKycDocumentStatus({
-        rentalId: rental.id,
-        docId: kycReasonTarget.docId,
-        status: kycReasonTarget.mode,
-        reason: kycReason,
-        actor,
-      });
-      setRental(updated);
-      setKycReasonTarget(null);
-      setKycReason('');
-      showToast({
-        title:
-          kycReasonTarget.mode === 'rejected'
-            ? 'KYC document rejected'
-            : 'Re-upload requested from customer',
-        variant: 'info',
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const handleAssignUnit = async () => {
     const unit = availableUnits.find((u) => u.id === selectedUnitId);
@@ -370,7 +308,6 @@ export function RentalDetailPage() {
               {rental.rentalNumber}
             </h1>
             <StatusBadge status={rental.status} />
-            <StatusBadge status={rental.kycStatus} label={`KYC: ${rental.kycStatus.replace('_', ' ')}`} />
           </div>
           <p className="mt-1 text-xs text-[#5B6B82]">
             {rental.productName} · <span className="capitalize">{rental.planType}</span> ({formatINR(rental.planRate)}) · {formatShortDate(rental.startDate)} → {formatShortDate(rental.endDate)}
@@ -433,110 +370,11 @@ export function RentalDetailPage() {
       {/* Main 3-Col Layout */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 space-y-6">
-          {/* a) KYC Section */}
-          <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <FileCheck2 className="h-5 w-5 text-[#1D5FAF]" />
-                <div>
-                  <h2 className="text-base font-semibold text-[#12263F]">
-                    a) Customer KYC &amp; Prescription Verification
-                  </h2>
-                  <p className="text-xs text-[#5B6B82]">
-                    Inspect uploaded ID, address proof, or doctor prescription with zoom &amp; rotate viewer.
-                  </p>
-                </div>
-              </div>
-              <StatusBadge status={rental.kycStatus} />
-            </div>
-
-            {rental.kycDocs.length === 0 ? (
-              <p className="rounded-lg bg-[#F6F9FD] px-4 py-3 text-xs text-[#5B6B82]">
-                KYC documents verified on file from previous customer profile.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {rental.kycDocs.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="rounded-xl border border-[#DCE6F2] bg-[#F6F9FD] p-3.5 space-y-3"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-semibold text-[#12263F]">{doc.docType}</p>
-                        <p className="text-[11px] text-[#5B6B82]">{doc.label}</p>
-                      </div>
-                      <StatusBadge status={doc.status} />
-                    </div>
-
-                    <div
-                      onClick={() => {
-                        setViewerDoc(doc);
-                        setZoom(1);
-                        setRotation(0);
-                      }}
-                      className="group relative aspect-[16/10] w-full overflow-hidden rounded-lg border border-[#DCE6F2] bg-white cursor-pointer"
-                    >
-                      <SafeImage src={doc.imageUrl} alt={doc.label} />
-                      <div className="absolute inset-0 flex items-center justify-center bg-[#0B2545]/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-[#12263F] shadow">
-                          <Eye className="h-3.5 w-3.5" />
-                          Inspect (Zoom / Rotate)
-                        </span>
-                      </div>
-                    </div>
-
-                    {doc.rejectionReason && (
-                      <p className="rounded-md bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">
-                        Reason: {doc.rejectionReason}
-                      </p>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <button
-                        type="button"
-                        disabled={busy || doc.status === 'approved'}
-                        onClick={() => handleKycApprove(doc.id)}
-                        className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-45"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          setKycReasonTarget({ docId: doc.id, mode: 'reupload_requested' });
-                          setKycReason('');
-                        }}
-                        className="rounded-md border border-[#F28C38]/40 bg-[#F28C38]/10 px-2.5 py-1 text-xs font-semibold text-[#B85A0E] hover:bg-[#F28C38]/20"
-                      >
-                        Request Re-upload
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          setKycReasonTarget({ docId: doc.id, mode: 'rejected' });
-                          setKycReason('');
-                        }}
-                        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
-                      >
-                        <XCircle className="h-3.5 w-3.5" />
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* b) Assign Unit & c) Dispatch */}
+          {/* a) Assign Unit & b) Dispatch */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-3">
               <h2 className="text-sm font-semibold text-[#12263F]">
-                b) Assign Serialized Rental Unit
+                a) Assign Serialized Rental Unit
               </h2>
               {rental.assignedUnitSerial ? (
                 <div className="rounded-lg border border-[#1D5FAF]/25 bg-[#EAF2FC] p-3.5 space-y-1">
@@ -583,7 +421,7 @@ export function RentalDetailPage() {
 
             <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-3">
               <h2 className="text-sm font-semibold text-[#12263F]">
-                c) Forward Dispatch (Shiprocket)
+                b) Forward Dispatch (Shiprocket)
               </h2>
               {rental.shipment ? (
                 <div className="rounded-lg bg-[#F6F9FD] border border-[#DCE6F2] p-3.5 text-xs space-y-1.5">
@@ -623,7 +461,7 @@ export function RentalDetailPage() {
             </div>
           </div>
 
-          {/* d) Extension & e) Return / Inspection */}
+          {/* c) Extension & d) Return / Inspection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <form
               onSubmit={handleApproveExtension}
@@ -632,7 +470,7 @@ export function RentalDetailPage() {
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-[#12263F] flex items-center gap-1.5">
                   <CalendarPlus className="h-4 w-4 text-[#1D5FAF]" />
-                  d) Rental Extension
+                  c) Rental Extension
                 </h2>
                 {rental.extensionRequest && !rental.extensionRequest.approved && (
                   <span className="rounded bg-[#F28C38]/15 px-2 py-0.5 text-[11px] font-semibold text-[#B85A0E]">
@@ -670,7 +508,7 @@ export function RentalDetailPage() {
             <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-3">
               <h2 className="text-sm font-semibold text-[#12263F] flex items-center gap-1.5">
                 <ClipboardCheck className="h-4 w-4 text-[#1D5FAF]" />
-                e) Return Pickup &amp; Inspection
+                d) Return Pickup &amp; Inspection
               </h2>
 
               {rental.returnInfo?.receivedAt ? (
@@ -718,12 +556,12 @@ export function RentalDetailPage() {
             </div>
           </div>
 
-          {/* f) Deposit Refund */}
+          {/* e) Deposit Refund */}
           <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-base font-semibold text-[#12263F] flex items-center gap-2">
                 <IndianRupee className="h-4 w-4 text-[#1D5FAF]" />
-                f) Security Deposit Refund ({formatINR(rental.depositAmount)} held)
+                e) Security Deposit Refund ({formatINR(rental.depositAmount)} held)
               </h2>
               <StatusBadge status={rental.depositStatus} />
             </div>
@@ -851,10 +689,10 @@ export function RentalDetailPage() {
             )}
           </div>
 
-          {/* g) Payments Ledger */}
+          {/* f) Payments Ledger */}
           <div className="rounded-xl border border-[#DCE6F2] bg-white overflow-hidden">
             <div className="border-b border-[#DCE6F2] px-5 py-3.5">
-              <h2 className="text-base font-semibold text-[#12263F]">g) Payments Ledger</h2>
+              <h2 className="text-base font-semibold text-[#12263F]">f) Payments Ledger</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -943,7 +781,7 @@ export function RentalDetailPage() {
                 rows={2}
                 value={noteInput}
                 onChange={(e) => setNoteInput(e.target.value)}
-                placeholder="Add delivery slot, technician, or KYC observation..."
+                placeholder="Add delivery slot, technician, or customer observation..."
                 className={textareaClass}
               />
               <button
@@ -966,128 +804,6 @@ export function RentalDetailPage() {
           </div>
         </div>
       </div>
-
-      {/* KYC Zoom & Rotate Lightbox Viewer */}
-      {viewerDoc && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col bg-[#0B2545]/85 p-4"
-          onClick={() => setViewerDoc(null)}
-        >
-          <div
-            className="mx-auto flex w-full max-w-4xl items-center justify-between rounded-t-xl bg-white px-5 py-3 border-b border-[#DCE6F2]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div>
-              <p className="text-sm font-semibold text-[#12263F]">
-                {viewerDoc.docType} — {viewerDoc.label}
-              </p>
-              <p className="text-xs text-[#5B6B82]">
-                Zoom: {Math.round(zoom * 100)}% · Rotation: {rotation}°
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
-                className="rounded-lg border border-[#DCE6F2] p-2 text-[#12263F] hover:bg-[#EAF2FC]"
-                title="Zoom out"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setZoom((z) => Math.min(2.5, Number((z + 0.25).toFixed(2))))}
-                className="rounded-lg border border-[#DCE6F2] p-2 text-[#12263F] hover:bg-[#EAF2FC]"
-                title="Zoom in"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setRotation((r) => (r + 90) % 360)}
-                className="inline-flex items-center gap-1 rounded-lg border border-[#DCE6F2] px-3 py-1.5 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC]"
-              >
-                <RotateCw className="h-3.5 w-3.5" />
-                Rotate 90°
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setZoom(1);
-                  setRotation(0);
-                }}
-                className="rounded-lg border border-[#DCE6F2] px-2.5 py-1.5 text-xs font-medium text-[#5B6B82] hover:bg-[#EAF2FC]"
-              >
-                Reset
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewerDoc(null)}
-                className="rounded-lg p-1.5 text-[#5B6B82] hover:bg-[#EAF2FC]"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-
-          <div
-            className="mx-auto flex flex-1 w-full max-w-4xl items-center justify-center overflow-auto rounded-b-xl bg-[#12263F] p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={viewerDoc.imageUrl}
-              alt={viewerDoc.label}
-              style={{
-                transform: `scale(${zoom}) rotate(${rotation}deg)`,
-                transition: 'transform 0.2s ease',
-              }}
-              className="max-h-[68vh] rounded-lg object-contain shadow-2xl"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* KYC Reject / Reupload Reason Modal */}
-      {kycReasonTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/50 p-4">
-          <form
-            onSubmit={handleKycReasonSubmit}
-            className="w-full max-w-md rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-4 shadow-xl"
-          >
-            <h3 className="text-base font-semibold text-[#12263F]">
-              {kycReasonTarget.mode === 'rejected'
-                ? 'Reject KYC Document'
-                : 'Request Document Re-upload'}
-            </h3>
-            <FormField label="Reason sent to customer" required>
-              <textarea
-                rows={3}
-                required
-                value={kycReason}
-                onChange={(e) => setKycReason(e.target.value)}
-                placeholder="e.g. Aadhaar back address text is blurry; please upload clear photo."
-                className={textareaClass}
-              />
-            </FormField>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setKycReasonTarget(null)}
-                className="rounded-lg border border-[#DCE6F2] px-4 py-2 text-xs font-semibold text-[#12263F]"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={busy}
-                className="rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
-              >
-                Submit
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
 
       {/* Dispatch Modal */}
       {dispatchOpen && (

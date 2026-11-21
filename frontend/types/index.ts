@@ -80,7 +80,6 @@ export interface Product {
   rentalPlans?: RentalPlan[];
   securityDeposit?: number; // refundable deposit
   deliveryPickupCharge?: number;
-  rentalKycRequired?: boolean;
   images: ProductImage[];
   thumbnail: string;
   image?: string; // fallback for cards if images is empty
@@ -127,14 +126,6 @@ export type RentalStatus =
   | 'deposit_refunded'
   | 'cancelled';
 
-export interface RentalKycDocuments {
-  idProofFront?: string;
-  idProofBack?: string;
-  addressProof?: string;
-  doctorPrescription?: string;
-  verified?: boolean;
-}
-
 export interface RentalPayment {
   id: string;
   amount: number;
@@ -163,7 +154,6 @@ export interface Rental {
   charges: RentalCharges;
   status: RentalStatus;
   address: Address;
-  kycDocuments: RentalKycDocuments;
   payments: RentalPayment[];
   createdAt: string;
   returnPickupDate?: string;
@@ -326,7 +316,19 @@ export interface OrderItem {
   rentalTenureMonths?: number;
 }
 
-export type OrderStatus = 'Placed' | 'Confirmed' | 'Packed' | 'Dispatched' | 'Delivered' | 'Cancelled';
+export type OrderStatus =
+  | 'Placed'
+  | 'Confirmed'
+  | 'Packed'
+  | 'Dispatched'
+  | 'Delivered'
+  | 'Cancelled'
+  | 'Return Requested'
+  | 'Return Approved'
+  | 'Pickup Scheduled'
+  | 'Return Received'
+  | 'Refunded'
+  | 'Return Rejected';
 
 export interface OrderTimelineEvent {
   status: OrderStatus;
@@ -334,6 +336,17 @@ export interface OrderTimelineEvent {
   title: string;
   description: string;
   completed: boolean;
+}
+
+export interface OrderReturnRequest {
+  id: string;
+  returnNumber: string;
+  status: 'requested' | 'approved' | 'pickup_scheduled' | 'received' | 'refunded' | 'rejected';
+  reason: string;
+  photos?: string[];
+  adminNote?: string;
+  createdAt: string;
+  refundAmount?: number;
 }
 
 export interface Order {
@@ -353,8 +366,19 @@ export interface Order {
   gstDetails?: GstDetails;
   trackingNumber?: string;
   courierPartner?: string;
+  trackingUrl?: string;
   estimatedDelivery: string;
   timeline: OrderTimelineEvent[];
+  /** Invoice details from admin-generated invoice record */
+  invoiceNumber?: string;
+  invoiceUrl?: string;
+  /** Coupon applied at checkout */
+  couponCode?: string;
+  /** Dynamic action eligibility */
+  canCancel?: boolean;
+  canReturn?: boolean;
+  returnRequest?: OrderReturnRequest;
+  cancelReason?: string;
 }
 
 export interface ActiveRental {
@@ -432,6 +456,7 @@ export interface PageBanner {
   imageMobile?: string;
   imageUrl?: string;
   link?: string;
+  linkUrl?: string;
   alt?: string;
   title?: string;
   headline?: string;

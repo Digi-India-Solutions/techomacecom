@@ -6,11 +6,35 @@ import { Category } from '@/types';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import SkeletonImage from '@/components/common/SkeletonImage';
 
+const CATEGORY_DEFAULT_IMAGES: Record<string, string> = {
+  'oxygen-concentrators': '/images/bento_oxygen_conc_1793803384593.jpg',
+  'dental-chairs': '/images/prod_dental_chair_1793803541905.jpg',
+  'patient-monitors': '/images/bento_monitoring_vitals_1793803410618.jpg',
+  'icu-beds': '/images/bento_homecare_mobility_1793803387668.jpg',
+  'manual-wheelchairs': '/images/prod_wheelchair_main.jpg',
+  'dental-autoclaves': '/images/prod_autoclave_main.jpg',
+  'bipap-cpap': '/images/bento_cpap_bipap_1793803386703.jpg',
+  'respiratory-care': '/images/bento_oxygen_conc_1793803384593.jpg',
+  'dental-equipment': '/images/prod_dental_chair_1793803541905.jpg',
+  'hospital-furniture': '/images/bento_homecare_mobility_1793803387668.jpg',
+};
+
+const getCategoryImage = (cat: Category): string => {
+  if (cat.image && cat.image.trim()) return cat.image;
+  if (cat.icon && cat.icon.trim()) return cat.icon;
+  const slug = (cat.slug || '').toLowerCase();
+  for (const [key, img] of Object.entries(CATEGORY_DEFAULT_IMAGES)) {
+    if (slug.includes(key) || key.includes(slug)) return img;
+  }
+  return '/images/bento_oxygen_conc_1793803384593.jpg';
+};
+
 interface TopCategoriesGridProps {
   categories: Category[];
+  title?: string;
 }
 
-export const TopCategoriesGrid: React.FC<TopCategoriesGridProps> = ({ categories }) => {
+export const TopCategoriesGrid: React.FC<TopCategoriesGridProps> = ({ categories, title = 'Top Categories' }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scrollLeft = () => {
@@ -32,7 +56,7 @@ export const TopCategoriesGrid: React.FC<TopCategoriesGridProps> = ({ categories
         <div className="flex items-end justify-between mb-5 sm:mb-6">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-[#0F172A] font-heading relative inline-block">
-              Top Categories
+              {title || 'Top Categories'}
               <span className="absolute bottom-[-4px] left-0 w-10 h-[3px] bg-[#1D5FAF] rounded-full" />
             </h2>
             <p className="text-xs sm:text-sm text-[#475569] font-body mt-2">
@@ -84,7 +108,7 @@ export const TopCategoriesGrid: React.FC<TopCategoriesGridProps> = ({ categories
               {/* Image tile */}
               <div className="relative w-full aspect-square rounded-xl bg-[#EAF2FC] group-hover:bg-[#D6E6F8] overflow-hidden transition-colors">
                 <SkeletonImage
-                  src={cat.image}
+                  src={getCategoryImage(cat)}
                   alt={cat.name}
                   fill
                   className="object-contain p-2 transition-transform duration-300 group-hover:scale-110"

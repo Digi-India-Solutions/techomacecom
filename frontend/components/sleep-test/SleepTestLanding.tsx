@@ -160,6 +160,7 @@ const FAQS_DATA = [
 ];
 
 export const SleepTestLanding: React.FC = () => {
+  const { store } = useSiteSettings();
   const { addToast } = useToastStore();
   const formRef = useRef<HTMLDivElement>(null);
   const [isQuizOpen, setIsQuizOpen] = useState(false);
@@ -296,7 +297,7 @@ export const SleepTestLanding: React.FC = () => {
       addToast({
         type: 'error',
         title: 'Submission Failed',
-        message: 'Could not send enquiry. Please call us directly at +91 98112 34567.'
+        message: `Could not send enquiry. Please call us directly at ${store.supportPhone}.`
       });
     } finally {
       setIsSubmitting(false);
@@ -360,7 +361,7 @@ export const SleepTestLanding: React.FC = () => {
           {/* Phone Helpline & Blue Enquire Now Button & Mobile Menu Toggle */}
           <div className="flex items-center gap-3 sm:gap-4 shrink-0">
             <a
-              href="tel:+919811234567"
+              href={store.supportPhoneHref}
               className="hidden md:flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white hover:text-[#93C5FD] transition-colors shrink-0 whitespace-nowrap"
               title="Call Clinical Helpline"
             >
@@ -372,7 +373,7 @@ export const SleepTestLanding: React.FC = () => {
                   Helpline
                 </span>
                 <span className="text-[14.5px] font-bold font-heading text-white whitespace-nowrap">
-                  +91 98112 34567
+                  {store.supportPhone}
                 </span>
               </div>
             </a>
@@ -439,13 +440,13 @@ export const SleepTestLanding: React.FC = () => {
             </nav>
             <div className="pt-3 border-t border-white/10 flex items-center justify-between gap-3">
               <a
-                href="tel:+919811234567"
+                href={store.supportPhoneHref}
                 className="flex items-center gap-2 text-xs sm:text-sm font-bold text-white hover:text-[#93C5FD]"
               >
                 <div className="w-7 h-7 rounded-full bg-[#1D5FAF]/40 flex items-center justify-center text-[#93C5FD]">
                   <Phone className="w-3.5 h-3.5" />
                 </div>
-                <span>+91 98112 34567</span>
+                <span>{store.supportPhone}</span>
               </a>
               <button
                 type="button"
@@ -553,14 +554,14 @@ export const SleepTestLanding: React.FC = () => {
 
                     <div className="pt-2 flex flex-col sm:flex-row gap-2">
                       <a
-                        href="tel:+919811234567"
+                        href={store.supportPhoneHref}
                         className="flex-1 py-3.5 px-3 rounded-xl bg-[#0B2545] hover:bg-[#13335E] text-white text-xs font-bold font-heading flex items-center justify-center gap-1.5 transition-colors"
                       >
                         <Phone className="w-3.5 h-3.5 text-[#93C5FD]" />
                         <span>Call Advisor</span>
                       </a>
                       <a
-                        href="https://wa.me/919811234567?text=Hi%20Buy%20Denmed,%20I%20submitted%20sleep%20test%20enquiry"
+                        href={whatsappUrl(store, 'Hi Buy Denmed, I submitted sleep test enquiry')}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex-1 py-3.5 px-3 rounded-xl bg-[#25D366] hover:bg-[#20BD5A] text-white text-xs font-bold font-heading flex items-center justify-center gap-1.5 transition-colors"
@@ -762,11 +763,11 @@ export const SleepTestLanding: React.FC = () => {
                       <span className="text-xs text-[#5B6B82] font-body">or</span>
                       <div className="mt-1">
                         <a
-                          href="tel:+919811234567"
+                          href={store.supportPhoneHref}
                           className="inline-flex items-center gap-1.5 text-xs font-bold font-heading text-[#12263F] hover:text-[#1D5FAF] transition-colors"
                         >
                           <Phone className="w-3.5 h-3.5 text-[#1D5FAF]" />
-                          <span>Call: +91 98112 34567</span>
+                          <span>Call: {store.supportPhone}</span>
                         </a>
                       </div>
                     </div>
@@ -1077,11 +1078,11 @@ export const SleepTestLanding: React.FC = () => {
                   Schedule Free Advisor Call
                 </button>
                 <a
-                  href="tel:+919811234567"
+                  href={store.supportPhoneHref}
                   className="w-full py-2.5 bg-white border border-[#1D5FAF] text-[#1D5FAF] hover:bg-[#EAF2FC] font-semibold font-heading text-xs rounded-xl flex items-center justify-center gap-2 transition-colors"
                 >
                   <Phone className="w-4 h-4 text-[#1D5FAF]" />
-                  <span>Call: +91 98112 34567</span>
+                  <span>Call: {store.supportPhone}</span>
                 </a>
               </div>
 
@@ -1320,11 +1321,11 @@ export const SleepTestLanding: React.FC = () => {
                 Enquire Now
               </button>
               <a
-                href="tel:+919811234567"
+                href={store.supportPhoneHref}
                 className="px-5 py-3 rounded-xl bg-white text-[#1D5FAF] border border-[#1D5FAF] hover:bg-[#EAF2FC] font-bold font-heading text-xs sm:text-sm shadow-md transition-colors flex items-center gap-2"
               >
                 <Phone className="w-4 h-4 text-[#1D5FAF]" />
-                <span>Call: +91 98112 34567</span>
+                <span>Call: {store.supportPhone}</span>
               </a>
             </div>
           </div>
@@ -1406,7 +1407,7 @@ export const SleepTestLanding: React.FC = () => {
 
             <div className="text-xs text-center md:text-right font-body">
               <div className="font-bold text-white font-heading">Sleep Helpline</div>
-              <div>+91 98112 34567 • care@buydenmed.com</div>
+              <div>{store.supportPhone} • {store.supportEmail}</div>
             </div>
           </div>
 
@@ -1415,7 +1416,7 @@ export const SleepTestLanding: React.FC = () => {
               <strong>Medical Disclaimer:</strong> Home Sleep Apnea Testing (HSAT) is a clinical diagnostic screening aid. Reports are analyzed and interpreted by certified physicians.
             </p>
             <p>
-              © 2026 Buy Denmed Healthcare Pvt. Ltd. Pan-India At-Home Diagnostics.
+              © {new Date().getFullYear()} {store.storeName}. Pan-India At-Home Diagnostics.
             </p>
           </div>
         </div>
@@ -1424,7 +1425,7 @@ export const SleepTestLanding: React.FC = () => {
       {/* Mobile Sticky Bottom Bar (Call & Enquire) */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#DCE6F2] p-3 shadow-lg flex items-center gap-2.5">
         <a
-          href="tel:+919811234567"
+          href={store.supportPhoneHref}
           className="flex-1 py-3 bg-[#0B2545] hover:bg-[#13335E] text-white font-bold font-heading text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
         >
           <Phone className="w-3.5 h-3.5 text-[#93C5FD]" />

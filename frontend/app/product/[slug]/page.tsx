@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
-import { getProductBySlug, getRelatedProducts, getProductReviews } from '@/lib/api';
+import { getProductBySlug, getRelatedProducts, getProductReviews, getBestSellers } from '@/lib/api';
 import ProductDetailClient from '@/components/product/ProductDetailClient';
+import ProductNotFoundView from '@/components/product/ProductNotFoundView';
 
 interface ProductPageProps {
   params: Promise<{ slug: string }>;
@@ -37,7 +37,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const product = await getProductBySlug(slug);
 
   if (!product) {
-    notFound();
+    const bestSellers = await getBestSellers();
+    return <ProductNotFoundView slug={slug} suggestedProducts={bestSellers} />;
   }
 
   const [relatedProducts, reviews] = await Promise.all([

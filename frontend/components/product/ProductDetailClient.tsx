@@ -28,7 +28,8 @@ import {
   FileText,
   AlertCircle,
   Share2,
-  Award
+  Award,
+  Zap
 } from 'lucide-react';
 
 interface ProductDetailClientProps {
@@ -237,6 +238,31 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
               )}
             </div>
           </div>
+
+          {/* Flash Deal of the Day Banner */}
+          {product.isDealOfDay && (
+            <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-[#EA580C] via-[#F97316] to-[#EA580C] text-white rounded-xl shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <span className="p-1.5 rounded-lg bg-white/20 flex items-center justify-center">
+                  <Zap className="w-4 h-4 fill-current text-white" />
+                </span>
+                <div>
+                  <div className="text-xs font-black uppercase tracking-wider font-heading leading-tight">
+                    Deal of the Day
+                  </div>
+                  <div className="text-[11px] text-orange-100 font-body">
+                    {product.regularPrice && product.regularPrice > currentPrice
+                      ? `Save ₹${(product.regularPrice - currentPrice).toLocaleString('en-IN')} off regular clinical price`
+                      : 'Special flash sale price'}
+                  </div>
+                </div>
+              </div>
+              <div className="inline-flex items-center gap-1.5 bg-black/25 backdrop-blur-xs px-3 py-1.5 rounded-lg text-xs font-mono font-bold">
+                <Clock className="w-3.5 h-3.5 text-white/90" />
+                <span>LIMITED TIME</span>
+              </div>
+            </div>
+          )}
 
           {/* Pricing Box */}
           <div className="p-4 bg-[#F6F9FD] rounded-xl border border-[#DCE6F2] space-y-2">

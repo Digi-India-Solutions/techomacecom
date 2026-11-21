@@ -18,29 +18,75 @@ const nextConfig: NextConfig = {
     // Uploaded filenames never change, so optimised copies can be cached for a long time
     minimumCacheTTL: 60 * 60 * 24 * 30,
     // Next 16 refuses to optimise images from localhost unless allowed (dev API only)
-    dangerouslyAllowLocalIP: isLocalBackend,
+    dangerouslyAllowLocalIP: true,
     remotePatterns: [
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '5001',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: '127.0.0.1',
+        port: '5001',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '3000',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '3001',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: '127.0.0.1',
+        pathname: '/**',
+      },
       {
         protocol: backendUrl.protocol.replace(':', '') as 'http' | 'https',
         hostname: backendUrl.hostname,
-        port: backendUrl.port,
-        pathname: '/uploads/**',
+        port: backendUrl.port || undefined,
+        pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'picsum.photos',
-        port: '',
-        pathname: '/**', // This allows any path under the hostname
+        pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'images.unsplash.com',
-        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'via.placeholder.com',
         pathname: '/**',
       },
     ],
   },
   output: 'standalone',
+  async rewrites() {
+    return [
+      { source: '/shipping-policy', destination: '/policies/shipping' },
+      { source: '/returns-refunds', destination: '/policies/returns' },
+      { source: '/rental-terms', destination: '/policies/rental-terms' },
+      { source: '/privacy-policy', destination: '/policies/privacy' },
+      { source: '/terms-of-use', destination: '/policies/terms' },
+    ];
+  },
   transpilePackages: ['motion'],
   turbopack: {},
   webpack: (config, {dev}) => {

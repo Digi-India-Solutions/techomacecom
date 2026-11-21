@@ -10,6 +10,9 @@ interface BlogPostPageProps {
   params: Promise<{ slug: string }>;
 }
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
   const { slug } = await params;
   const post = await getBlogPostBySlug(slug);
@@ -102,9 +105,14 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
           {post.excerpt}
         </p>
 
-        <p>
-          {post.content}
-        </p>
+        {post.content && /<[a-z][\s\S]*>/i.test(post.content) ? (
+          <div
+            className="prose prose-slate max-w-none text-sm sm:text-base text-[#5B6B82] leading-relaxed space-y-4"
+            dangerouslySetInnerHTML={{ __html: post.content }}
+          />
+        ) : (
+          <p>{post.content}</p>
+        )}
 
         <h2 className="text-xl font-bold text-[#12263F] pt-4">Clinical Infrastructure & Safety Standards</h2>
         <p>

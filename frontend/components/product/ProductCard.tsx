@@ -97,8 +97,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               </span>
             )} */}
             {product.isDealOfDay && (
-              <span className="bg-[#0B2545] text-white text-[11px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider font-heading">
-                DEAL
+              <span className="bg-[#EA580C] text-white text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider font-heading shadow-xs flex items-center gap-1">
+                ⚡ DEAL
               </span>
             )}
             {product.isBestSeller && (
@@ -239,11 +239,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </p>
 
           {/* Price Row */}
-          <div className="flex items-baseline gap-2 pt-0.5">
+          <div className="flex items-baseline gap-2 pt-0.5 flex-wrap">
             <span className="font-heading font-bold text-lg text-[#12263F]">
               ₹{product.price.toLocaleString('en-IN')}
             </span>
-            {product.mrp > product.price && (
+            {product.regularPrice && product.regularPrice > product.price ? (
+              <>
+                <span className="text-[12px] sm:text-[13px] text-[#5B6B82] line-through font-body">
+                  ₹{product.regularPrice.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[11px] sm:text-xs font-bold text-[#EA580C] bg-[#FFF7ED] px-1.5 py-0.2 rounded font-body">
+                  Save ₹{(product.regularPrice - product.price).toLocaleString('en-IN')}
+                </span>
+              </>
+            ) : product.mrp > product.price ? (
               <>
                 <span className="text-[13px] sm:text-sm text-[#5B6B82] line-through font-body">
                   ₹{product.mrp.toLocaleString('en-IN')}
@@ -252,7 +261,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   ↓ {product.discountPercentage}% off
                 </span>
               </>
-            )}
+            ) : null}
           </div>
 
           {/* EMI or Rent Options */}

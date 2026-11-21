@@ -26,7 +26,11 @@ export function productInclude(now = new Date()) {
       include: {
         inventory: true,
         deals: {
-          where: { is_active: true, starts_at: { lte: now }, ends_at: { gt: now } },
+          where: {
+            is_active: true,
+            starts_at: { lte: new Date(now.getTime() + 24 * 60 * 60 * 1000) },
+            ends_at: { gt: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+          },
           orderBy: { ends_at: "asc" },
         },
       },
@@ -70,7 +74,6 @@ function rentalSettings(product) {
     plans,
     securityDepositPaise: first?.security_deposit_paise ?? 0n,
     deliveryPickupPaise: first?.delivery_pickup_paise ?? 0n,
-    kycRequired: first?.kyc_required ?? true,
     prescriptionRequired: first?.prescription_required ?? false,
   };
 }
@@ -158,7 +161,6 @@ export function toAdminProduct(product, categoryPath = "") {
       })),
       securityDeposit: paiseToRupees(rental.securityDepositPaise),
       deliveryPickupCharge: paiseToRupees(rental.deliveryPickupPaise),
-      kycRequired: rental.kycRequired,
       prescriptionRequired: rental.prescriptionRequired,
     },
     seoTitle: product.meta_title || "",
@@ -252,7 +254,6 @@ export function toStorefrontProduct(product, category, { detail = false } = {}) 
     })),
     securityDeposit: activePlans.length ? paiseToRupees(rental.securityDepositPaise) : undefined,
     deliveryPickupCharge: activePlans.length ? paiseToRupees(rental.deliveryPickupPaise) : undefined,
-    rentalKycRequired: activePlans.length ? rental.kycRequired : undefined,
     rentalPrescriptionRequired: activePlans.length ? rental.prescriptionRequired : undefined,
     images: detail ? images : images.slice(0, 2),
     thumbnail,

@@ -179,6 +179,32 @@ Rules:
 - Product descriptions are **sanitised HTML** (`sanitize-html`); image fields accept only uploaded paths or https URLs.
 - Product search / filters / sorts run as one parameterised SQL query (`products/query.js`), using the pg_trgm indexes.
 
+## Settings
+
+Admin → Settings is stored in the `settings` table (one row per group + key, JSON value);
+anything never saved uses the defaults in `src/modules/settings/definitions.js`.
+Money is stored in paise and shown in rupees.
+
+| Endpoint | Permission | |
+|---|---|---|
+| `GET /api/v1/admin/settings` | `settings.view` | Every tab (rupees, image URLs, dropdown options) |
+| `PUT /api/v1/admin/settings/:group` | `settings.edit` | Save one tab: `store`, `shipping`, `tax`, `rental` |
+| `PUT/DELETE /api/v1/admin/settings/images/:name` | `settings.edit` | `logo`, `footerLogo`, `favicon`, `signatory` (→ WebP in `uploads/misc`) |
+| `GET /api/v1/admin/settings/pincodes[/summary|/export]`, `POST …/pincodes/import`, `DELETE …/pincodes` | view / edit | Serviceable PIN codes (CSV) |
+| `GET/PUT /api/v1/admin/settings/notifications`, `POST …/notifications/:event/test`, `GET …/notifications/logs` | view / edit | Templates per event × channel |
+| `GET /api/v1/settings/public` | public | What the storefront may see (cached 30 s) |
+| `GET /api/v1/pincodes/:pincode` | public | Delivery / COD check |
+
+- **PIN codes** (`serviceable_pincodes`): empty table = deliver everywhere; once rows exist only
+  listed PIN codes are serviceable. CSV columns: `pincode,city,state,cod,delivery_days`.
+- **Invoices**: `allocateInvoiceNumber()` in `settings/service.js` atomically takes the next
+  number (`BDM/26-27/00001`) — the orders / rentals modules call it when they issue an invoice.
+- **Notifications**: `notify(event, { email, mobile, vars })` in `src/services/notification.service.js`
+  sends on every switched-on channel using the saved template and logs to `notification_logs`.
+  Email uses Gmail (EMAIL_USER), SMS uses MSG91 flow templates (`SMS_PROVIDER=msg91` + DLT id per
+  event) or prints to the terminal in development; WhatsApp is not connected yet.
+- Payments and Shiprocket settings are not implemented yet.
+
 ## Shared helpers
 
 **Lists** — `src/lib/list.js`: `listQuery({...filters})` (zod: `page`, `limit` ≤ 100, `sort`, `q`),
@@ -204,7 +230,7 @@ src/lib/       tokens (JWT + cookies), password, OTP SMS, mailer, http, list, mo
 src/middlewares/ auth (requireCustomer / requireAdmin / requirePermission), validate (zod), rate limits, errors
 src/rbac/      permission catalogue + per-role permission cache
 src/services/  sessions (+ signed-in devices), OTPs (SMS + email), activity log, avatars
-src/modules/   auth (customers) · account (addresses, GST, photo) · admin-auth · staff · uploads
+src/modules/   auth (customers) · account (addresses, GST, photo) · admin-auth · staff · uploads · settings
                catalog/{categories,brands,products,storefront} · products (basic CRUD at /admin/products-basic)
                inventory · rental-units · banners — each: routes → controller → service → validator
                — each: routes → controller → service → validator

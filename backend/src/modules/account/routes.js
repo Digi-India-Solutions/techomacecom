@@ -4,6 +4,7 @@ import { requireCustomer } from "../../middlewares/auth.js";
 import { imageUpload } from "../../middlewares/upload.js";
 import * as c from "./controller.js";
 import * as v from "./validator.js";
+import * as ordersController from "./orders.controller.js";
 
 /**
  * Storefront "My account" data — mounted at /api/v1/account (signed-in customers only).
@@ -28,5 +29,10 @@ router.delete("/gst/:id", byId, c.deleteGst);
 
 router.put("/avatar", imageUpload({ single: true }), c.uploadAvatar);
 router.delete("/avatar", c.deleteAvatar);
+
+// ---- Orders ----
+router.get("/orders", ordersController.listOrders);
+router.post("/orders", ordersController.createOrder);
+router.get("/orders/:id", ordersController.getOrder);
 
 export default router;

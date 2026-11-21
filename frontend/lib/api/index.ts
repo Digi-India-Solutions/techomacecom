@@ -64,10 +64,19 @@ async function fetchOrMock<T>(endpoint: string, mockFallback: () => T | Promise<
 
 // Catalog (categories, brands, products, search) comes from the live API — see ./catalog.ts
 export * from './catalog';
+import { checkPincode } from '@/lib/settings/pincode-api';
+export * from './marketing';
+import {
+  getHomepageConfig,
+  getHeroBanners as getMarketingHeroBanners,
+  getPageBanners as getMarketingPageBanners,
+  applyCouponViaBackend
+} from './marketing';
 
 /**
  * Check Indian pincode serviceability
  */
+/** Delivery check against Settings → Shipping (backend /pincodes/:pincode). */
 export async function checkPincodeServiceability(pincode: string): Promise<{
   serviceable: boolean;
   city: string;
@@ -75,72 +84,19 @@ export async function checkPincodeServiceability(pincode: string): Promise<{
   deliveryDays: string;
   codAvailable: boolean;
 }> {
-  // Common city pincode lookup simulation for Indian tier 1 & 2 cities
-  const cleanPin = pincode.trim();
-  if (!/^\d{6}$/.test(cleanPin)) {
-    return {
-      serviceable: false,
-      city: '',
-      state: '',
-      deliveryDays: '',
-      codAvailable: false
-    };
-  }
-
-  const prefix = cleanPin.substring(0, 2);
-  let city = 'Delhi NCR';
-  let state = 'Delhi';
-  let deliveryDays = '1-2 Days (Fast Dispatch)';
-
-  if (prefix === '11') {
-    city = 'New Delhi';
-    state = 'Delhi';
-    deliveryDays = 'Same Day / Next Day Delivery';
-  } else if (prefix === '20' || prefix === '12') {
-    city = 'Noida / Gurugram';
-    state = 'NCR';
-    deliveryDays = '1-2 Days Delivery';
-  } else if (prefix === '40') {
-    city = 'Mumbai';
-    state = 'Maharashtra';
-    deliveryDays = '2-3 Days Delivery';
-  } else if (prefix === '56') {
-    city = 'Bengaluru';
-    state = 'Karnataka';
-    deliveryDays = '2-3 Days Delivery';
-  } else if (prefix === '50') {
-    city = 'Hyderabad';
-    state = 'Telangana';
-    deliveryDays = '2-3 Days Delivery';
-  } else if (prefix === '60') {
-    city = 'Chennai';
-    state = 'Tamil Nadu';
-    deliveryDays = '2-4 Days Delivery';
-  } else if (prefix === '70') {
-    city = 'Kolkata';
-    state = 'West Bengal';
-    deliveryDays = '3-4 Days Delivery';
-  } else if (prefix === '38' || prefix === '39') {
-    city = 'Ahmedabad';
-    state = 'Gujarat';
-    deliveryDays = '2-3 Days Delivery';
-  } else {
-    city = 'Regional Hub';
-    state = 'India';
-    deliveryDays = '3-5 Days via Air Cargo';
-  }
-
+  const r = await checkPincode(pincode);
   return {
-    serviceable: true,
-    city,
-    state,
-    deliveryDays,
-    codAvailable: true
+    serviceable: r.serviceable,
+    // No city in the uploaded list → show the PIN itself (e.g. "Deliver to 110020")
+    city: r.city || r.pincode,
+    state: r.state,
+    deliveryDays: r.serviceable ? `${r.deliveryDays} business days` : r.message,
+    codAvailable: r.codAvailable
   };
 }
 
 /**
- * Coupon validation
+ * Coupon validation (backed by PostgreSQL coupons table with fallback)
  */
 export async function applyCoupon(code: string, subtotal: number): Promise<{
   valid: boolean;
@@ -148,6 +104,15 @@ export async function applyCoupon(code: string, subtotal: number): Promise<{
   discountAmount: number;
   message: string;
 }> {
+  // 1. Try real PostgreSQL database coupon
+  try {
+    const live = await applyCouponViaBackend(code, subtotal);
+    if (live.valid) return live;
+  } catch (err) {
+    console.warn('Backend coupon apply failed, testing mock fallback:', err);
+  }
+
+  // 2. Fallback to mock coupons for demo/testing
   const normalized = code.trim().toUpperCase();
   const coupon = MOCK_COUPONS.find((c) => c.code === normalized);
 
@@ -155,7 +120,7 @@ export async function applyCoupon(code: string, subtotal: number): Promise<{
     return {
       valid: false,
       discountAmount: 0,
-      message: 'Invalid coupon code. Try DENMED10 or CLINIC500.'
+      message: 'Invalid coupon code. Try WELCOME10 or CLINIC2000.'
     };
   }
 
@@ -319,14 +284,27 @@ export async function submitSellerRegistration(data: SellerRegistrationInput): P
 //   }
 // }
 
+/**
+ * Customer orders — fetched from the live backend (/api/v1/account/orders).
+ * Falls back to mock data only when the backend is not reachable.
+ */
 export async function getOrders(): Promise<Order[]> {
-  return fetchOrMock('/api/orders', () => [...MOCK_ORDERS]);
+  try {
+    const { fetchOrders } = await import('./orders');
+    return await fetchOrders();
+  } catch {
+    // Backend not available → dev fallback
+    return [...MOCK_ORDERS];
+  }
 }
 
 export async function getOrderById(orderId: string): Promise<Order | null> {
-  return fetchOrMock(`/api/orders/${orderId}`, () => {
+  try {
+    const { fetchOrderById } = await import('./orders');
+    return await fetchOrderById(orderId);
+  } catch {
     return MOCK_ORDERS.find((o) => o.id === orderId || o.orderNumber === orderId) || null;
-  });
+  }
 }
 
 /**
@@ -363,7 +341,6 @@ export async function createRentalBooking(data: Partial<Rental>): Promise<{ succ
         charges: data.charges || { deliveryPickup: 500, gst: 0 },
         status: 'pending_approval',
         address: data.address!,
-        kycDocuments: data.kycDocuments || { verified: false },
         payments: data.payments || [],
         createdAt: new Date().toISOString()
       };
@@ -371,7 +348,7 @@ export async function createRentalBooking(data: Partial<Rental>): Promise<{ succ
       return {
         success: true,
         rental: newRental,
-        message: 'Rental booking created successfully! Biomedical verification and KYC approval in progress.'
+        message: 'Rental booking created successfully! Our team will confirm availability shortly.'
       };
     },
     {
@@ -463,14 +440,14 @@ export async function scheduleRentalReturn(
  * Blog
  */
 export async function getBlogPosts(): Promise<BlogPost[]> {
-  return fetchOrMock('/api/blog', () => [...MOCK_BLOG_POSTS]);
+  return getLiveBlogPosts();
 }
 
 export async function getBlogPostBySlug(slug: string): Promise<BlogPost | null> {
-  return fetchOrMock(`/api/blog/${slug}`, () => {
-    return MOCK_BLOG_POSTS.find((b) => b.slug === slug) || null;
-  });
+  return getLiveBlogPostBySlug(slug);
 }
+
+export { getFaqs, getCmsPage, listCmsPages, getLiveBlogPosts, getLiveBlogPostBySlug };
 
 /**
  * Sleep test packages
@@ -639,9 +616,18 @@ export async function getFeaturedReviews(): Promise<Review[]> {
  */
 export async function getPageBanners(
   pageType: string,
-  slug?: string
+  slug?: string,
+  targetId?: string
 ): Promise<PageBanner[]> {
-  // Banners uploaded in Admin → Catalog (category / brand) win over the marketing defaults below
+  // 1. Primary: Marketing Page Banners configured in Admin (Admin → Marketing → Page Banners)
+  try {
+    const banners = await getMarketingPageBanners(pageType, slug, targetId);
+    if (banners && banners.length > 0) return banners;
+  } catch (err) {
+    console.warn('Could not fetch marketing page banners:', err);
+  }
+
+  // 2. Secondary: Banners uploaded in Admin → Catalog (category / brand)
   if ((pageType === 'category' || pageType === 'brand') && slug) {
     const entity =
       pageType === 'category'
@@ -653,16 +639,20 @@ export async function getPageBanners(
         {
           id: `${pageType}-${entity.id}`,
           imageDesktop: desktop,
+          imageUrl: desktop,
           imageMobile: entity.bannerMobile || desktop,
           link: `/${pageType}/${entity.slug}`,
           alt: entity.name,
           title: entity.name,
+          headline: entity.name,
           tagline: entity.description || '',
+          subtext: entity.description || '',
           bgColor: 'from-[#EAF2FC] via-white to-[#F6F9FD]'
         }
       ];
     }
   }
+
   const liveBrand = pageType === 'brand' && slug ? await getBrandBySlug(slug).catch(() => null) : null;
 
   return fetchOrMock(`/api/banners?type=${pageType}&slug=${slug || ''}`, () => {
@@ -836,6 +826,13 @@ export async function getPageBanners(
  * Home Page Hero Banner Slider Data (1920x500 desktop + 800x600 mobile)
  */
 export async function getHeroBanners(): Promise<HeroBanner[]> {
+  try {
+    const live = await getMarketingHeroBanners();
+    if (live && live.length > 0) return live;
+  } catch (err) {
+    console.warn('Could not fetch marketing hero banners:', err);
+  }
+
   return fetchOrMock('/api/hero-banners', () => [
     {
       id: 'hero-oxygen-concentrators',
@@ -871,4 +868,7 @@ export async function getHeroBanners(): Promise<HeroBanner[]> {
 export const api = {
   getHeroBanners
 };
+
+export * from './cms';
+
 

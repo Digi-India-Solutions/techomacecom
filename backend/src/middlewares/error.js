@@ -25,7 +25,7 @@ export function errorHandler(err, req, res, next) {
   else if (err?.name === "MulterError") {
     error =
       err.code === "LIMIT_FILE_SIZE"
-        ? new ApiError(413, "FILE_TOO_LARGE", `Each image must be under ${env.uploads.maxFileMb} MB`)
+        ? new ApiError(413, "FILE_TOO_LARGE", "This file is too large")
         : err.code === "LIMIT_FILE_COUNT"
           ? ApiError.badRequest(`Upload at most ${env.uploads.maxFiles} images at once`, "TOO_MANY_FILES")
           : ApiError.badRequest(`Upload error: ${err.message} (use the "file" or "files" field)`, "UPLOAD_ERROR");
