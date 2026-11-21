@@ -1,3 +1,5 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import "./config/load-env.js"; // one .env, *_LOCAL / *_PRODUCTION picked automatically
 import "./src/lib/serialize.js"; // BigInt → JSON (must load before any response is sent)
 import express from "express";
@@ -10,6 +12,10 @@ import { corsOptions, allowedOrigins } from "./config/cors.js";
 import { UPLOADS_ROOT, UPLOADS_URL_PREFIX } from "./src/lib/storage.js";
 import apiRoutes from "./src/routes.js";
 import { notFoundHandler, errorHandler } from "./src/middlewares/error.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ASSETS_IMAGES_ROOT = path.join(__dirname, "src/assets/images");
 
 const app = express();
 const PORT = env.port;
@@ -57,6 +63,19 @@ app.use(
     dotfiles: "deny",
     setHeaders(res) {
       // helmet defaults to same-origin; the storefront (another origin) must be able to load these
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    },
+  })
+);
+
+// Fallback seed assets (e.g. /src/assets/images/... or /assets/images/...)
+app.use(
+  ["/src/assets/images", "/assets/images"],
+  express.static(ASSETS_IMAGES_ROOT, {
+    maxAge: "365d",
+    index: false,
+    dotfiles: "deny",
+    setHeaders(res) {
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     },
   })

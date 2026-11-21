@@ -27,6 +27,7 @@ import {
 // import { sendLoginOtp, verifyLoginOtp } from './customerAuth'; // mobile OTP sign-in disabled
 import { getBrandBySlug, getCategoryBySlug } from './catalog';
 import { errorMessage } from './backend';
+import { getLiveBlogPosts, getLiveBlogPostBySlug, getFaqs, getCmsPage, listCmsPages } from './cms';
 
 // Read base URL from NEXT_PUBLIC_API_URL if configured for real REST backend
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
@@ -65,6 +66,13 @@ async function fetchOrMock<T>(endpoint: string, mockFallback: () => T | Promise<
 // Catalog (categories, brands, products, search) comes from the live API — see ./catalog.ts
 export * from './catalog';
 import { checkPincode } from '@/lib/settings/pincode-api';
+export * from './marketing';
+import {
+  getHomepageConfig,
+  getHeroBanners as getMarketingHeroBanners,
+  getPageBanners as getMarketingPageBanners,
+  applyCouponViaBackend
+} from './marketing';
 
 /**
  * Check Indian pincode serviceability
@@ -89,7 +97,7 @@ export async function checkPincodeServiceability(pincode: string): Promise<{
 }
 
 /**
- * Coupon validation
+ * Coupon validation (backed by PostgreSQL coupons table with fallback)
  */
 export async function applyCoupon(code: string, subtotal: number): Promise<{
   valid: boolean;
@@ -97,6 +105,15 @@ export async function applyCoupon(code: string, subtotal: number): Promise<{
   discountAmount: number;
   message: string;
 }> {
+  // 1. Try real PostgreSQL database coupon
+  try {
+    const live = await applyCouponViaBackend(code, subtotal);
+    if (live.valid) return live;
+  } catch (err) {
+    console.warn('Backend coupon apply failed, testing mock fallback:', err);
+  }
+
+  // 2. Fallback to mock coupons for demo/testing
   const normalized = code.trim().toUpperCase();
   const coupon = MOCK_COUPONS.find((c) => c.code === normalized);
 
@@ -104,7 +121,7 @@ export async function applyCoupon(code: string, subtotal: number): Promise<{
     return {
       valid: false,
       discountAmount: 0,
-      message: 'Invalid coupon code. Try DENMED10 or CLINIC500.'
+      message: 'Invalid coupon code. Try WELCOME10 or CLINIC2000.'
     };
   }
 
@@ -375,14 +392,14 @@ export async function scheduleRentalReturn(
  * Blog
  */
 export async function getBlogPosts(): Promise<BlogPost[]> {
-  return fetchOrMock('/api/blog', () => [...MOCK_BLOG_POSTS]);
+  return getLiveBlogPosts();
 }
 
 export async function getBlogPostBySlug(slug: string): Promise<BlogPost | null> {
-  return fetchOrMock(`/api/blog/${slug}`, () => {
-    return MOCK_BLOG_POSTS.find((b) => b.slug === slug) || null;
-  });
+  return getLiveBlogPostBySlug(slug);
 }
+
+export { getFaqs, getCmsPage, listCmsPages, getLiveBlogPosts, getLiveBlogPostBySlug };
 
 /**
  * Sleep test packages
@@ -551,9 +568,18 @@ export async function getFeaturedReviews(): Promise<Review[]> {
  */
 export async function getPageBanners(
   pageType: string,
-  slug?: string
+  slug?: string,
+  targetId?: string
 ): Promise<PageBanner[]> {
-  // Banners uploaded in Admin → Catalog (category / brand) win over the marketing defaults below
+  // 1. Primary: Marketing Page Banners configured in Admin (Admin → Marketing → Page Banners)
+  try {
+    const banners = await getMarketingPageBanners(pageType, slug, targetId);
+    if (banners && banners.length > 0) return banners;
+  } catch (err) {
+    console.warn('Could not fetch marketing page banners:', err);
+  }
+
+  // 2. Secondary: Banners uploaded in Admin → Catalog (category / brand)
   if ((pageType === 'category' || pageType === 'brand') && slug) {
     const entity =
       pageType === 'category'
@@ -565,16 +591,20 @@ export async function getPageBanners(
         {
           id: `${pageType}-${entity.id}`,
           imageDesktop: desktop,
+          imageUrl: desktop,
           imageMobile: entity.bannerMobile || desktop,
           link: `/${pageType}/${entity.slug}`,
           alt: entity.name,
           title: entity.name,
+          headline: entity.name,
           tagline: entity.description || '',
+          subtext: entity.description || '',
           bgColor: 'from-[#EAF2FC] via-white to-[#F6F9FD]'
         }
       ];
     }
   }
+
   const liveBrand = pageType === 'brand' && slug ? await getBrandBySlug(slug).catch(() => null) : null;
 
   return fetchOrMock(`/api/banners?type=${pageType}&slug=${slug || ''}`, () => {
@@ -748,6 +778,13 @@ export async function getPageBanners(
  * Home Page Hero Banner Slider Data (1920x500 desktop + 800x600 mobile)
  */
 export async function getHeroBanners(): Promise<HeroBanner[]> {
+  try {
+    const live = await getMarketingHeroBanners();
+    if (live && live.length > 0) return live;
+  } catch (err) {
+    console.warn('Could not fetch marketing hero banners:', err);
+  }
+
   return fetchOrMock('/api/hero-banners', () => [
     {
       id: 'hero-oxygen-concentrators',
@@ -783,4 +820,7 @@ export async function getHeroBanners(): Promise<HeroBanner[]> {
 export const api = {
   getHeroBanners
 };
+
+export * from './cms';
+
 

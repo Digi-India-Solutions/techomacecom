@@ -3,8 +3,9 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { getBrandBySlug, getProducts } from '@/lib/api';
+import { getBrandBySlug, getProducts, getPageBanners } from '@/lib/api';
 import ProductCard from '@/components/product/ProductCard';
+import PageBannerSlider from '@/components/common/PageBannerSlider';
 import { ShieldCheck, ChevronRight, MapPin, Award } from 'lucide-react';
 
 interface BrandPageProps {
@@ -45,10 +46,18 @@ export default async function BrandPage({ params }: BrandPageProps) {
     notFound();
   }
 
-  const productsData = await getProducts({ brandIds: [brand.id], limit: 40 });
+  const [productsData, pageBanners] = await Promise.all([
+    getProducts({ brandIds: [brand.id], limit: 40 }),
+    getPageBanners('brand', brand.slug, brand.id).catch(() => [])
+  ]);
 
   return (
-    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-8">
+    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-6">
+      {/* Dynamic Page Banners from Admin */}
+      {pageBanners && pageBanners.length > 0 && (
+        <PageBannerSlider banners={pageBanners} className="mb-2" />
+      )}
+
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-xs text-[#5B6B82]">
         <Link href="/" className="hover:text-[#1D5FAF]">Home</Link>

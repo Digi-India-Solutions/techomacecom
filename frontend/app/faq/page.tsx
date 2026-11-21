@@ -4,6 +4,9 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { HelpCircle, ChevronDown, ShieldCheck, Truck, CreditCard, Bed } from 'lucide-react';
 import { useSiteSettings } from '@/lib/settings/store';
+import { Metadata } from 'next';
+import { getFaqs } from '@/lib/api/cms';
+import FaqClient from './FaqClient';
 
 interface FaqItem {
   q: string;
@@ -144,4 +147,18 @@ export default function FaqPage() {
       </div>
     </div>
   );
+
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export const metadata: Metadata = {
+  title: 'Frequently Asked Questions (FAQ) | Buy Denmed India',
+  description:
+    'Everything doctors and healthcare procurement teams need to know about purchasing, rentals, warranties, and GST invoicing.',
+};
+
+export default async function FaqPage() {
+  const faqs = await getFaqs();
+  return <FaqClient initialFaqs={faqs} />;
 }

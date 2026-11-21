@@ -4,11 +4,23 @@ import Link from 'next/link';
 import { getSiteSettings } from '@/lib/settings/server';
 import { formatTime } from '@/lib/settings/format';
 import { Truck, ShieldCheck, Clock, MapPin } from 'lucide-react';
+import { getCmsPage } from '@/lib/api/cms';
 
-export const metadata: Metadata = {
-  title: 'Pan-India Shipping & Delivery Policy | Buy Denmed',
-  description: 'Fast, secure doorstep transit policy for medical equipment, air-cargo delivery, fragile crating, and transit insurance.'
-};
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export async function generateMetadata(): Promise<Metadata> {
+  const page = await getCmsPage('shipping-policy');
+  return {
+    title: page?.seoTitle || 'Pan-India Shipping & Delivery Policy | Buy Denmed',
+    description:
+      page?.seoDescription ||
+      'Fast, secure doorstep transit policy for medical equipment, air-cargo delivery, fragile crating, and transit insurance.',
+  };
+}
+
+export default async function ShippingPolicyPage() {
+  const page = await getCmsPage('shipping-policy');
 
 export default async function ShippingPolicyPage() {
   const { shipping } = await getSiteSettings();
@@ -19,18 +31,27 @@ export default async function ShippingPolicyPage() {
           Logistics Transparency
         </span>
         <h1 className="text-2xl sm:text-4xl font-black text-[#12263F] tracking-tight">
-          Pan-India Shipping & Delivery Policy
+          {page?.title || 'Pan-India Shipping & Delivery Policy'}
         </h1>
-        <p className="text-xs text-[#5B6B82]">Last updated: November 2026</p>
+        <p className="text-xs text-[#5B6B82]">
+          Last updated: {page?.updatedAt ? new Date(page.updatedAt).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : 'November 2026'}
+        </p>
       </div>
 
       <div className="bg-white p-8 rounded-3xl border border-[#DCE6F2] shadow-xs space-y-6 text-xs sm:text-sm text-[#5B6B82] leading-relaxed">
-        <section className="space-y-2">
-          <h2 className="font-bold text-base text-[#12263F]">1. Coverage & Serviceable Pincodes</h2>
-          <p>
-            Buy Denmed ships to over 25,000 postal codes across all 28 states and 8 union territories in India. Our primary logistics partners include BlueDart Express, Delhivery Air, and Safexpress Heavy Cargo.
-          </p>
-        </section>
+        {page?.contentHtml ? (
+          <div
+            className="prose prose-slate max-w-none text-xs sm:text-sm text-[#5B6B82] leading-relaxed space-y-4"
+            dangerouslySetInnerHTML={{ __html: page.contentHtml }}
+          />
+        ) : (
+          <>
+            <section className="space-y-2">
+              <h2 className="font-bold text-base text-[#12263F]">1. Coverage & Serviceable Pincodes</h2>
+              <p>
+                Buy Denmed ships to over 25,000 postal codes across all 28 states and 8 union territories in India. Our primary logistics partners include BlueDart Express, Delhivery Air, and Safexpress Heavy Cargo.
+              </p>
+            </section>
 
         <section className="space-y-2">
           <h2 className="font-bold text-base text-[#12263F]">2. Free Shipping Threshold</h2>
@@ -63,19 +84,21 @@ export default async function ShippingPolicyPage() {
           </ul>
         </section>
 
-        <section className="space-y-2">
-          <h2 className="font-bold text-base text-[#12263F]">4. Fragile & Heavy Equipment Crating</h2>
-          <p>
-            Delicate items such as Class B vacuum autoclaves, intraoral RVG sensors, and dental turbines are packaged with reinforced wooden crates, moisture desiccant packs, and anti-static bubble wrap to guarantee arrival in zero-defect condition.
-          </p>
-        </section>
+            <section className="space-y-2">
+              <h2 className="font-bold text-base text-[#12263F]">4. Fragile &amp; Heavy Equipment Crating</h2>
+              <p>
+                Delicate items such as Class B vacuum autoclaves, intraoral RVG sensors, and dental turbines are packaged with reinforced wooden crates, moisture desiccant packs, and anti-static bubble wrap to guarantee arrival in zero-defect condition.
+              </p>
+            </section>
 
-        <section className="space-y-2">
-          <h2 className="font-bold text-base text-[#12263F]">5. 100% In-Transit Insurance</h2>
-          <p>
-            Every parcel dispatched from Buy Denmed distribution hubs carries comprehensive marine and transit insurance. In the rare event of transit damage, our logistics desk issues immediate replacements without protracted claims processing.
-          </p>
-        </section>
+            <section className="space-y-2">
+              <h2 className="font-bold text-base text-[#12263F]">5. 100% In-Transit Insurance</h2>
+              <p>
+                Every parcel dispatched from Buy Denmed distribution hubs carries comprehensive marine and transit insurance. In the rare event of transit damage, our logistics desk issues immediate replacements without protracted claims processing.
+              </p>
+            </section>
+          </>
+        )}
       </div>
     </div>
   );

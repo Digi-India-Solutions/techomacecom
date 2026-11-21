@@ -26,7 +26,11 @@ export function productInclude(now = new Date()) {
       include: {
         inventory: true,
         deals: {
-          where: { is_active: true, starts_at: { lte: now }, ends_at: { gt: now } },
+          where: {
+            is_active: true,
+            starts_at: { lte: new Date(now.getTime() + 24 * 60 * 60 * 1000) },
+            ends_at: { gt: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+          },
           orderBy: { ends_at: "asc" },
         },
       },

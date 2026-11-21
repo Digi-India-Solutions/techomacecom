@@ -257,6 +257,31 @@ export const PLACEMENT_TO_PAGE_TYPE = {
   "brands_page": "Brands",
 };
 
+export function normalizePageTypeToPlacement(pageType) {
+  if (!pageType) return undefined;
+  const s = String(pageType).trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const map = {
+    category: 'category',
+    categories: 'category',
+    brand: 'brand',
+    brands: 'brands_page',
+    brands_page: 'brands_page',
+    best_sellers: 'best_sellers',
+    bestsellers: 'best_sellers',
+    new_arrivals: 'new_arrivals',
+    newarrivals: 'new_arrivals',
+    offers: 'offers',
+    offer: 'offers',
+    hot_selling: 'hot_selling',
+    hotselling: 'hot_selling',
+    deal_of_the_day: 'deal_of_day',
+    deal_of_day: 'deal_of_day',
+    deals: 'deal_of_day',
+    deal: 'deal_of_day',
+  };
+  return map[s] || PAGE_TYPE_TO_PLACEMENT[pageType] || s;
+}
+
 export function formatPageBanner(b) {
   let targetId = "";
   let targetLabel = "";
@@ -273,12 +298,15 @@ export function formatPageBanner(b) {
   return {
     id: b.id.toString(),
     pageType: PLACEMENT_TO_PAGE_TYPE[b.placement] || b.placement,
+    placement: b.placement,
     targetId,
     targetLabel,
     title: b.title || "",
+    headline: b.title || "",
     desktopImageUrl: b.image_desktop_url,
     mobileImageUrl: b.image_mobile_url || b.image_desktop_url,
     linkUrl: b.link_url || "",
+    altText: b.alt_text || b.title || "",
     startDate: formatDate(b.starts_at),
     endDate: formatDate(b.ends_at),
     active: Boolean(b.is_active),
@@ -496,11 +524,25 @@ export async function deletePageBanner(id, adminUser) {
   return await listPageBanners();
 }
 
-export async function listPublicPageBanners(pageType, targetId) {
+export async function listPublicPageBanners(arg1, arg2, arg3) {
   await seedInitialPageBannersIfEmpty();
 
+  let pageType;
+  let targetId;
+  let slug;
+
+  if (typeof arg1 === "object" && arg1 !== null) {
+    pageType = arg1.pageType;
+    targetId = arg1.targetId;
+    slug = arg1.slug;
+  } else {
+    pageType = arg1;
+    targetId = arg2;
+    slug = arg3;
+  }
+
   const now = new Date();
-  const placement = pageType ? (PAGE_TYPE_TO_PLACEMENT[pageType] || pageType) : undefined;
+  const placement = normalizePageTypeToPlacement(pageType);
 
   const where = {
     placement: placement || { not: "hero" },
@@ -510,20 +552,83 @@ export async function listPublicPageBanners(pageType, targetId) {
     AND: [{ OR: [{ ends_at: null }, { ends_at: { gte: now } }] }],
   };
 
-  if (targetId) {
-    try {
-      where.target_id = BigInt(targetId);
-    } catch {
-      where.alt_text = { startsWith: `${targetId}:::` };
-    }
-  }
-
   const banners = await prisma.banner.findMany({
     where,
     orderBy: [{ sort_order: "asc" }, { id: "asc" }],
   });
 
-  return banners.map(formatPageBanner);
+  const formatted = banners.map(formatPageBanner);
+
+  // If specific category requested, find matched category banners
+  if (placement === "category" && (targetId || slug)) {
+    const slugLower = slug ? String(slug).toLowerCase() : "";
+    const targetStr = targetId ? String(targetId).toLowerCase() : "";
+
+    const matched = formatted.filter((b) => {
+      // 1. Direct targetId match
+      if (targetStr && b.targetId && String(b.targetId).toLowerCase() === targetStr) {
+        return true;
+      }
+      // 2. Target label matches category name or slug
+      if (b.targetLabel) {
+        const lbl = b.targetLabel.toLowerCase();
+        if (targetStr && (lbl.includes(targetStr) || targetStr.includes(lbl))) return true;
+        if (slugLower && (lbl.includes(slugLower) || slugLower.includes(lbl))) return true;
+        // Known category aliases:
+        // respiratory-care <-> oxygen-concentrators
+        if ((slugLower.includes("oxygen") || targetStr.includes("oxygen")) && lbl.includes("respiratory")) return true;
+        if ((slugLower.includes("respiratory") || targetStr.includes("respiratory")) && lbl.includes("oxygen")) return true;
+        // dental-equipment <-> dental-chairs
+        if (slugLower.includes("dental") && lbl.includes("dental")) return true;
+      }
+      // 3. Link URL matches slug
+      if (slugLower && b.linkUrl) {
+        const link = b.linkUrl.toLowerCase();
+        if (link.includes(slugLower)) return true;
+        if (slugLower.includes("oxygen") && link.includes("respiratory")) return true;
+        if (slugLower.includes("respiratory") && link.includes("oxygen")) return true;
+        if (slugLower.includes("dental") && link.includes("dental")) return true;
+      }
+      // 4. Banner title matches category
+      if (b.title) {
+        const ttl = b.title.toLowerCase();
+        if (slugLower && (ttl.includes(slugLower) || slugLower.includes(ttl))) return true;
+        if ((slugLower.includes("oxygen") || targetStr.includes("oxygen")) && ttl.includes("oxygen")) return true;
+        if (slugLower.includes("dental") && ttl.includes("dental")) return true;
+      }
+      return false;
+    });
+
+    if (matched.length > 0) return matched;
+    // Fallback: return active category banners
+    return formatted;
+  }
+
+  // If specific brand requested, find matched brand banners
+  if (placement === "brand" && (targetId || slug)) {
+    const slugLower = slug ? String(slug).toLowerCase() : "";
+    const targetStr = targetId ? String(targetId).toLowerCase() : "";
+
+    const matched = formatted.filter((b) => {
+      if (targetStr && b.targetId && String(b.targetId).toLowerCase() === targetStr) return true;
+      if (b.targetLabel) {
+        const lbl = b.targetLabel.toLowerCase();
+        if (targetStr && (lbl.includes(targetStr) || targetStr.includes(lbl))) return true;
+        if (slugLower && (lbl.includes(slugLower) || slugLower.includes(lbl))) return true;
+      }
+      if (slugLower && b.linkUrl && b.linkUrl.toLowerCase().includes(slugLower)) return true;
+      if (b.title) {
+        const ttl = b.title.toLowerCase();
+        if (slugLower && ttl.includes(slugLower)) return true;
+      }
+      return false;
+    });
+
+    if (matched.length > 0) return matched;
+    return formatted;
+  }
+
+  return formatted;
 }
 
 // =============================================================================

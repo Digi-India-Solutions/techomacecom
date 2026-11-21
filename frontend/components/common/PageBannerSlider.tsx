@@ -25,18 +25,28 @@ export const PageBannerSlider: React.FC<PageBannerSliderProps> = ({ banners, cla
   if (!banners || banners.length === 0) return null;
 
   const banner = banners[current];
+  const targetLink = banner.link || banner.linkUrl || banner.ctaLink;
+  const isInternalLink = Boolean(targetLink && targetLink !== '#catalog' && targetLink !== '#');
 
   return (
     <div className={`relative w-full overflow-hidden rounded-2xl bg-gradient-to-r from-[#EAF2FC] via-[#F6F9FD] to-[#EAF2FC] border border-[#DCE6F2] shadow-xs ${className}`}>
       {/* Banner Slide Content - ~190px desktop / ~120px mobile */}
       <div className="relative h-[120px] sm:h-[180px] lg:h-[190px] w-full flex items-center justify-between px-4 sm:px-8 lg:px-12 overflow-hidden">
+        {isInternalLink && targetLink && (
+          <Link
+            href={targetLink}
+            className="absolute inset-0 z-10"
+            aria-label={banner.headline || banner.title || 'Page banner link'}
+          />
+        )}
+
         {/* Left Headline & Tagline */}
-        <div className="max-w-xl z-10 space-y-1 sm:space-y-2">
-          {/* {banner.tagline && (
-            <span className="inline-block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-[#174E90] bg-[#EAF2FC] border border-[#1D5FAF]/20 px-2 py-0.5 rounded-full font-heading">
+        <div className="max-w-xl z-10 space-y-1 sm:space-y-2 pointer-events-none">
+          {banner.tagline && (
+            <span className="inline-block text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#174E90] bg-[#EAF2FC] border border-[#1D5FAF]/20 px-2 py-0.5 rounded-full font-heading">
               {banner.tagline}
             </span>
-          )} */}
+          )}
           <h2 className="text-base sm:text-2xl lg:text-3xl font-extrabold text-[#12263F] font-heading tracking-tight leading-tight">
             {(banner.headline || banner.title || 'Buy Denmed Healthcare').split(' ').map((word, i, arr) => {
               // Highlight the last word or middle word in medical blue
@@ -53,10 +63,17 @@ export const PageBannerSlider: React.FC<PageBannerSliderProps> = ({ banners, cla
               {banner.subtext || banner.tagline}
             </p>
           )}
+          {isInternalLink && (
+            <div className="pt-0.5 hidden sm:block">
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#1D5FAF]">
+                {banner.ctaText || 'Shop Collection'} &rarr;
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Right Graphic/Product Image */}
-        <div className="relative h-[100px] sm:h-[150px] lg:h-[170px] w-36 sm:w-64 lg:w-80 shrink-0 flex items-center justify-end">
+        <div className="relative h-[100px] sm:h-[150px] lg:h-[170px] w-36 sm:w-64 lg:w-80 shrink-0 flex items-center justify-end pointer-events-none">
           {(banner.imageUrl || banner.imageDesktop) && (
             <Image
               src={banner.imageUrl || banner.imageDesktop || '/images/hero_medical_sale_1793803411713.jpg'}

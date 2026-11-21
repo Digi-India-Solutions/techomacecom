@@ -23,7 +23,7 @@ const AVAILABLE = Prisma.sql`(s.qty - s.reserved)`;
 const DISCOUNT = Prisma.sql`CASE WHEN dv.mrp_paise > 0 THEN ((dv.mrp_paise - dv.price_paise) * 100 / dv.mrp_paise) ELSE 0 END`;
 const ACTIVE_DEAL = Prisma.sql`EXISTS (
   SELECT 1 FROM deals d JOIN product_variants dpv ON dpv.id = d.variant_id
-  WHERE dpv.product_id = p.id AND dpv.is_active AND d.is_active AND d.starts_at <= now() AND d.ends_at > now()
+  WHERE dpv.product_id = p.id AND dpv.is_active AND d.is_active AND (d.starts_at IS NULL OR d.starts_at <= (now() + interval '1 day')) AND (d.ends_at IS NULL OR d.ends_at > (now() - interval '1 day'))
 )`;
 
 /** Whitelisted ORDER BY clauses (the client only ever picks a key). */

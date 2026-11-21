@@ -1,5 +1,8 @@
 'use client';
-
+import React from 'react';
+import { Metadata } from 'next';
+import { getCmsPage } from '@/lib/api/cms';
+import ContactClient from './ContactClient';
 import React, { useState } from 'react';
 import { useToastStore } from '@/lib/store';
 import { useSiteSettings } from '@/lib/settings/store';
@@ -22,7 +25,20 @@ export default function ContactPage() {
       title: 'Message Received',
       message: 'Our clinical customer care team will contact you within 2 hours.'
     });
+
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export async function generateMetadata(): Promise<Metadata> {
+  const page = await getCmsPage('contact');
+  return {
+    title: page?.seoTitle || 'Contact Buy Denmed India - Clinical Support & Helpline',
+    description:
+      page?.seoDescription ||
+      'Need assistance with order tracking, warranty claims, equipment rentals, or hospital tenders? Contact Buy Denmed.',
   };
+}
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-10 space-y-10">
@@ -192,4 +208,7 @@ export default function ContactPage() {
       </div>
     </div>
   );
+export default async function ContactPage() {
+  const page = await getCmsPage('contact');
+  return <ContactClient initialPage={page} />;
 }

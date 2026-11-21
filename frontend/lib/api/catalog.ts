@@ -46,10 +46,48 @@ export async function getCategories(): Promise<Category[]> {
   return list<Category>('/categories', 'categories');
 }
 
-/** Any visible category (Level 1–3) by slug, with breadcrumbs. */
+const CATEGORY_SLUG_ALIASES: Record<string, string> = {
+  'dental-equipment': 'dental-chairs',
+  'dental': 'dental-chairs',
+  'dental-autoclave': 'dental-autoclaves',
+  'respiratory-care': 'oxygen-concentrators',
+  'respiratory': 'oxygen-concentrators',
+  'sleep-apnea-therapy': 'bipap-cpap',
+  'sleep-apnea': 'bipap-cpap',
+  'cpap-bipap': 'bipap-cpap',
+  'diagnostic-monitoring': 'patient-monitors',
+  'patient-monitoring': 'patient-monitors',
+  'hospital-furniture': 'icu-beds',
+  'mobility': 'manual-wheelchairs',
+  'wheelchairs': 'manual-wheelchairs',
+};
+
+/** Any visible category (Level 1–3) by slug, with breadcrumbs & alias resolution. */
 export async function getCategoryBySlug(slug: string): Promise<Category | null> {
   if (!slug) return null;
-  return one<Category>(`/categories/${slugPath(slug)}`);
+  const direct = await one<Category>(`/categories/${slugPath(slug)}`);
+  if (direct) return direct;
+
+  const cleanSlug = slug.toLowerCase().trim();
+  const alias = CATEGORY_SLUG_ALIASES[cleanSlug];
+  if (alias) {
+    const aliased = await one<Category>(`/categories/${slugPath(alias)}`);
+    if (aliased) return aliased;
+  }
+
+  // Also try partial match against list of categories
+  try {
+    const all = await getCategories();
+    const clean = cleanSlug.replace(/[-_]/g, '');
+    const found = all.find((c) => {
+      const cs = (c.slug || '').toLowerCase().replace(/[-_]/g, '');
+      const cn = (c.name || '').toLowerCase().replace(/[-_]/g, '');
+      return cs.includes(clean) || clean.includes(cs) || cn.includes(clean) || clean.includes(cn);
+    });
+    if (found) return found;
+  } catch {}
+
+  return null;
 }
 
 export async function getBrands(options: { featured?: boolean } = {}): Promise<Brand[]> {
