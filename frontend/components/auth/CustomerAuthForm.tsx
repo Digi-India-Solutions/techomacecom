@@ -47,11 +47,11 @@ const MOBILE_RE = /^[6-9]\d{9}$/;
 const PASSWORD_RE = /^(?=.*[A-Za-z])(?=.*\d).{8,128}$/; // same rule as the API (lib/password.js)
 
 const inputClass =
-  'w-full px-4 py-3 border border-[#DCE6F2] focus:border-[#1D5FAF] focus:ring-2 focus:ring-[#1D5FAF]/20 rounded-xl text-sm font-semibold text-[#12263F] outline-none transition-all disabled:bg-[#F6F9FD] disabled:text-[#5B6B82]';
+  'w-full px-3.5 py-2.5 border border-[#DCE6F2] focus:border-[#1D5FAF] focus:ring-2 focus:ring-[#1D5FAF]/20 rounded-xl text-xs sm:text-sm font-medium text-[#12263F] outline-none transition-all disabled:bg-[#F6F9FD] disabled:text-[#5B6B82] font-body';
 const errorInput = 'border-red-400 focus:border-red-500 focus:ring-red-200';
 const primaryButton =
-  'w-full py-3.5 bg-[#1D5FAF] hover:bg-[#174E90] text-white font-bold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed font-heading';
-const labelClass = 'block text-xs sm:text-sm font-semibold text-[#12263F] mb-1.5 font-heading';
+  'w-full py-2.5 sm:py-3 bg-[#1D5FAF] hover:bg-[#174E90] text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed font-heading';
+const labelClass = 'block text-xs font-bold text-[#12263F] mb-1 font-heading';
 
 type FieldErrors = Partial<Record<'name' | 'email' | 'otp' | 'mobile' | 'password' | 'confirmPassword', string>>;
 
@@ -362,7 +362,7 @@ export const CustomerAuthForm: React.FC<CustomerAuthFormProps> = ({
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3.5" style={{ fontFamily: "'Poppins', sans-serif" }}>
       {/* Sign in / Create account tabs (inline mode only; hidden on "forgot password") */}
       {switchVia === 'inline' && mode !== 'forgot' && (
         <div className="grid grid-cols-2 gap-1 p-1 bg-[#F6F9FD] border border-[#DCE6F2] rounded-xl" role="tablist">
@@ -373,7 +373,7 @@ export const CustomerAuthForm: React.FC<CustomerAuthFormProps> = ({
               role="tab"
               aria-selected={mode === m}
               onClick={() => switchTo(m)}
-              className={`py-2 rounded-lg text-sm font-bold transition-all cursor-pointer font-heading ${
+              className={`py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer font-heading ${
                 mode === m ? 'bg-white text-[#1D5FAF] shadow-xs' : 'text-[#5B6B82] hover:text-[#12263F]'
               }`}
             >

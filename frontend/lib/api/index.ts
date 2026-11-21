@@ -26,8 +26,7 @@ import {
 } from '@/lib/mock/data';
 // import { sendLoginOtp, verifyLoginOtp } from './customerAuth'; // mobile OTP sign-in disabled
 import { getBrandBySlug, getCategoryBySlug } from './catalog';
-import { errorMessage } from './backend';
-import { getLiveBlogPosts, getLiveBlogPostBySlug, getFaqs, getCmsPage, listCmsPages } from './cms';
+import { apiPost, errorMessage } from './backend';
 
 // Read base URL from NEXT_PUBLIC_API_URL if configured for real REST backend
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
@@ -168,7 +167,10 @@ export async function submitBulkEnquiry(data: Enquiry): Promise<{ success: boole
 }
 
 /**
- * Universal enquiry submission (Sleep Test, Equipment, Rentals, Support)
+ * Sleep-test callback enquiry — saved by the live API (POST /api/v1/enquiries,
+ * backend/src/modules/enquiries). Used by the /sleep-test header form and the
+ * risk-quiz result page. `quiz` carries the STOP-BANG answers; the API recomputes the risk.
+ * Throws ApiClientError (with field errors) when the API rejects the form.
  */
 export async function submitEnquiry(data: {
   type: string;
@@ -176,34 +178,80 @@ export async function submitEnquiry(data: {
   name?: string;
   phone?: string;
   mobile?: string;
+  email?: string;
   city?: string;
   preferredDate?: string;
   testType?: string;
   message?: string;
   consent?: boolean;
   honeypot?: string;
-  [key: string]: any;
-}): Promise<{ success: boolean; message: string; enquiryId: string }> {
-  return fetchOrMock('/api/enquiries', () => {
-    // Honeypot spam trap: if filled, silently accept without processing
-    if (data.honeypot && data.honeypot.trim() !== '') {
-      return {
-        success: true,
-        message: 'Your enquiry has been received.',
-        enquiryId: `ENQ-BOT-${Date.now().toString().slice(-6)}`
-      };
-    }
-
-    const generatedId = `ENQ-ST-${Date.now().toString().slice(-6)}`;
-    return {
-      success: true,
-      message: 'Thank you! Your sleep study enquiry has been submitted. Our clinical sleep specialist will call you within 30 minutes.',
-      enquiryId: generatedId
-    };
-  }, {
-    method: 'POST',
-    body: JSON.stringify(data)
+  sourcePage?: string;
+  quiz?: {
+    answers: Record<'snoring' | 'tired' | 'observed' | 'pressure' | 'age' | 'neck' | 'male', boolean>;
+    heightCm: number;
+    weightKg: number;
+    unit: 'imperial' | 'metric';
+  };
+}): Promise<{ success: boolean; message: string; enquiryId: string; risk?: string; score?: number }> {
+  const res = await apiPost<{ enquiryId: string; message: string; risk?: string; score?: number }>('/enquiries', {
+    type: 'sleep_test',
+    name: (data.fullName || data.name || '').trim(),
+    mobile: (data.mobile || data.phone || '').replace(/\D/g, ''),
+    email: data.email || '',
+    city: data.city || '',
+    preferredDate: data.preferredDate || '',
+    testType: data.testType || 'Not sure',
+    message: data.message || '',
+    consent: Boolean(data.consent),
+    honeypot: data.honeypot || '',
+    sourcePage: data.sourcePage || (typeof window !== 'undefined' ? window.location.pathname : ''),
+    ...(data.quiz ? { quiz: data.quiz } : {}),
   });
+  return { success: true, ...res };
+}
+
+export interface SellerRegistrationInput {
+  companyName: string;
+  registeredAs: string;
+  email: string;
+  mobile: string;
+  originCountry?: string;
+  vendorType: string;
+  gstNumber?: string;
+  brands?: { name: string; country: string }[];
+  contactPerson?: string;
+  city?: string;
+  categories?: string[];
+  message?: string;
+  consent: boolean;
+  honeypot?: string;
+  sourcePage?: string;
+}
+
+export async function submitSellerRegistration(data: SellerRegistrationInput): Promise<{
+  success: boolean;
+  message: string;
+  enquiryId: string;
+}> {
+  const cleanMobile = data.mobile.replace(/\D/g, '');
+  const res = await apiPost<{ enquiryId: string; message: string }>('/enquiries/seller', {
+    companyName: data.companyName.trim(),
+    registeredAs: data.registeredAs,
+    email: data.email.trim().toLowerCase(),
+    mobile: cleanMobile,
+    originCountry: data.originCountry || 'India',
+    vendorType: data.vendorType,
+    gstNumber: (data.gstNumber || '').trim().toUpperCase(),
+    brands: data.brands || [],
+    contactPerson: (data.contactPerson || '').trim(),
+    city: (data.city || '').trim(),
+    categories: data.categories || [],
+    message: (data.message || '').trim(),
+    consent: Boolean(data.consent),
+    honeypot: data.honeypot || '',
+    sourcePage: data.sourcePage || (typeof window !== 'undefined' ? window.location.pathname : '/sell'),
+  });
+  return { success: true, ...res };
 }
 
 /**
