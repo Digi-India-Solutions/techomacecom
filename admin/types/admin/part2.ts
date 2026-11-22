@@ -246,7 +246,7 @@ export interface RentalBooking {
 }
 
 // --- ENQUIRIES ---
-export type EnquiryCategory = 'sleep_test' | 'bulk_b2b' | 'contact';
+export type EnquiryCategory = 'sleep_test' | 'bulk_b2b' | 'contact' | 'seller_registration';
 export type EnquiryStatus = 'new' | 'contacted' | 'follow_up' | 'converted' | 'closed';
 
 export interface EnquiryNote {
@@ -265,12 +265,31 @@ export interface EnquiryRecord {
   email: string;
   city: string;
   // Type-specific
-  testType?: 'Home Level-3 Sleep Study' | 'Polysomnography (Level-1)' | 'CPAP Titration';
+  /** 'contact_us' | 'seller_registration' inside the Contact tab */
+  kind?: 'sleep_test' | 'bulk' | 'contact_us' | 'seller_registration';
+  testType?: string;
   preferredDate?: string;
   organization?: string;
   gstin?: string;
   productsSummary?: string;
   estimatedQty?: number;
+  estimatedBudget?: string;
+  timeline?: string;
+  state?: string;
+  pincode?: string;
+  sourcePage?: string;
+  /** STOP-BANG result when the lead came from the sleep-apnea quiz */
+  quiz?: { risk: 'low' | 'moderate' | 'high'; score: number; bmi: number; signs?: string[] } | null;
+  sellerDetails?: {
+    companyName?: string;
+    registeredAs?: string;
+    vendorType?: string;
+    originCountry?: string;
+    gstNumber?: string;
+    brands?: { name: string; country?: string }[];
+    contactPerson?: string | null;
+    categories?: string[];
+  } | null;
   subject?: string;
   message: string;
   status: EnquiryStatus;
@@ -298,6 +317,14 @@ export interface ProductReview {
   verifiedBuyer: boolean;
   status: ReviewStatus;
   rejectionReason?: string;
+  productSlug?: string;
+  customerId?: string | null;
+  reviewerEmail?: string;
+  featured?: boolean;
+  adminReply?: string;
+  adminReplyAt?: string | null;
+  moderatedBy?: string | null;
+  moderatedAt?: string | null;
   createdAt: string;
 }
 

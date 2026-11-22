@@ -52,8 +52,9 @@ export function CustomerDetailPage() {
       getCustomerById(id),
       listOrders(),
       listRentals(),
-      listEnquiries(),
-      listReviews('all'),
+      // real customer filters on the API (linked account / same mobile or email); [] if the role cannot view them
+      listEnquiries({ customerId: id }).catch(() => [] as EnquiryRecord[]),
+      listReviews('all', { customerId: id }).catch(() => [] as ProductReview[]),
     ])
       .then(([cust, allOrders, allRentals, allEnquiries, allReviews]) => {
         if (cancelled) return;
@@ -69,19 +70,8 @@ export function CustomerDetailPage() {
               (r) => r.customerId === cust.id || r.customerName === cust.name
             )
           );
-          setEnquiries(
-            allEnquiries.filter(
-              (e) =>
-                e.email === cust.email ||
-                e.mobile === cust.mobile ||
-                e.name === cust.name
-            )
-          );
-          setReviews(
-            allReviews.filter(
-              (rv) => rv.reviewerName.toLowerCase().includes(cust.name.split(' ')[0].toLowerCase())
-            )
-          );
+          setEnquiries(allEnquiries);
+          setReviews(allReviews);
         }
       })
       .finally(() => {

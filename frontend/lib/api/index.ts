@@ -9,7 +9,7 @@ import {
   Order, 
   ActiveRental, 
   Rental,
-  Review, 
+  // Review — reviews now come from ./reviews (live API)
   FilterOptions, 
   Enquiry,
   HeroBanner,
@@ -21,8 +21,8 @@ import {
   MOCK_SLEEP_TEST_PACKAGES,
   MOCK_ORDERS,
   MOCK_ACTIVE_RENTALS,
-  MOCK_RENTALS,
-  MOCK_REVIEWS
+  MOCK_RENTALS
+  // MOCK_REVIEWS — reviews now come from the live API
 } from '@/lib/mock/data';
 // import { sendLoginOtp, verifyLoginOtp } from './customerAuth'; // mobile OTP sign-in disabled
 import { getBrandBySlug, getCategoryBySlug } from './catalog';
@@ -154,17 +154,52 @@ export async function applyCoupon(code: string, subtotal: number): Promise<{
 /**
  * Bulk Purchase enquiry
  */
-export async function submitBulkEnquiry(data: Enquiry): Promise<{ success: boolean; message: string; enquiryId: string }> {
-  return fetchOrMock('/api/enquiries/bulk', () => {
-    return {
-      success: true,
-      message: 'Thank you! Our institutional medical equipment specialist will call you within 2 hours with wholesale quotations.',
-      enquiryId: `ENQ-${Date.now().toString().slice(-6)}`
-    };
-  }, {
-    method: 'POST',
-    body: JSON.stringify(data)
+export async function submitBulkEnquiry(
+  data: Enquiry & { honeypot?: string; sourcePage?: string }
+): Promise<{ success: boolean; message: string; enquiryId: string }> {
+  // Live API: POST /api/v1/enquiries/bulk (saved as type "bulk", shown in Admin → Enquiries → Bulk / B2B)
+  const res = await apiPost<{ enquiryId: string; message: string }>('/enquiries/bulk', {
+    name: data.name.trim(),
+    organizationName: data.organizationName.trim(),
+    email: data.email.trim().toLowerCase(),
+    mobile: data.phone.replace(/\D/g, '').slice(-10),
+    city: data.city.trim(),
+    state: (data.state || '').trim(),
+    pincode: (data.pincode || '').trim(),
+    equipmentRequired: data.equipmentRequired || [],
+    estimatedBudget: data.estimatedBudget || '',
+    timeline: data.timeline || '',
+    message: (data.message || '').trim(),
+    honeypot: data.honeypot || '',
+    sourcePage: data.sourcePage || (typeof window !== 'undefined' ? window.location.pathname : '/bulk-enquiry'),
   });
+  return { success: true, ...res };
+}
+
+/**
+ * Contact Us form — live API: POST /api/v1/enquiries/contact
+ * (saved as type "contact", shown in Admin → Enquiries → Contact Form).
+ * Throws ApiClientError (with field errors) when the API rejects the form.
+ */
+export async function submitContactEnquiry(data: {
+  name: string;
+  phone: string;
+  email: string;
+  subject: string;
+  message: string;
+  honeypot?: string;
+  sourcePage?: string;
+}): Promise<{ success: boolean; message: string; enquiryId: string }> {
+  const res = await apiPost<{ enquiryId: string; message: string }>('/enquiries/contact', {
+    name: data.name.trim(),
+    mobile: data.phone.replace(/\D/g, '').slice(-10),
+    email: data.email.trim().toLowerCase(),
+    subject: data.subject.trim(),
+    message: data.message.trim(),
+    honeypot: data.honeypot || '',
+    sourcePage: data.sourcePage || (typeof window !== 'undefined' ? window.location.pathname : '/contact'),
+  });
+  return { success: true, ...res };
 }
 
 /**
@@ -458,159 +493,169 @@ export async function getSleepTestPackages(): Promise<SleepTestPackage[]> {
 }
 
 /**
- * Reviews (admin-moderated)
+ * Reviews — now served by the live API (lib/api/reviews.ts → backend/src/modules/reviews).
+ * Writing a review needs a signed-in customer; the old mobile-OTP flow below is switched off.
  */
-// In-memory array for user submitted reviews during runtime
-const submittedReviewsStore: Review[] = [];
-// In-memory OTP storage for review verification
-const pendingReviewOtps: Record<string, { otp: string; expiresAt: number }> = {};
+export * from './reviews';
 
-/**
- * Fetch approved reviews for a specific product
- */
-export async function getProductReviews(productId: string): Promise<Review[]> {
-  return fetchOrMock(`/api/products/${productId}/reviews`, () => {
-    // Return only approved reviews matching the productId
-    const staticReviews = MOCK_REVIEWS.filter(
-      (r) => r.productId === productId && r.status === 'approved'
-    );
-
-    const runtimeApproved = submittedReviewsStore.filter(
-      (r) => r.productId === productId && r.status === 'approved'
-    );
-
-    const all = [...runtimeApproved, ...staticReviews];
-
-    // If specific product has no direct reviews, fallback to general approved medical reviews
-    // so the review section looks active and clinical
-    if (all.length === 0) {
-      return MOCK_REVIEWS.filter((r) => r.status === 'approved').slice(0, 3);
-    }
-
-    return all;
-  });
-}
-
-/**
- * Send 6-digit OTP to mobile for review submission spam prevention
- */
-export async function sendReviewOtp(mobile: string): Promise<{
-  success: boolean;
-  message: string;
-  simulatedOtp?: string;
-}> {
-  return fetchOrMock(
-    '/api/reviews/send-otp',
-    () => {
-      const cleanMobile = mobile.replace(/\D/g, '');
-      if (!/^[6-9]\d{9}$/.test(cleanMobile)) {
-        throw new Error('Please enter a valid 10-digit Indian mobile number');
-      }
-
-      // Generate 6-digit OTP (for testing/demo: default 123456 or random)
-      const otp = '123456';
-      pendingReviewOtps[cleanMobile] = {
-        otp,
-        expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes validity
-      };
-
-      return {
-        success: true,
-        message: `OTP sent successfully to +91 ${cleanMobile}. (Use test code 123456)`,
-        simulatedOtp: otp
-      };
-    },
-    {
-      method: 'POST',
-      body: JSON.stringify({ mobile })
-    }
-  );
-}
-
-/**
- * Verify 6-digit review OTP
- */
-export async function verifyReviewOtp(
-  mobile: string,
-  otp: string
-): Promise<{ success: boolean; message: string }> {
-  return fetchOrMock(
-    '/api/reviews/verify-otp',
-    () => {
-      const cleanMobile = mobile.replace(/\D/g, '');
-      const record = pendingReviewOtps[cleanMobile];
-
-      // Allow 123456 as master test OTP or match stored OTP
-      if (otp.trim() === '123456' || (record && record.otp === otp.trim())) {
-        delete pendingReviewOtps[cleanMobile];
-        return {
-          success: true,
-          message: 'Mobile number verified successfully'
-        };
-      }
-
-      throw new Error('Invalid OTP. Please check the 6-digit code or enter 123456.');
-    },
-    {
-      method: 'POST',
-      body: JSON.stringify({ mobile, otp })
-    }
-  );
-}
-
-/**
- * Submit product review (requires admin moderation, starts with status 'pending')
- */
-export async function submitReview(data: {
-  productId: string;
-  name: string;
-  mobile?: string;
-  rating: number;
-  title?: string;
-  comment: string;
-  images?: string[];
-  isVerifiedBuyer?: boolean;
-}): Promise<{ success: boolean; reviewId: string; message: string }> {
-  return fetchOrMock(
-    `/api/products/${data.productId}/reviews`,
-    () => {
-      const reviewId = `rev-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-      const newReview: Review = {
-        id: reviewId,
-        productId: data.productId,
-        name: data.name.trim(),
-        authorName: data.name.trim(),
-        mobile: data.mobile?.trim(),
-        rating: data.rating,
-        title: data.title?.trim() || 'Verified Product Feedback',
-        comment: data.comment.trim(),
-        images: data.images || [],
-        isVerifiedBuyer: data.isVerifiedBuyer ?? true,
-        verifiedBuyer: data.isVerifiedBuyer ?? true,
-        status: 'pending', // NOT shown publicly until admin approves
-        createdAt: new Date().toISOString(),
-        date: new Date().toISOString().split('T')[0],
-        helpfulCount: 0
-      };
-
-      submittedReviewsStore.unshift(newReview);
-
-      return {
-        success: true,
-        reviewId,
-        message: 'Thank you! Your review has been submitted and will be visible after approval.'
-      };
-    },
-    {
-      method: 'POST',
-      body: JSON.stringify(data)
-    }
-  );
-}
-
-export async function getFeaturedReviews(): Promise<Review[]> {
-  return fetchOrMock('/api/reviews/featured', () => [...MOCK_REVIEWS]);
-}
+// ---------------------------------------------------------------------------
+// OLD mock reviews + review mobile OTP — DISABLED (kept for reference).
+// ---------------------------------------------------------------------------
+// /**
+//  * Reviews (admin-moderated)
+//  */
+// // In-memory array for user submitted reviews during runtime
+// const submittedReviewsStore: Review[] = [];
+// // In-memory OTP storage for review verification
+// const pendingReviewOtps: Record<string, { otp: string; expiresAt: number }> = {};
+//
+// /**
+//  * Fetch approved reviews for a specific product
+//  */
+// export async function getProductReviews(productId: string): Promise<Review[]> {
+//   return fetchOrMock(`/api/products/${productId}/reviews`, () => {
+//     // Return only approved reviews matching the productId
+//     const staticReviews = MOCK_REVIEWS.filter(
+//       (r) => r.productId === productId && r.status === 'approved'
+//     );
+//
+//     const runtimeApproved = submittedReviewsStore.filter(
+//       (r) => r.productId === productId && r.status === 'approved'
+//     );
+//
+//     const all = [...runtimeApproved, ...staticReviews];
+//
+//     // If specific product has no direct reviews, fallback to general approved medical reviews
+//     // so the review section looks active and clinical
+//     if (all.length === 0) {
+//       return MOCK_REVIEWS.filter((r) => r.status === 'approved').slice(0, 3);
+//     }
+//
+//     return all;
+//   });
+// }
+//
+// /**
+//  * Send 6-digit OTP to mobile for review submission spam prevention
+//  */
+// export async function sendReviewOtp(mobile: string): Promise<{
+//   success: boolean;
+//   message: string;
+//   simulatedOtp?: string;
+// }> {
+//   return fetchOrMock(
+//     '/api/reviews/send-otp',
+//     () => {
+//       const cleanMobile = mobile.replace(/\D/g, '');
+//       if (!/^[6-9]\d{9}$/.test(cleanMobile)) {
+//         throw new Error('Please enter a valid 10-digit Indian mobile number');
+//       }
+//
+//       // Generate 6-digit OTP (for testing/demo: default 123456 or random)
+//       const otp = '123456';
+//       pendingReviewOtps[cleanMobile] = {
+//         otp,
+//         expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes validity
+//       };
+//
+//       return {
+//         success: true,
+//         message: `OTP sent successfully to +91 ${cleanMobile}. (Use test code 123456)`,
+//         simulatedOtp: otp
+//       };
+//     },
+//     {
+//       method: 'POST',
+//       body: JSON.stringify({ mobile })
+//     }
+//   );
+// }
+//
+// /**
+//  * Verify 6-digit review OTP
+//  */
+// export async function verifyReviewOtp(
+//   mobile: string,
+//   otp: string
+// ): Promise<{ success: boolean; message: string }> {
+//   return fetchOrMock(
+//     '/api/reviews/verify-otp',
+//     () => {
+//       const cleanMobile = mobile.replace(/\D/g, '');
+//       const record = pendingReviewOtps[cleanMobile];
+//
+//       // Allow 123456 as master test OTP or match stored OTP
+//       if (otp.trim() === '123456' || (record && record.otp === otp.trim())) {
+//         delete pendingReviewOtps[cleanMobile];
+//         return {
+//           success: true,
+//           message: 'Mobile number verified successfully'
+//         };
+//       }
+//
+//       throw new Error('Invalid OTP. Please check the 6-digit code or enter 123456.');
+//     },
+//     {
+//       method: 'POST',
+//       body: JSON.stringify({ mobile, otp })
+//     }
+//   );
+// }
+//
+// /**
+//  * Submit product review (requires admin moderation, starts with status 'pending')
+//  */
+// export async function submitReview(data: {
+//   productId: string;
+//   name: string;
+//   mobile?: string;
+//   rating: number;
+//   title?: string;
+//   comment: string;
+//   images?: string[];
+//   isVerifiedBuyer?: boolean;
+// }): Promise<{ success: boolean; reviewId: string; message: string }> {
+//   return fetchOrMock(
+//     `/api/products/${data.productId}/reviews`,
+//     () => {
+//       const reviewId = `rev-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+//       const newReview: Review = {
+//         id: reviewId,
+//         productId: data.productId,
+//         name: data.name.trim(),
+//         authorName: data.name.trim(),
+//         mobile: data.mobile?.trim(),
+//         rating: data.rating,
+//         title: data.title?.trim() || 'Verified Product Feedback',
+//         comment: data.comment.trim(),
+//         images: data.images || [],
+//         isVerifiedBuyer: data.isVerifiedBuyer ?? true,
+//         verifiedBuyer: data.isVerifiedBuyer ?? true,
+//         status: 'pending', // NOT shown publicly until admin approves
+//         createdAt: new Date().toISOString(),
+//         date: new Date().toISOString().split('T')[0],
+//         helpfulCount: 0
+//       };
+//
+//       submittedReviewsStore.unshift(newReview);
+//
+//       return {
+//         success: true,
+//         reviewId,
+//         message: 'Thank you! Your review has been submitted and will be visible after approval.'
+//       };
+//     },
+//     {
+//       method: 'POST',
+//       body: JSON.stringify(data)
+//     }
+//   );
+// }
+//
+// export async function getFeaturedReviews(): Promise<Review[]> {
+//   return fetchOrMock('/api/reviews/featured', () => [...MOCK_REVIEWS]);
+// }
+//
 
 /**
  * Page Banners for Listing Pages (Category, Brand, Offers, Deals, Best Sellers, etc.)

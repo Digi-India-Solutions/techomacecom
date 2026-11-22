@@ -440,6 +440,12 @@ export interface Review {
   date?: string;
   verifiedBuyer?: boolean;
   helpfulCount?: number;
+  // Live API (backend/src/modules/reviews)
+  adminReply?: string | null; // public reply from the store
+  adminReplyAt?: string | null;
+  productName?: string; // featured reviews (home-page testimonials)
+  productSlug?: string;
+  productImage?: string;
 }
 
 export interface HeroBanner {

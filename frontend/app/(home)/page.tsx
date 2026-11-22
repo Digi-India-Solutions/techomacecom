@@ -10,7 +10,8 @@ import {
   getBlogPosts,
   getHeroBanners,
   getPageBanners,
-  getHomepageConfig
+  getHomepageConfig,
+  getFeaturedReviews
 } from '@/lib/api';
 import type { Product, Category } from '@/types';
 import HeroSlider from '@/components/home/HeroSlider';
@@ -44,7 +45,8 @@ export default async function HomePage() {
     newArrivals,
     rentalProducts,
     blogPosts,
-    hotSellingBanners
+    hotSellingBanners,
+    featuredReviews
   ] = await Promise.all([
     getHomepageConfig(),
     getHeroBanners(),
@@ -56,7 +58,9 @@ export default async function HomePage() {
     getNewArrivals(),
     getRentableProducts(),
     getBlogPosts(),
-    getPageBanners('hot_selling').catch(() => [])
+    getPageBanners('hot_selling').catch(() => []),
+    // Admin → Reviews → "Feature on home page" (approved reviews only)
+    getFeaturedReviews(12)
   ]);
 
   const dynamicPromoBanners = hotSellingBanners && hotSellingBanners.length >= 3
@@ -349,6 +353,7 @@ export default async function HomePage() {
         return (
           <TestimonialsSection
             key="testimonials"
+            reviews={featuredReviews}
             title={getSectionTitle('testimonials', 'What Doctors & Patients Say')}
           />
         );

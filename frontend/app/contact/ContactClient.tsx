@@ -2,31 +2,72 @@
 
 import React, { useState } from 'react';
 import { useToastStore } from '@/lib/store';
-import { Phone, Mail, Clock, Send } from 'lucide-react';
+import { Phone, Mail, Clock, Send, Loader2, CheckCircle2 } from 'lucide-react';
 import type { CmsPageData } from '@/lib/api/cms';
+import { submitContactEnquiry } from '@/lib/api';
+import { ApiClientError } from '@/lib/api/backend';
 
+const EMPTY_FORM = { name: '', email: '', phone: '', subject: '', message: '', honeypot: '' };
+type ContactForm = typeof EMPTY_FORM;
+
+/** Same rules as the API (backend/src/modules/enquiries/validator.js → contactEnquirySchema). */
+function validate(f: ContactForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (f.name.trim().length < 2) errors.name = 'Name is required';
+  if (!/^[6-9]\d{9}$/.test(f.phone.replace(/\D/g, '').slice(-10))) errors.mobile = 'Enter a valid 10-digit mobile number';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) errors.email = 'Enter a valid email address';
+  if (f.subject.trim().length < 2) errors.subject = 'Subject is required';
+  if (f.message.trim().length < 5) errors.message = 'Please write a short message';
+  return errors;
+}
+
+/**
+ * Contact Us — saved by the live API (POST /enquiries/contact) and shown in
+ * Admin → Enquiries → Contact Form, where staff follow up.
+ */
 export default function ContactClient({ initialPage }: { initialPage: CmsPageData | null }) {
   const { addToast } = useToastStore();
-  const [formData, setFormData] = useState({
-    name: 'Dr. Vikram Malhotra',
-    email: 'dr.vikram@malhotraclinic.com',
-    phone: '9811234567',
-    subject: 'Equipment Installation Inquiry',
-    message: 'Need assistance scheduling installation for our new dental operatory unit.',
-  });
-  const [submitted, setSubmitted] = useState(false);
-  const [ticketId, setTicketId] = useState('89201');
+  const [formData, setFormData] = useState<ContactForm>(EMPTY_FORM);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ enquiryId: string; message: string } | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setTicketId(String(Math.floor(10000 + Math.random() * 90000)));
-    setSubmitted(true);
-    addToast({
-      type: 'success',
-      title: 'Message Received',
-      message: 'Our clinical customer care team will contact you within 2 hours.',
-    });
+  const update = (key: keyof ContactForm, value: string) => {
+    setFormData((prev) => ({ ...prev, [key]: value }));
+    const errorKey = key === 'phone' ? 'mobile' : key;
+    if (errors[errorKey]) setErrors(({ [errorKey]: _removed, ...rest }) => rest);
   };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const found = validate(formData);
+    setErrors(found);
+    if (Object.keys(found).length) return;
+
+    setSubmitting(true);
+    try {
+      const res = await submitContactEnquiry(formData);
+      setResult({ enquiryId: res.enquiryId, message: res.message });
+      setFormData(EMPTY_FORM);
+      addToast({ type: 'success', title: 'Message received', message: res.message });
+    } catch (err) {
+      if (err instanceof ApiClientError && err.fields) setErrors(err.fields);
+      addToast({
+        type: 'error',
+        title: 'Could not send your message',
+        message: err instanceof Error ? err.message : 'Please try again or call us.',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputClass = (field: string) =>
+    `w-full px-3.5 py-2.5 border rounded-xl focus:outline-none focus:border-[#1D5FAF] text-[#12263F] ${
+      errors[field] ? 'border-[#DC2626]' : 'border-[#DCE6F2]'
+    }`;
+  const fieldError = (field: string) =>
+    errors[field] ? <p className="mt-1 text-[11px] text-[#DC2626]">{errors[field]}</p> : null;
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-10 space-y-10">
@@ -110,79 +151,118 @@ export default function ContactClient({ initialPage }: { initialPage: CmsPageDat
             <p className="text-xs text-[#5B6B82]">Our biomedical team will review your query immediately</p>
           </div>
 
-          {submitted ? (
-            <div className="p-8 bg-green-50 rounded-2xl border border-green-200 text-center space-y-2">
-              <h3 className="font-bold text-base text-green-900">Message Dispatched!</h3>
+          {result ? (
+            <div className="p-8 bg-green-50 rounded-2xl border border-green-200 text-center space-y-3">
+              <CheckCircle2 className="w-10 h-10 text-green-600 mx-auto" />
+              <h3 className="font-bold text-base text-green-900">Message received!</h3>
               <p className="text-xs text-green-700">
-                Ticket #TKT-{ticketId} created. An engineer will follow up shortly.
+                Your reference number is <strong className="font-mono">{result.enquiryId}</strong>. {result.message}
               </p>
+              <button
+                type="button"
+                onClick={() => setResult(null)}
+                className="text-xs font-bold text-[#1D5FAF] hover:underline"
+              >
+                Send another message
+              </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs" noValidate>
+              {/* Spam trap: hidden from people, bots fill it */}
+              <input
+                type="text"
+                name="company_website"
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                value={formData.honeypot}
+                onChange={(e) => update('honeypot', e.target.value)}
+                className="hidden"
+              />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-bold text-[#12263F] block mb-1">Your Name *</label>
+                  <label htmlFor="contact-name" className="font-bold text-[#12263F] block mb-1">Your Name *</label>
                   <input
+                    id="contact-name"
                     type="text"
-                    required
+                    autoComplete="name"
+                    maxLength={120}
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-[#DCE6F2] rounded-xl focus:outline-none focus:border-[#1D5FAF] text-[#12263F]"
+                    onChange={(e) => update('name', e.target.value)}
+                    placeholder="e.g. Dr. Vikram Malhotra"
+                    className={inputClass('name')}
                   />
+                  {fieldError('name')}
                 </div>
                 <div>
-                  <label className="font-bold text-[#12263F] block mb-1">Mobile Number *</label>
+                  <label htmlFor="contact-phone" className="font-bold text-[#12263F] block mb-1">Mobile Number *</label>
                   <input
+                    id="contact-phone"
                     type="tel"
-                    required
+                    inputMode="numeric"
+                    autoComplete="tel-national"
                     maxLength={10}
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-[#DCE6F2] rounded-xl focus:outline-none focus:border-[#1D5FAF] text-[#12263F]"
+                    onChange={(e) => update('phone', e.target.value.replace(/\D/g, ''))}
+                    placeholder="10-digit mobile number"
+                    className={inputClass('mobile')}
                   />
+                  {fieldError('mobile')}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-bold text-[#12263F] block mb-1">Email Address *</label>
+                  <label htmlFor="contact-email" className="font-bold text-[#12263F] block mb-1">Email Address *</label>
                   <input
+                    id="contact-email"
                     type="email"
-                    required
+                    autoComplete="email"
+                    maxLength={200}
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-[#DCE6F2] rounded-xl focus:outline-none focus:border-[#1D5FAF] text-[#12263F]"
+                    onChange={(e) => update('email', e.target.value)}
+                    placeholder="you@clinic.com"
+                    className={inputClass('email')}
                   />
+                  {fieldError('email')}
                 </div>
                 <div>
-                  <label className="font-bold text-[#12263F] block mb-1">Subject</label>
+                  <label htmlFor="contact-subject" className="font-bold text-[#12263F] block mb-1">Subject *</label>
                   <input
+                    id="contact-subject"
                     type="text"
-                    required
+                    maxLength={150}
                     value={formData.subject}
-                    onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-[#DCE6F2] rounded-xl focus:outline-none focus:border-[#1D5FAF] text-[#12263F]"
+                    onChange={(e) => update('subject', e.target.value)}
+                    placeholder="e.g. Equipment installation enquiry"
+                    className={inputClass('subject')}
                   />
+                  {fieldError('subject')}
                 </div>
               </div>
 
               <div>
-                <label className="font-bold text-[#12263F] block mb-1">Message</label>
+                <label htmlFor="contact-message" className="font-bold text-[#12263F] block mb-1">Message *</label>
                 <textarea
+                  id="contact-message"
                   rows={4}
-                  required
+                  maxLength={2000}
                   value={formData.message}
-                  onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                  className="w-full p-3.5 border border-[#DCE6F2] rounded-xl focus:outline-none focus:border-[#1D5FAF] text-[#12263F]"
+                  onChange={(e) => update('message', e.target.value)}
+                  placeholder="How can we help you?"
+                  className={`${inputClass('message')} p-3.5`}
                 />
+                {fieldError('message')}
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3.5 bg-[#1D5FAF] hover:bg-[#174E90] text-white font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+                disabled={submitting}
+                className="w-full py-3.5 bg-[#1D5FAF] hover:bg-[#174E90] disabled:opacity-60 text-white font-black rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
               >
-                <span>Send Message to Customer Care</span>
-                <Send className="w-4 h-4" />
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                <span>{submitting ? 'Sending…' : 'Send Message to Customer Care'}</span>
+                {!submitting && <Send className="w-4 h-4" />}
               </button>
             </form>
           )}
@@ -191,4 +271,3 @@ export default function ContactClient({ initialPage }: { initialPage: CmsPageDat
     </div>
   );
 }
-
