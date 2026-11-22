@@ -48,6 +48,27 @@ export interface SiteSettings {
     lateFeePerDay: number;
     gracePeriodDays: number;
     depositRefundDays: number;
+    /** % of the booking total paid online at checkout (100 = full payment) */
+    advancePaymentPercent: number;
+    balanceDue: 'before_dispatch' | 'on_delivery';
+    /** Earliest start date = today + this many days */
+    minLeadDays: number;
+    kycRequired: boolean;
+    kycDocuments: { key: string; label: string; hint: string }[];
+    kycInstructions: string;
+  };
+  returns: {
+    returnsEnabled: boolean;
+    returnWindowDays: number;
+    refundEnabled: boolean;
+    replacementEnabled: boolean;
+    photosRequired: boolean;
+    maxPhotos: number;
+    /** Business days, e.g. "5-7" */
+    refundProcessingDays: string;
+    returnReasons: string[];
+    cancelReasons: string[];
+    conditions: string;
   };
 }
 

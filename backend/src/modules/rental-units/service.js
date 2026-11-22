@@ -39,11 +39,11 @@ export function formatRentalUnit(u) {
     rentalId: r.rental_number,
     customerName: r.customer?.name || "Customer",
     customerPhone: r.customer?.mobile || "",
-    startDate: formatDate(r.start_date || r.created_at),
+    startDate: formatDate(r.start_date || r.requested_start_date || r.created_at),
     endDate: formatDate(r.end_date),
     returnedDate: r.returned_at ? formatDate(r.returned_at) : undefined,
-    status: r.status === "completed" ? "completed" : r.status === "overdue" ? "overdue" : "active",
-    notes: r.delivery_address || "",
+    status: ["returned", "deposit_refunded", "cancelled"].includes(r.status) ? "completed" : r.status === "overdue" ? "overdue" : "active",
+    notes: [r.delivery_address?.city, r.delivery_address?.pincode].filter(Boolean).join(" "),
   }));
 
   const currRental = u.current_rental;
@@ -58,9 +58,11 @@ export function formatRentalUnit(u) {
     purchaseDate: formatDate(u.purchase_date),
     condition: u.condition,
     status: u.status,
-    currentCustomerName: currRental?.customer?.name || (u.notes?.includes("Khanna") ? "Arvind Khanna" : u.notes?.includes("Kavita") ? "Dr. Kavita Rao (Home ICU)" : u.notes?.includes("Deshmukh") ? "Sunita Deshmukh" : undefined),
-    currentRentalId: currRental?.rental_number || (u.notes?.includes("Khanna") ? "RNT-2026-412" : u.notes?.includes("Kavita") ? "RNT-2026-398" : u.notes?.includes("Deshmukh") ? "RNT-2026-429" : undefined),
-    expectedReturnDate: currRental?.end_date ? formatDate(currRental.end_date) : (u.notes?.includes("Khanna") ? "2026-11-21" : u.notes?.includes("Kavita") ? "2026-11-14" : u.notes?.includes("Deshmukh") ? "2026-12-18" : undefined),
+    // Only real bookings (admin → Rentals) — never guessed from the notes text
+    currentCustomerName: currRental?.customer?.name || undefined,
+    currentRentalId: currRental?.rental_number || undefined,
+    currentRentalDbId: currRental ? currRental.id.toString() : undefined,
+    expectedReturnDate: currRental?.end_date ? formatDate(currRental.end_date) : undefined,
     lastServiceDate: formatDate(u.last_service_at),
     nextServiceDue: formatDate(u.next_service_due),
     notes: u.notes || "",

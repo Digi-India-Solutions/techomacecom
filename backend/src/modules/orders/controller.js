@@ -1,6 +1,5 @@
 import { ok } from "../../lib/http.js";
 import * as service from "./service.js";
-import * as returnsService from "./returns.service.js";
 
 /**
  * Storefront Customer Orders Controller
@@ -22,13 +21,8 @@ export async function getOrder(req, res) {
 }
 
 export async function cancelOrder(req, res) {
-  const order = await returnsService.cancelCustomerOrder(req.customer.id, req.params.id, req.body);
+  const order = await service.cancelCustomerOrder(req.customer.id, req.params.id, req.body);
   return ok(res, order);
-}
-
-export async function requestReturn(req, res) {
-  const result = await returnsService.createCustomerReturn(req.customer.id, req.params.id, req.body);
-  return ok(res, result, { status: 201 });
 }
 
 export async function verifyPayment(req, res) {

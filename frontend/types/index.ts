@@ -303,8 +303,11 @@ export interface User {
 }
 
 export interface OrderItem {
+  /** order_items.id — used to pick items for a return */
+  orderItemId?: string;
   productId: string;
   productName: string;
+  productSlug?: string;
   brandName: string;
   image: string;
   sku: string;
@@ -312,6 +315,10 @@ export interface OrderItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  /** Units that can still be returned (0 when outside the window, non-returnable, or already returned) */
+  returnableQty?: number;
+  returnedQty?: number;
+  nonReturnable?: boolean;
   isRental?: boolean;
   rentalTenureMonths?: number;
 }
@@ -323,6 +330,7 @@ export type OrderStatus =
   | 'Dispatched'
   | 'Delivered'
   | 'Cancelled'
+  | 'Returned'
   | 'Return Requested'
   | 'Return Approved'
   | 'Pickup Scheduled'
@@ -338,15 +346,90 @@ export interface OrderTimelineEvent {
   completed: boolean;
 }
 
+export type RefundStatus = 'processing' | 'processed' | 'failed';
+
+export interface OrderRefund {
+  id: string;
+  amount: number;
+  reason: 'cancel' | 'return' | 'goodwill' | 'deposit_refund';
+  method: 'gateway' | 'bank_transfer' | 'upi';
+  methodLabel: string;
+  status: RefundStatus;
+  reference: string | null;
+  note: string | null;
+  returnId: string | null;
+  createdAt: string;
+  processedAt: string | null;
+}
+
+export type ReturnRequestStatus =
+  | 'requested'
+  | 'approved'
+  | 'pickup_scheduled'
+  | 'received'
+  | 'replacement_shipped'
+  | 'refunded'
+  | 'completed'
+  | 'rejected'
+  | 'cancelled';
+
+export interface ReturnShipmentInfo {
+  courier: string;
+  awb: string;
+  trackingUrl: string;
+  pickupDate: string | null;
+  status: string;
+  createdAt: string | null;
+  deliveredAt: string | null;
+}
+
+/** A return / replacement request (RMA) as the customer sees it */
 export interface OrderReturnRequest {
   id: string;
   returnNumber: string;
-  status: 'requested' | 'approved' | 'pickup_scheduled' | 'received' | 'refunded' | 'rejected';
+  type: 'refund' | 'replacement';
+  typeLabel: string;
+  status: ReturnRequestStatus;
+  statusLabel: string;
   reason: string;
-  photos?: string[];
-  adminNote?: string;
+  customerNote: string;
+  photos: string[];
+  items: {
+    id: string;
+    orderItemId: string;
+    productName: string;
+    variantName: string;
+    sku: string;
+    image: string;
+    quantity: number;
+    orderedQuantity: number;
+    refundAmount: number;
+    condition: 'resellable' | 'damaged' | null;
+  }[];
+  requestedAmount: number;
+  rejectionReason: string | null;
+  pickup: ReturnShipmentInfo | null;
+  replacementShipment: ReturnShipmentInfo | null;
+  steps: { key: string; label: string; done: boolean; current: boolean; at: string | null }[];
   createdAt: string;
-  refundAmount?: number;
+  updatedAt: string;
+  resolvedAt: string | null;
+  orderId: string;
+  orderNumber: string;
+  refundAccount: { mode: 'bank' | 'upi'; label: string } | null;
+  refunds: OrderRefund[];
+  refundedAmount: number;
+  canCancel: boolean;
+  timeline: { status: string; label: string; note: string; at: string }[];
+}
+
+export interface OrderReturnPolicy {
+  windowDays: number;
+  windowEndsAt: string | null;
+  windowOpen: boolean;
+  types: ('refund' | 'replacement')[];
+  /** Why the order cannot be returned (only once delivered) */
+  blockReason: string | null;
 }
 
 export interface Order {
@@ -361,24 +444,30 @@ export interface Order {
   gstAmount: number;
   totalAmount: number;
   paymentMethod: 'Online Razorpay (Cards/UPI/EMI)' | 'Cash on Delivery';
-  paymentStatus: 'Paid' | 'Pending' | 'Refunded';
+  paymentStatus: 'Paid' | 'Pending' | 'Refunded' | 'Partially Refunded' | 'Failed';
   shippingAddress: Address;
   gstDetails?: GstDetails;
   trackingNumber?: string;
   courierPartner?: string;
   trackingUrl?: string;
   estimatedDelivery: string;
+  deliveredAt?: string;
   timeline: OrderTimelineEvent[];
   /** Invoice details from admin-generated invoice record */
   invoiceNumber?: string;
   invoiceUrl?: string;
   /** Coupon applied at checkout */
   couponCode?: string;
-  /** Dynamic action eligibility */
+  /** Dynamic action eligibility (from the API, driven by admin → Settings → Returns) */
   canCancel?: boolean;
   canReturn?: boolean;
-  returnRequest?: OrderReturnRequest;
+  returnPolicy?: OrderReturnPolicy;
+  /** Return / replacement requests, newest first */
+  returns?: OrderReturnRequest[];
+  /** Every refund on this order (cancellation, return, goodwill) */
+  refunds?: OrderRefund[];
   cancelReason?: string;
+  cancelledAt?: string;
 }
 
 export interface ActiveRental {
@@ -518,4 +607,131 @@ export interface SleepTestPackage {
   features: string[];
   reportDeliveryHours: number;
   doctorConsultationIncluded: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Rentals — live API (backend/src/modules/rentals)
+// ---------------------------------------------------------------------------
+
+export interface RentalKycDocType {
+  key: string;
+  label: string;
+  hint: string;
+}
+
+export interface RentalKycDoc {
+  id: string;
+  docType: string;
+  label: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  status: 'uploaded' | 'approved' | 'rejected';
+  rejectReason?: string | null;
+  uploadedAt: string;
+}
+
+/** POST /rentals/quote — the server's price for a plan + duration */
+export interface RentalQuote {
+  productId: string;
+  /** Free rentable units right now (serial-numbered machines) */
+  available: number;
+  inStock: boolean;
+  period: 'daily' | 'weekly' | 'monthly';
+  periods: number;
+  durationLabel: string;
+  rate: number;
+  rent: number;
+  delivery: number;
+  gst: number;
+  gstRate: number;
+  deposit: number;
+  total: number;
+  advancePercent: number;
+  payNow: number;
+  balance: number;
+  balanceDue: 'before_dispatch' | 'on_delivery';
+  startDate: string;
+  endDate: string;
+  earliestStartDate: string;
+  kyc: { required: boolean; documents: RentalKycDocType[]; instructions: string };
+}
+
+export type CustomerRentalStatus =
+  | 'pending_payment'
+  | 'pending_approval'
+  | 'approved'
+  | 'dispatched'
+  | 'active'
+  | 'extension_requested'
+  | 'overdue'
+  | 'return_scheduled'
+  | 'returned'
+  | 'deposit_refunded'
+  | 'cancelled';
+
+export interface RentalShipment {
+  courier: string;
+  awb: string;
+  trackingUrl: string;
+  pickupDate: string | null;
+  status: string;
+  createdAt: string | null;
+  deliveredAt: string | null;
+}
+
+export interface CustomerRental {
+  id: string;
+  rentalNumber: string;
+  status: CustomerRentalStatus;
+  statusLabel: string;
+  product: { id: string; name: string; slug: string; brand: string; image: string };
+  plan: { period: 'daily' | 'weekly' | 'monthly'; periodLabel: string; unit: string; rate: number; periods: number; durationLabel: string; minPeriods: number; maxPeriods: number };
+  requestedStartDate: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  daysLeft: number | null;
+  overdueDays: number;
+  lateFeeAccrued: number;
+  amounts: {
+    rent: number;
+    delivery: number;
+    gst: number;
+    deposit: number;
+    total: number;
+    advancePercent: number;
+    advance: number;
+    paid: number;
+    advanceDue: number;
+    balanceDue: number;
+    refunded: number;
+    depositRefund: number | null;
+  };
+  balanceDuePolicy: 'before_dispatch' | 'on_delivery';
+  deliveryAddress: { name: string; phone: string; organisation: string; line1: string; line2: string; landmark: string; city: string; state: string; pincode: string } | null;
+  kyc: {
+    required: boolean;
+    status: 'pending' | 'submitted' | 'approved' | 'rejected' | null;
+    statusLabel: string | null;
+    note: string | null;
+    requirements: { key: string; label: string; hint: string; document: RentalKycDoc | null }[];
+    documents: RentalKycDoc[];
+  };
+  unit: { serialNumber: string } | null;
+  delivery: RentalShipment | null;
+  returnPickup: RentalShipment | null;
+  returnRequestedOn: string | null;
+  returnCondition: string | null;
+  returnNotes: string | null;
+  deductions: { id: string; type: string; amount: number; description: string }[];
+  extensions: { id: string; extraPeriods: number; amount: number; status: string; oldEndDate: string | null; newEndDate: string | null; createdAt: string }[];
+  pendingExtensionId: string | null;
+  payments: { id: string; amount: number; purpose: string; method: string; reference: string | null; paidAt: string }[];
+  refunds: OrderRefund[];
+  steps: { key: string; label: string; done: boolean; current: boolean; at: string | null }[];
+  timeline: { status: string; label: string; note: string; at: string }[];
+  actions: { payAdvance: boolean; payBalance: boolean; cancel: boolean; uploadKyc: boolean; extend: boolean; requestReturn: boolean };
+  cancelReason: string | null;
+  createdAt: string;
+  updatedAt: string;
 }

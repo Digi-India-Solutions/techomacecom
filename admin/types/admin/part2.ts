@@ -11,7 +11,7 @@ export type OrderStatus =
   | 'returned';
 
 export type OrderPaymentMethod = 'Razorpay' | 'COD' | 'EMI';
-export type OrderPaymentStatus = 'paid' | 'pending' | 'failed' | 'refunded' | 'partial_refund';
+export type OrderPaymentStatus = 'paid' | 'pending' | 'failed' | 'refunded' | 'partially_refunded';
 
 export interface OrderItem {
   id: string;
@@ -106,10 +106,56 @@ export interface Order {
   invoiceUrl?: string;
   seller?: OrderSellerDetails;
   cancelReason?: string;
+  /** Every refund attempt on this order (cancellation, return, goodwill) */
+  refunds: RefundRecord[];
+  refundSummary: RefundSummary;
+  /** Return / replacement requests raised on this order */
+  returns: OrderReturnSummary[];
   timeline: OrderTimelineEvent[];
   internalNotes: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+// --- REFUNDS ---
+export type RefundMode = 'gateway' | 'bank_transfer' | 'upi';
+export type RefundStatus = 'processing' | 'processed' | 'failed';
+
+export interface RefundRecord {
+  id: string;
+  amount: number;
+  reason: 'cancel' | 'return' | 'goodwill' | 'deposit_refund';
+  method: RefundMode;
+  methodLabel: string;
+  status: RefundStatus;
+  reference: string | null;
+  note: string | null;
+  returnId: string | null;
+  createdAt: string;
+  processedAt: string | null;
+  gatewayRefundId?: string | null;
+  failureReason?: string | null;
+  processedBy?: string;
+}
+
+export interface RefundSummary {
+  paid: number;
+  refunded: number;
+  balance: number;
+  /** A captured Razorpay payment exists, so "original payment method" refunds are possible */
+  gatewayAvailable: boolean;
+  paymentId: string | null;
+}
+
+export interface OrderReturnSummary {
+  id: string;
+  returnNumber: string;
+  type: ReturnRequestType;
+  status: ReturnStatus;
+  statusLabel: string;
+  itemCount: number;
+  requestedAmount: number;
+  createdAt: string;
 }
 
 export type ReturnStatus =
@@ -117,132 +163,245 @@ export type ReturnStatus =
   | 'approved'
   | 'pickup_scheduled'
   | 'received'
+  | 'replacement_shipped'
   | 'refunded'
-  | 'rejected';
+  | 'completed'
+  | 'rejected'
+  | 'cancelled';
 
-export interface ReturnRefundRecord {
+export type ReturnRequestType = 'refund' | 'replacement';
+
+export interface ReturnShipment {
+  courier: string;
+  awb: string;
+  trackingUrl: string;
+  pickupDate: string | null;
+  status: string;
+  createdAt: string | null;
+  deliveredAt: string | null;
+}
+
+export interface ReturnStep {
+  key: string;
+  label: string;
+  done: boolean;
+  current: boolean;
+  at: string | null;
+}
+
+export interface ReturnRequestItem {
   id: string;
-  amount: number;
-  method: 'Razorpay' | 'Bank Transfer (NEFT/IMPS)';
-  reference: string;
-  processedBy: string;
-  processedAt: string;
+  orderItemId: string;
+  productName: string;
+  variantName: string;
+  sku: string;
+  image: string;
+  quantity: number;
+  orderedQuantity: number;
+  refundAmount: number;
+  condition: 'resellable' | 'damaged' | null;
+}
+
+export interface ReturnRefundAccount {
+  mode: 'bank' | 'upi';
+  label: string;
+  /** Only in the detail view */
+  details?: {
+    mode: 'bank' | 'upi';
+    accountHolder?: string | null;
+    accountNumber?: string;
+    ifsc?: string;
+    bankName?: string | null;
+    upiId?: string;
+  };
 }
 
 export interface ReturnRequest {
   id: string;
   returnNumber: string;
-  orderId: string;
-  orderNumber: string;
-  customerName: string;
-  customerPhone: string;
-  paymentMethod: OrderPaymentMethod;
-  items: { productName: string; sku: string; qty: number; refundEligibleAmount: number }[];
+  type: ReturnRequestType;
+  typeLabel: string;
+  status: ReturnStatus;
+  statusLabel: string;
   reason: string;
   customerNote: string;
   photos: string[];
-  status: ReturnStatus;
-  adminNote?: string;
-  pickupDate?: string;
-  pickupCourier?: string;
-  bankDetails?: {
-    accountHolder: string;
-    accountNumber: string;
-    ifsc: string;
-  };
-  refundHistory: ReturnRefundRecord[];
+  items: ReturnRequestItem[];
+  requestedAmount: number;
+  rejectionReason: string | null;
+  pickup: ReturnShipment | null;
+  replacementShipment: ReturnShipment | null;
+  steps: ReturnStep[];
   createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+  orderId: string;
+  orderNumber: string;
+  orderTotal: number;
+  orderPlacedAt: string | null;
+  orderDeliveredAt: string | null;
+  paymentMethod: OrderPaymentMethod;
+  customer: { id: string; name: string; phone: string; email: string; address: string };
+  refundAccount: ReturnRefundAccount | null;
+  adminNote: string;
+  refunds: RefundRecord[];
+  refundedAmount: number;
+  history: { id: string; status: string; label: string; note: string; actor: string; at: string }[];
+  /** Detail view only */
+  refundable?: {
+    paid: number;
+    alreadyRefunded: number;
+    max: number;
+    suggested: number;
+    gatewayAvailable: boolean;
+    defaultMode: RefundMode;
+  };
 }
 
-// --- RENTALS ---
+export interface ReturnsSummary {
+  needsReview: number;
+  inPickup: number;
+  awaitingResolution: number;
+  replacementInTransit: number;
+  open: number;
+  closed: number;
+  total: number;
+  refundedLast30Days: number;
+}
+
+// --- RENTALS (backend/src/modules/rentals) ---
 export type RentalStatus =
+  | 'pending_payment'
   | 'pending_approval'
   | 'approved'
   | 'dispatched'
   | 'active'
   | 'extension_requested'
-  | 'return_scheduled'
   | 'overdue'
+  | 'return_scheduled'
   | 'returned'
   | 'deposit_refunded'
   | 'cancelled';
 
-export interface RentalLedgerEntry {
+export type RentalPeriod = 'daily' | 'weekly' | 'monthly';
+export type RentalKycStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
+export type OfflinePaymentMethod = 'cash' | 'upi' | 'bank_transfer' | 'cheque';
+
+export interface RentalKycDocument {
   id: string;
-  type: 'rent' | 'deposit' | 'delivery_charge' | 'extension' | 'deduction' | 'refund';
-  description: string;
-  amount: number;
-  status: 'paid' | 'pending' | 'refunded';
-  reference?: string;
-  date: string;
+  docType: string;
+  label: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  status: 'uploaded' | 'approved' | 'rejected';
+  rejectReason: string | null;
+  uploadedAt: string;
 }
 
-export interface RentalTimelineEvent {
-  id: string;
-  event: string;
-  actor: string;
-  note?: string;
-  timestamp: string;
+export interface RentalShipmentInfo {
+  courier: string;
+  awb: string;
+  trackingUrl: string;
+  pickupDate: string | null;
+  status: string;
+  createdAt: string | null;
+  deliveredAt: string | null;
 }
 
-export interface RentalDeductionLine {
-  id: string;
-  reason: string;
-  amount: number;
-}
-
-export interface RentalBooking {
+export interface AdminRental {
   id: string;
   rentalNumber: string;
-  customerId: string;
-  customerName: string;
-  customerPhone: string;
-  customerEmail: string;
-  deliveryAddress: OrderAddress;
-  productId: string;
-  productName: string;
-  productImage: string;
-  planType: 'daily' | 'weekly' | 'monthly';
-  planRate: number;
-  startDate: string;
-  endDate: string;
   status: RentalStatus;
-  assignedUnitId?: string;
-  assignedUnitCode?: string;
-  assignedUnitSerial?: string;
-  depositAmount: number;
-  depositStatus: 'held' | 'pending' | 'partial_refunded' | 'refunded';
-  amountPaid: number;
-  shipment?: {
-    courier: string;
-    awb: string;
-    trackingUrl: string;
+  statusLabel: string;
+  product: { id: string; name: string; slug: string; brand: string; image: string };
+  plan: {
+    period: RentalPeriod;
+    periodLabel: string;
+    unit: string;
+    rate: number;
+    periods: number;
+    durationLabel: string;
+    minPeriods: number;
+    maxPeriods: number;
   };
-  extensionRequest?: {
-    requestedEndDate: string;
-    additionalAmount: number;
-    paymentStatus: 'paid' | 'pending';
-    approved?: boolean;
+  requestedStartDate: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  daysLeft: number | null;
+  overdueDays: number;
+  lateFeeAccrued: number;
+  amounts: {
+    rent: number;
+    delivery: number;
+    gst: number;
+    deposit: number;
+    total: number;
+    advancePercent: number;
+    advance: number;
+    paid: number;
+    advanceDue: number;
+    balanceDue: number;
+    refunded: number;
+    depositRefund: number | null;
   };
-  returnInfo?: {
-    pickupDate: string;
-    receivedAt?: string;
-    inspectionCondition?: 'good' | 'needs_service' | 'damaged';
-    inspectionNotes?: string;
-    inspectionPhotos?: string[];
+  balanceDuePolicy: 'before_dispatch' | 'on_delivery';
+  deliveryAddress: {
+    name: string;
+    phone: string;
+    organisation: string;
+    line1: string;
+    line2: string;
+    landmark: string;
+    city: string;
+    state: string;
+    pincode: string;
+  } | null;
+  kyc: {
+    required: boolean;
+    status: RentalKycStatus | null;
+    statusLabel: string | null;
+    note: string | null;
+    requirements: { key: string; label: string; hint: string; document: RentalKycDocument | null }[];
+    documents: RentalKycDocument[];
   };
-  depositRefund?: {
-    deductions: RentalDeductionLine[];
-    netRefundAmount: number;
-    method: 'Razorpay' | 'Bank Transfer' | 'UPI';
-    reference: string;
-    refundedAt: string;
-  };
-  ledger: RentalLedgerEntry[];
-  timeline: RentalTimelineEvent[];
-  internalNotes: string[];
-  lastReminderSentAt?: string;
+  customer: { id: string; name: string; phone: string; email: string };
+  unit: { id: string; unitCode: string; serialNumber: string; condition: string; status: string } | null;
+  prescriptionRequired: boolean;
+  delivery: RentalShipmentInfo | null;
+  returnPickup: RentalShipmentInfo | null;
+  returnRequestedOn: string | null;
+  returnCondition: 'good' | 'needs_service' | 'damaged' | null;
+  returnNotes: string | null;
+  deductions: { id: string; type: 'late_fee' | 'damage' | 'missing_accessory'; amount: number; description: string }[];
+  extensions: { id: string; extraPeriods: number; amount: number; status: string; oldEndDate: string | null; newEndDate: string | null; createdAt: string }[];
+  pendingExtensionId: string | null;
+  payments: { id: string; amount: number; purpose: string; method: string; reference: string | null; paidAt: string }[];
+  refunds: RefundRecord[];
+  ledger: { id: string; type: string; direction: 'debit' | 'credit'; amount: number; description: string; at: string }[];
+  steps: { key: string; label: string; done: boolean; current: boolean; at: string | null }[];
+  internalNotes: { text: string; by: string; at: string }[];
+  cancelReason: string | null;
   createdAt: string;
+  updatedAt: string;
+  /** Detail view only */
+  history?: { id: string; status: string; label: string; note: string; actor: string; at: string }[];
+  availableUnits?: { id: string; unitCode: string; serialNumber: string; condition: string; nextServiceDue: string | null }[] | null;
+}
+
+/** @deprecated old mock shape — use AdminRental */
+export type RentalBooking = AdminRental;
+
+export interface RentalsSummary {
+  awaitingApproval: number;
+  kycToReview: number;
+  toDispatch: number;
+  inUse: number;
+  overdue: number;
+  dueIn7Days: number;
+  pickups: number;
+  depositsToRefund: number;
+  depositsHeld: number;
 }
 
 // --- ENQUIRIES ---
@@ -547,15 +706,36 @@ export interface AdminSettings {
     lateFeePerDay: number;
     gracePeriodDays: number;
     depositRefundDays: number;
+    advancePaymentPercent: number;
+    balanceDue: 'before_dispatch' | 'on_delivery';
+    minLeadDays: number;
+    kycRequired: boolean;
+    kycDocuments: string[];
+    kycInstructions: string;
+  };
+  returns: {
+    returnsEnabled: boolean;
+    returnWindowDays: number;
+    refundEnabled: boolean;
+    replacementEnabled: boolean;
+    photosRequired: boolean;
+    maxPhotos: number;
+    refundProcessingDays: string;
+    returnReasons: string[];
+    cancelReasons: string[];
+    nonReturnableCategoryIds: string[];
+    conditions: string;
   };
   images: { logo: string | null; footerLogo: string | null; favicon: string | null; signatory: string | null };
   options: {
     states: { code: string; name: string }[];
     gstRates: number[];
+    categories?: { id: string; name: string; path: string; active: boolean }[];
+    kycDocumentTypes?: { key: string; label: string; hint: string }[];
   };
 }
 
-export type SettingsGroup = 'store' | 'shipping' | 'tax' | 'rental';
+export type SettingsGroup = 'store' | 'shipping' | 'tax' | 'rental' | 'returns';
 export type SettingsImage = 'logo' | 'footerLogo' | 'favicon' | 'signatory';
 
 export interface PincodeSummary {

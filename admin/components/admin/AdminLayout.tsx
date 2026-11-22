@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -37,14 +37,10 @@ import {
   Warehouse,
   X,
 } from 'lucide-react';
-import type { AdminNotification, AdminPermission, GlobalSearchResult } from '@/types/admin';
+import type { AdminNotification, AdminNotificationFeed, AdminPermission, GlobalSearchResult } from '@/types/admin';
 import { useAuth } from './AuthContext';
-import {
-  getNotifications,
-  globalSearchAdmin,
-  markAllNotificationsRead,
-  markNotificationRead,
-} from '@/lib/api/admin/dashboard';
+import { globalSearchAdmin } from '@/lib/api/admin/dashboard';
+import { getNotificationFeed, markAllNotificationsRead, markNotificationRead } from '@/lib/api/admin/notifications';
 import { Avatar } from './Avatar';
 
 interface NavItem {
@@ -141,16 +137,32 @@ export function AdminLayout() {
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Notifications
-  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  const [feed, setFeed] = useState<AdminNotificationFeed | null>(null);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifTab, setNotifTab] = useState<'attention' | 'activity'>('attention');
 
   // Profile menu
   const [profileOpen, setProfileOpen] = useState(false);
 
+  // Live alerts: on load, every minute, and whenever the tab gets focus again
+  const refreshFeed = useCallback(() => {
+    getNotificationFeed()
+      .then(setFeed)
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     if (!isAuthenticated) return;
-    getNotifications().then(setNotifications).catch(() => {});
-  }, [isAuthenticated]);
+    refreshFeed();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') refreshFeed();
+    }, 60_000);
+    const onFocus = () => refreshFeed();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [isAuthenticated, refreshFeed]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -189,7 +201,11 @@ export function AdminLayout() {
     return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />;
   }
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = feed?.unread ?? 0;
+  const attention = feed?.attention ?? [];
+  const activity = feed?.items ?? [];
+  const urgentCount = attention.filter((a) => a.severity === 'urgent').length;
+  const badgeCount = unreadCount + urgentCount;
 
   const isActiveLink = (item: NavItem) => {
     if (item.exact) return location.pathname === item.to;
@@ -197,15 +213,13 @@ export function AdminLayout() {
   };
 
   const handleMarkRead = async (n: AdminNotification) => {
-    const next = await markNotificationRead(n.id);
-    setNotifications(next);
     setNotifOpen(false);
     navigate(n.href);
+    if (!n.read) markNotificationRead(n.id).then(setFeed).catch(() => {});
   };
 
   const handleMarkAllRead = async () => {
-    const next = await markAllNotificationsRead();
-    setNotifications(next);
+    markAllNotificationsRead().then(setFeed).catch(() => {});
   };
 
   const sidebarContent = (isMobile = false) => (
@@ -437,68 +451,121 @@ export function AdminLayout() {
               <button
                 type="button"
                 onClick={() => {
-                  setNotifOpen((o) => !o);
+                  setNotifOpen((o) => {
+                    if (!o) {
+                      refreshFeed();
+                      setNotifTab(attention.length || !unreadCount ? 'attention' : 'activity');
+                    }
+                    return !o;
+                  });
                   setProfileOpen(false);
                 }}
                 className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-[#DCE6F2] bg-white text-[#12263F] hover:bg-[#EAF2FC] transition-colors"
-                aria-label="Notifications"
+                aria-label={`Notifications${badgeCount ? ` (${badgeCount} new)` : ''}`}
               >
                 <Bell className="h-4 w-4" />
-                {unreadCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#F28C38] px-1 text-[10px] font-bold text-white tabular-nums">
-                    {unreadCount}
+                {badgeCount > 0 && (
+                  <span
+                    className={`absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white tabular-nums ${
+                      urgentCount ? 'bg-red-600' : 'bg-[#F28C38]'
+                    }`}
+                  >
+                    {badgeCount > 99 ? '99+' : badgeCount}
                   </span>
                 )}
               </button>
 
               {notifOpen && (
                 <>
-                  <div
-                    className="fixed inset-0 z-20"
-                    onClick={() => setNotifOpen(false)}
-                  />
-                  <div className="absolute right-0 z-30 mt-2 w-80 sm:w-96 rounded-xl border border-[#DCE6F2] bg-white shadow-xl overflow-hidden">
+                  <div className="fixed inset-0 z-20" onClick={() => setNotifOpen(false)} />
+                  <div className="absolute right-0 z-30 mt-2 w-[22rem] sm:w-[26rem] max-w-[calc(100vw-1.5rem)] rounded-xl border border-[#DCE6F2] bg-white shadow-xl overflow-hidden">
                     <div className="flex items-center justify-between border-b border-[#DCE6F2] px-4 py-3">
-                      <h3 className="text-sm font-semibold text-[#12263F]">
-                        Operational Alerts
-                      </h3>
-                      {unreadCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={handleMarkAllRead}
-                          className="text-xs font-medium text-[#1D5FAF] hover:underline"
-                        >
+                      <h3 className="text-sm font-semibold text-[#12263F]">Operational Alerts</h3>
+                      {notifTab === 'activity' && unreadCount > 0 && (
+                        <button type="button" onClick={handleMarkAllRead} className="text-xs font-medium text-[#1D5FAF] hover:underline">
                           Mark all read
                         </button>
                       )}
                     </div>
-                    <div className="max-h-80 overflow-y-auto divide-y divide-[#DCE6F2]">
-                      {notifications.map((n) => (
+                    <div className="flex gap-1 border-b border-[#DCE6F2] px-2 py-1.5">
+                      {(
+                        [
+                          ['attention', 'Needs attention', attention.reduce((s2, a2) => s2 + a2.count, 0)],
+                          ['activity', 'Recent activity', unreadCount],
+                        ] as const
+                      ).map(([key, label, n]) => (
                         <button
-                          key={n.id}
+                          key={key}
                           type="button"
-                          onClick={() => handleMarkRead(n)}
-                          className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[#F6F9FD] ${
-                            !n.read ? 'bg-[#EAF2FC]/50' : ''
+                          onClick={() => setNotifTab(key)}
+                          className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold ${
+                            notifTab === key ? 'bg-[#EAF2FC] text-[#1D5FAF]' : 'text-[#5B6B82] hover:text-[#12263F]'
                           }`}
                         >
-                          <span
-                            className={`mt-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase shrink-0 ${
-                              n.severity === 'urgent'
-                                ? 'bg-[#F28C38]/15 text-[#B85A0E]'
-                                : n.severity === 'warning'
-                                  ? 'bg-[#F28C38]/10 text-[#B85A0E]'
-                                  : 'bg-[#EAF2FC] text-[#1D5FAF]'
-                            }`}
-                          >
-                            {n.severity}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-semibold text-[#12263F]">{n.title}</p>
-                            <p className="mt-0.5 text-xs text-[#5B6B82]">{n.message}</p>
-                          </div>
+                          {label}
+                          {n > 0 && <span className="rounded bg-white px-1 text-[10px] tabular-nums text-[#12263F]">{n}</span>}
                         </button>
                       ))}
+                    </div>
+                    <div className="max-h-[26rem] overflow-y-auto divide-y divide-[#DCE6F2]">
+                      {!feed ? (
+                        <p className="px-4 py-6 text-center text-xs text-[#5B6B82]">Loading…</p>
+                      ) : notifTab === 'attention' ? (
+                        attention.length === 0 ? (
+                          <p className="px-4 py-8 text-center text-xs text-[#5B6B82]">All caught up — nothing needs attention right now.</p>
+                        ) : (
+                          attention.map((a) => (
+                            <button
+                              key={a.key}
+                              type="button"
+                              onClick={() => {
+                                setNotifOpen(false);
+                                navigate(a.href);
+                              }}
+                              className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[#F6F9FD]"
+                            >
+                              <span
+                                className={`mt-0.5 flex h-7 min-w-[28px] items-center justify-center rounded-md px-1.5 text-xs font-bold tabular-nums ${
+                                  a.severity === 'urgent'
+                                    ? 'bg-red-50 text-red-700'
+                                    : a.severity === 'warning'
+                                      ? 'bg-[#F28C38]/12 text-[#B85A0E]'
+                                      : 'bg-[#EAF2FC] text-[#1D5FAF]'
+                                }`}
+                              >
+                                {a.count}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-xs font-semibold text-[#12263F]">{a.title}</span>
+                                <span className="mt-0.5 block text-xs text-[#5B6B82]">{a.message}</span>
+                              </span>
+                            </button>
+                          ))
+                        )
+                      ) : activity.length === 0 ? (
+                        <p className="px-4 py-8 text-center text-xs text-[#5B6B82]">No activity yet. New orders, returns, rental bookings and failed refunds appear here.</p>
+                      ) : (
+                        activity.map((n) => (
+                          <button
+                            key={n.id}
+                            type="button"
+                            onClick={() => handleMarkRead(n)}
+                            className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[#F6F9FD] ${!n.read ? 'bg-[#EAF2FC]/50' : ''}`}
+                          >
+                            <span
+                              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                                n.read ? 'bg-transparent' : n.severity === 'urgent' ? 'bg-red-600' : n.severity === 'warning' ? 'bg-[#F28C38]' : 'bg-[#1D5FAF]'
+                              }`}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className={`block text-xs ${n.read ? 'text-[#12263F]' : 'font-semibold text-[#12263F]'}`}>{n.title}</span>
+                              {n.message && <span className="mt-0.5 block text-xs text-[#5B6B82]">{n.message}</span>}
+                              <span className="mt-0.5 block text-[11px] text-[#8A97A8]">{timeAgo(n.createdAt, feed.serverTime)}</span>
+                            </span>
+                            {n.severity === 'urgent' && <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-700">Urgent</span>}
+                          </button>
+                        ))
+                      )}
                     </div>
                   </div>
                 </>
@@ -594,4 +661,17 @@ export function AdminLayout() {
       </div>
     </div>
   );
+}
+
+/** "just now" · "5 min ago" · "3 h ago" · "2 d ago" · date — relative to the server clock */
+function timeAgo(iso: string, now: string) {
+  const sec = Math.max(0, Math.round((new Date(now).getTime() - new Date(iso).getTime()) / 1000));
+  if (sec < 60) return 'just now';
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `${h} h ago`;
+  const d = Math.round(h / 24);
+  if (d < 7) return `${d} d ago`;
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }

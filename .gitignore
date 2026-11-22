@@ -42,3 +42,6 @@ Thumbs.db
 # Uploaded images live on the server's disk (backend/uploads) — back them up, don't commit them
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# KYC documents and other private files (never served publicly)
+backend/private_uploads/

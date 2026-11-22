@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Product, Variant, CartItem, User, Address, Coupon, Rental, RentalPlan, RentalPayment } from '@/types';
-import { MOCK_RENTALS } from '@/lib/mock/data';
+import { Product, Variant, CartItem, User, Address, Coupon } from '@/types';
 import { getSiteSettingsSnapshot } from '@/lib/settings/store';
 
 // =======================
@@ -351,96 +350,34 @@ export const useToastStore = create<ToastState>((set) => ({
 // =======================
 // RENTAL STORE
 // =======================
+/**
+ * The rental the customer is configuring (rent page → /rent/checkout).
+ * Prices are never stored here — checkout asks the API for a fresh quote.
+ */
 export interface RentalDraft {
-  product: Product;
-  plan: RentalPlan;
-  duration: number;
+  productSlug: string;
+  productName: string;
+  productImage: string;
+  period: 'daily' | 'weekly' | 'monthly';
+  periods: number;
   startDate: string;
-  endDate: string;
-  deposit: number;
-  rentAmount: number;
-  deliveryPickupCharge: number;
-  gstAmount: number;
-  totalPayable: number;
-  address?: Address;
 }
 
 interface RentalState {
-  rentals: Rental[];
   draft: RentalDraft | null;
   setDraft: (draft: RentalDraft) => void;
-  updateDraftAddress: (address: Address) => void;
   clearDraft: () => void;
-  addRental: (rental: Rental) => void;
-  extendRental: (rentalId: string, extraDuration: number, extraRent: number, payment: RentalPayment) => void;
-  scheduleReturn: (rentalId: string, pickupDate: string) => void;
-  getRental: (rentalId: string) => Rental | undefined;
 }
 
 export const useRentalStore = create<RentalState>()(
   persist(
-    (set, get) => ({
-      rentals: [...MOCK_RENTALS],
+    (set) => ({
       draft: null,
-
       setDraft: (draft) => set({ draft }),
-      updateDraftAddress: (address) =>
-        set((state) => ({
-          draft: state.draft ? { ...state.draft, address } : null
-        })),
       clearDraft: () => set({ draft: null }),
-
-      addRental: (rental) =>
-        set((state) => ({
-          rentals: [rental, ...state.rentals]
-        })),
-
-      extendRental: (rentalId, extraDuration, extraRent, payment) =>
-        set((state) => ({
-          rentals: state.rentals.map((r) => {
-            if (r.id === rentalId || r.bookingNumber === rentalId) {
-              const currentEnd = new Date(r.endDate);
-              if (r.plan.type === 'daily') {
-                currentEnd.setDate(currentEnd.getDate() + extraDuration);
-              } else if (r.plan.type === 'weekly') {
-                currentEnd.setDate(currentEnd.getDate() + extraDuration * 7);
-              } else {
-                currentEnd.setMonth(currentEnd.getMonth() + extraDuration);
-              }
-              const newEndDate = currentEnd.toISOString().split('T')[0];
-
-              return {
-                ...r,
-                duration: r.duration + extraDuration,
-                endDate: newEndDate,
-                rentAmount: r.rentAmount + extraRent,
-                status: 'active',
-                payments: [...r.payments, payment]
-              };
-            }
-            return r;
-          })
-        })),
-
-      scheduleReturn: (rentalId, pickupDate) =>
-        set((state) => ({
-          rentals: state.rentals.map((r) => {
-            if (r.id === rentalId || r.bookingNumber === rentalId) {
-              return {
-                ...r,
-                status: 'return_scheduled',
-                returnPickupDate: pickupDate
-              };
-            }
-            return r;
-          })
-        })),
-
-      getRental: (rentalId) =>
-        get().rentals.find((r) => r.id === rentalId || r.bookingNumber === rentalId)
     }),
     {
-      name: 'buydenmed-rental-store',
+      name: 'buydenmed-rental-draft',
       storage: createJSONStorage(() => (typeof window !== 'undefined' ? localStorage : {
         getItem: () => null,
         setItem: () => null,
@@ -449,4 +386,3 @@ export const useRentalStore = create<RentalState>()(
     }
   )
 );
-

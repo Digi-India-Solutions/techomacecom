@@ -55,6 +55,12 @@ export function CustomerDetailPage() {
       // real customer filters on the API (linked account / same mobile or email); [] if the role cannot view them
       listEnquiries({ customerId: id }).catch(() => [] as EnquiryRecord[]),
       listReviews('all', { customerId: id }).catch(() => [] as ProductReview[]),
+      listOrders().catch(() => []), // the profile still loads if orders cannot be read
+      listRentals()
+        .then((res) => res.items)
+        .catch(() => [] as RentalBooking[]),
+      listEnquiries(),
+      listReviews('all'),
     ])
       .then(([cust, allOrders, allRentals, allEnquiries, allReviews]) => {
         if (cancelled) return;
@@ -72,6 +78,20 @@ export function CustomerDetailPage() {
           );
           setEnquiries(allEnquiries);
           setReviews(allReviews);
+          setRentals(allRentals.filter((r) => r.customer.id === cust.id));
+          setEnquiries(
+            allEnquiries.filter(
+              (e) =>
+                e.email === cust.email ||
+                e.mobile === cust.mobile ||
+                e.name === cust.name
+            )
+          );
+          setReviews(
+            allReviews.filter(
+              (rv) => rv.reviewerName.toLowerCase().includes(cust.name.split(' ')[0].toLowerCase())
+            )
+          );
         }
       })
       .finally(() => {
@@ -253,16 +273,18 @@ export function CustomerDetailPage() {
                       <span className="font-mono text-xs font-semibold text-[#1D5FAF]">
                         {r.rentalNumber}
                       </span>
-                      <p className="text-xs font-medium text-[#12263F]">{r.productName}</p>
+                      <p className="text-xs font-medium text-[#12263F]">{r.product.name}</p>
                       <p className="text-[11px] text-[#5B6B82]">
-                        {formatShortDate(r.startDate)} → {formatShortDate(r.endDate)}
+                        {r.startDate && r.endDate
+                          ? `${formatShortDate(r.startDate)} → ${formatShortDate(r.endDate)}`
+                          : `${r.plan.durationLabel} · starts on delivery`}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-bold text-[#12263F] tabular-nums">
-                        {formatINR(r.amountPaid)}
+                        {formatINR(r.amounts.paid)}
                       </span>
-                      <StatusBadge status={r.status} />
+                      <StatusBadge status={r.status} label={r.statusLabel} />
                     </div>
                   </Link>
                 ))}

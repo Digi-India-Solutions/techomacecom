@@ -1,6 +1,6 @@
 import { ok } from "../../lib/http.js";
 import * as service from "./service.js";
-import * as returnsService from "./returns.service.js";
+import { logActivity } from "../../services/activity.service.js";
 
 /**
  * Admin Panel Orders Controller
@@ -23,6 +23,7 @@ export async function updateStatus(req, res) {
     status,
     actor,
     note,
+    adminId: req.admin?.id ?? null,
   });
   return ok(res, order);
 }
@@ -56,21 +57,20 @@ export async function bulkPacked(req, res) {
   return ok(res, { success: true });
 }
 
-export async function listReturns(req, res) {
-  const returns = await returnsService.listAdminReturns();
-  return ok(res, returns);
-}
-
-export async function updateReturnStatus(req, res) {
-  const updated = await returnsService.updateAdminReturnStatus(req.params.id, req.body);
-  return ok(res, updated);
-}
-
-export async function processReturnRefund(req, res) {
-  const processedBy = req.admin?.name || "Admin";
-  const updated = await returnsService.processAdminReturnRefund(req.params.id, {
-    ...req.body,
-    processedBy,
+export async function issueRefund(req, res) {
+  const order = await service.issueAdminOrderRefund(req.params.id, req.body, req.admin);
+  const last = order.refunds[order.refunds.length - 1];
+  await logActivity(req, {
+    module: "returns",
+    action: "create",
+    entityType: "order",
+    entityId: BigInt(order.id),
+    entityLabel: order.orderNumber,
+    summary: `Refunded ₹${last?.amount ?? ""} on ${order.orderNumber} via ${last?.methodLabel ?? req.body.mode}`,
   });
-  return ok(res, updated);
+  return ok(res, order);
+}
+
+export async function syncRefund(req, res) {
+  return ok(res, await service.syncAdminOrderRefund(req.params.id, req.params.refundId));
 }

@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { alertStaff } from "../../services/admin-alerts.service.js";
+import { assertInStock, cancelOrderStock, reserveOrder, shipOrder } from "../inventory/stock.js";
 import prisma from "../../../db/db.js";
 import { ApiError } from "../../lib/http.js";
 import { publicUrl } from "../../lib/storage.js";
@@ -6,6 +8,10 @@ import { notify } from "../../services/notification.service.js";
 import { getGroup } from "../settings/service.js";
 import { STATE_OPTIONS } from "../settings/definitions.js";
 import env from "../../../config/env.js";
+import { formatINR } from "../../lib/money.js";
+import { loadReturnContext, returnPolicy } from "../returns/policy.js";
+import { RETURN_DETAIL_INCLUDE, RETURN_STATUS_LABEL, toCustomerReturnDto } from "../returns/dto.js";
+import { issueRefund, refundSummary, syncGatewayRefund, toRefundDto, REFUND_METHOD_LABEL } from "../refunds/service.js";
 
 /**
  * Orders service — shared by customer storefront checkout/account and admin sales order page.
@@ -30,6 +36,16 @@ const STATUS_MAP_CUSTOMER = {
   return_picked_up: "Delivered",
   returned: "Delivered",
   refunded: "Delivered",
+};
+
+/** Orders a customer can still cancel themselves (nothing has left the warehouse). */
+const CUSTOMER_CANCELLABLE = ["pending_payment", "payment_failed", "confirmed", "packed"];
+
+const PAYMENT_STATUS_CUSTOMER = {
+  paid: "Paid",
+  refunded: "Refunded",
+  partially_refunded: "Partially Refunded",
+  failed: "Failed",
 };
 
 const toRupees = (paise) => Number(paise || 0n) / 100;
@@ -113,77 +129,46 @@ function toShippingAddress(snap) {
   };
 }
 
-/** Formatter for storefront Customer DTO */
-export function toStorefrontOrderDto(order, shipment, extra = null) {
-  const latestReturn = (order.returns || []).sort(
-    (a, b) => new Date(b.created_at) - new Date(a.created_at)
-  )[0];
+/**
+ * Formatter for storefront Customer DTO.
+ * Pass `ctx` (from loadReturnContext()) to include return eligibility; without it canReturn is false.
+ */
+export function toStorefrontOrderDto(order, shipment, extra = null, ctx = null) {
+  const displayStatus = order.status === "returned" ? "Returned" : STATUS_MAP_CUSTOMER[order.status] || "Placed";
 
-  let displayStatus = STATUS_MAP_CUSTOMER[order.status] || "Placed";
-  if (latestReturn) {
-    const RETURN_STATUS_DISPLAY = {
-      requested: "Return Requested",
-      approved: "Return Approved",
-      pickup_scheduled: "Pickup Scheduled",
-      received: "Return Received",
-      refunded: "Refunded",
-      rejected: "Return Rejected",
+  const policy = ctx ? returnPolicy(order, ctx) : null;
+  const itemPolicy = new Map((policy?.items || []).map((p) => [p.orderItemId, p]));
+
+  const returns = [...(order.returns || [])]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .map((r) => toCustomerReturnDto(r, order));
+
+  const items = (order.items || []).map((item) => {
+    const p = itemPolicy.get(String(item.id));
+    return {
+      orderItemId: String(item.id),
+      productId: String(item.product_id),
+      productName: item.product_name,
+      productSlug: item.product?.slug || undefined,
+      brandName: item.product?.brand?.name || item.variant?.product?.brand?.name || "",
+      image: getProductImage(item.product) || item.variant?.image_url || "",
+      sku: item.sku,
+      variantName: item.variant_name && item.variant_name !== "Default" ? item.variant_name : undefined,
+      quantity: item.quantity,
+      unitPrice: toRupees(item.unit_price_paise),
+      totalPrice: toRupees(item.line_total_paise),
+      returnableQty: p?.returnableQty ?? 0,
+      returnedQty: p?.returnedQty ?? 0,
+      nonReturnable: p?.nonReturnable ?? false,
     };
-    displayStatus = RETURN_STATUS_DISPLAY[latestReturn.status] || "Return Requested";
-  } else if (order.status === "return_requested") {
-    displayStatus = "Return Requested";
-  } else if (order.status === "returned") {
-    displayStatus = "Returned";
-  }
-
-  const returnRequest = latestReturn
-    ? {
-        id: String(latestReturn.id),
-        returnNumber: latestReturn.return_number,
-        status: latestReturn.status,
-        reason: latestReturn.reason || "",
-        photos: latestReturn.photos || [],
-        adminNote: latestReturn.admin_note || "",
-        createdAt: latestReturn.created_at.toISOString(),
-        refundAmount: latestReturn.refunds?.[0]
-          ? toRupees(latestReturn.refunds[0].amount_paise)
-          : undefined,
-      }
-    : undefined;
-
-  const canCancel =
-    ["new", "pending_payment", "confirmed", "processing", "packed", "ready_to_ship"].includes(order.status) &&
-    !latestReturn;
-
-  const deliveredDate = order.delivered_at || order.placed_at || order.created_at;
-  const daysSinceDelivery = (Date.now() - new Date(deliveredDate).getTime()) / (1000 * 60 * 60 * 24);
-  const isReturnWindowValid = daysSinceDelivery <= 7.5;
-  const canReturn =
-    (order.status === "delivered" || order.status === "shipped") &&
-    !latestReturn &&
-    isReturnWindowValid;
-
-  const items = (order.items || []).map((item) => ({
-    productId: String(item.product_id),
-    productName: item.product_name,
-    brandName: item.product?.brand?.name || item.variant?.product?.brand?.name || "",
-    image: getProductImage(item.product) || item.variant?.image_url || "",
-    sku: item.sku,
-    variantName: item.variant_name || undefined,
-    quantity: item.quantity,
-    unitPrice: toRupees(item.unit_price_paise),
-    totalPrice: toRupees(item.line_total_paise),
-  }));
+  });
 
   const timeline = buildCustomerTimeline(order.status_history || [], order.status);
 
   const pm = order.payment_method;
   const paymentMethod =
     pm === "cod" ? "Cash on Delivery" : "Online Razorpay (Cards/UPI/EMI)";
-
-  const ps = order.payment_status;
-  const paymentStatus =
-    ps === "paid" ? "Paid" : ps === "refunded" ? "Refunded" : "Pending";
+  const paymentStatus = PAYMENT_STATUS_CUSTOMER[order.payment_status] || "Pending";
 
   const invoice = (order.invoices || []).sort(
     (a, b) => new Date(b.issued_at) - new Date(a.issued_at)
@@ -215,14 +200,26 @@ export function toStorefrontOrderDto(order, shipment, extra = null) {
     estimatedDelivery: order.delivered_at
       ? order.delivered_at.toISOString().slice(0, 10)
       : "",
+    deliveredAt: order.delivered_at ? order.delivered_at.toISOString() : undefined,
     timeline,
     invoiceNumber: invoice?.invoice_number || undefined,
     invoiceUrl: invoice?.pdf_url || undefined,
     couponCode: order.coupon_code || undefined,
-    canCancel,
-    canReturn,
-    returnRequest,
+    canCancel: CUSTOMER_CANCELLABLE.includes(order.status),
+    canReturn: policy?.canReturn || false,
+    returnPolicy: policy
+      ? {
+          windowDays: policy.windowDays,
+          windowEndsAt: policy.windowEndsAt ? policy.windowEndsAt.toISOString() : null,
+          windowOpen: policy.windowOpen,
+          types: policy.types,
+          blockReason: policy.blockReason,
+        }
+      : undefined,
+    returns,
+    refunds: (order.refunds || []).map((r) => toRefundDto(r)),
     cancelReason: order.cancel_reason || undefined,
+    cancelledAt: order.cancelled_at ? order.cancelled_at.toISOString() : undefined,
     razorpay: extra?.razorpay || order.razorpay || undefined,
   };
 }
@@ -271,14 +268,9 @@ export function toAdminOrderDto(order, sellerSettings = {}) {
       ? "EMI"
       : "Razorpay";
 
-  const paymentStatus =
-    order.payment_status === "paid"
-      ? "paid"
-      : order.payment_status === "refunded"
-      ? "refunded"
-      : order.payment_status === "failed"
-      ? "failed"
-      : "pending";
+  const paymentStatus = ["paid", "refunded", "partially_refunded", "failed"].includes(order.payment_status)
+    ? order.payment_status
+    : "pending";
 
   const rawStatus = order.status || "pending_payment";
   // Map internal status to admin enum: new | confirmed | packed | shipped | delivered | cancelled | returned
@@ -392,6 +384,18 @@ export function toAdminOrderDto(order, sellerSettings = {}) {
         }
       : undefined,
     cancelReason: order.cancel_reason || undefined,
+    refunds: (order.refunds || []).map((r) => toRefundDto(r, { admin: true })),
+    refundSummary: refundSummary(order),
+    returns: (order.returns || []).map((r) => ({
+      id: String(r.id),
+      returnNumber: r.return_number,
+      type: r.type,
+      status: r.status,
+      statusLabel: RETURN_STATUS_LABEL[r.status] || r.status,
+      itemCount: (r.items || []).reduce((sum, ri) => sum + ri.quantity, 0),
+      requestedAmount: toRupees(r.requested_amount_paise),
+      createdAt: r.created_at.toISOString(),
+    })),
     timeline,
     internalNotes,
     createdAt: (order.placed_at || order.created_at).toISOString(),
@@ -418,7 +422,7 @@ export const ORDER_INCLUDE = {
     orderBy: { created_at: "asc" },
   },
   shipments: {
-    where: { direction: "forward" },
+    where: { direction: "forward", return_id: null }, // replacement shipments belong to their return
     orderBy: { created_at: "desc" },
     take: 1,
   },
@@ -428,15 +432,13 @@ export const ORDER_INCLUDE = {
     select: { invoice_number: true, pdf_url: true, issued_at: true },
   },
   returns: {
-    include: {
-      items: {
-        include: {
-          order_item: true,
-        },
-      },
-      refunds: true,
-    },
+    include: RETURN_DETAIL_INCLUDE,
     orderBy: { created_at: "desc" },
+  },
+  payments: true,
+  refunds: {
+    orderBy: { created_at: "asc" },
+    include: { admin_user: { select: { name: true } } },
   },
 };
 
@@ -565,6 +567,12 @@ export async function createCustomerOrder(customerId, data) {
       });
     }
 
+    // Never sell more than is available (lines of the same variant are added up)
+    await assertInStock(
+      tx,
+      orderItemsData.map((it) => ({ variantId: it.variant_id, quantity: it.quantity, name: it.product_name }))
+    );
+
     const created = await tx.order.create({
       data: {
         order_number: orderNumber,
@@ -633,6 +641,9 @@ export async function createCustomerOrder(customerId, data) {
       }
     }
 
+    // COD orders are confirmed at once → hold the stock now (online orders: when payment is verified)
+    if (initialStatus === "confirmed") await reserveOrder(tx, created);
+
     return created;
   });
 
@@ -692,6 +703,15 @@ export async function createCustomerOrder(customerId, data) {
 
   // Asynchronous notification for COD (online orders notify upon successful payment verification)
   if (data.paymentMethod === "cod") {
+    alertStaff({
+      type: "order_new",
+      title: `New COD order ${order.order_number} · ${formatINR(order.total_paise)}`,
+      message: `${customer.name || data.shippingAddress?.name || "Customer"} · ${order.items.length} item${order.items.length === 1 ? "" : "s"} · ${data.shippingAddress?.city || ""}`,
+      link: `/admin/orders/${order.id}`,
+      entityType: "order",
+      entityId: order.id,
+      permission: "orders.view",
+    });
     try {
       notify("order_placed", {
         email: customer.email,
@@ -802,7 +822,18 @@ export async function verifyCustomerOrderPayment(
       },
     });
 
+    await reserveOrder(tx, o);
     return o;
+  });
+
+  alertStaff({
+    type: "order_new",
+    title: `New paid order ${updated.order_number} · ${formatINR(updated.total_paise)}`,
+    message: `Paid online (Razorpay ${razorpayPaymentId})`,
+    link: `/admin/orders/${updated.id}`,
+    entityType: "order",
+    entityId: updated.id,
+    permission: "orders.view",
   });
 
   try {
@@ -826,13 +857,16 @@ export async function verifyCustomerOrderPayment(
 }
 
 export async function listCustomerOrders(customerId) {
-  const orders = await prisma.order.findMany({
-    where: { customer_id: BigInt(customerId) },
-    include: ORDER_INCLUDE,
-    orderBy: { placed_at: "desc" },
-  });
+  const [orders, ctx] = await Promise.all([
+    prisma.order.findMany({
+      where: { customer_id: BigInt(customerId) },
+      include: ORDER_INCLUDE,
+      orderBy: { placed_at: "desc" },
+    }),
+    loadReturnContext(),
+  ]);
 
-  return orders.map((o) => toStorefrontOrderDto(o, o.shipments?.[0] || null));
+  return orders.map((o) => toStorefrontOrderDto(o, o.shipments?.[0] || null, null, ctx));
 }
 
 export async function getCustomerOrder(customerId, orderId) {
@@ -841,10 +875,119 @@ export async function getCustomerOrder(customerId, orderId) {
     ? { id: BigInt(orderId), customer_id: BigInt(customerId) }
     : { order_number: orderId, customer_id: BigInt(customerId) };
 
-  const order = await prisma.order.findFirst({ where, include: ORDER_INCLUDE });
+  const [order, ctx] = await Promise.all([prisma.order.findFirst({ where, include: ORDER_INCLUDE }), loadReturnContext()]);
   if (!order) throw ApiError.notFound("Order not found");
 
-  return toStorefrontOrderDto(order, order.shipments?.[0] || null);
+  return toStorefrontOrderDto(order, order.shipments?.[0] || null, null, ctx);
+}
+
+/**
+ * Customer cancels before dispatch. Prepaid orders are refunded to the original payment
+ * method straight away (Razorpay); if that is not possible the refund shows as pending
+ * for staff on the admin order page.
+ */
+export async function cancelCustomerOrder(customerId, orderId, { reason, note }) {
+  const isNumeric = /^\d+$/.test(String(orderId));
+  const where = isNumeric
+    ? { id: BigInt(orderId), customer_id: BigInt(customerId) }
+    : { order_number: orderId, customer_id: BigInt(customerId) };
+
+  const existing = await prisma.order.findFirst({ where, include: { customer: true, payments: true, refunds: true } });
+  if (!existing) throw ApiError.notFound("Order not found");
+  if (existing.status === "cancelled") throw ApiError.badRequest("This order is already cancelled");
+  if (!CUSTOMER_CANCELLABLE.includes(existing.status)) {
+    throw ApiError.badRequest(
+      `This order has already been ${existing.status.replace(/_/g, " ")} and can no longer be cancelled. You can request a return after delivery.`
+    );
+  }
+
+  const cancelReason = `${reason}${note ? ` — ${note}` : ""}`.slice(0, 500);
+  await prisma.$transaction(async (tx) => {
+    const o = await tx.order.update({
+      where: { id: existing.id },
+      data: {
+        status: "cancelled",
+        cancel_reason: cancelReason,
+        cancelled_at: new Date(),
+        status_history: {
+          create: {
+            from_status: existing.status,
+            to_status: "cancelled",
+            actor_type: "customer",
+            actor_id: BigInt(customerId),
+            note: `Cancelled by customer: ${cancelReason}`,
+          },
+        },
+      },
+      include: { items: true },
+    });
+    await cancelOrderStock(tx, o);
+  });
+
+  const refundNote = await refundCancelledOrder(existing, { actorType: "customer", actorId: BigInt(customerId) });
+  alertStaff({
+    type: "order_cancelled",
+    title: `Order ${existing.order_number} cancelled by the customer`,
+    message: `${cancelReason}. ${refundNote}`,
+    severity: "warning",
+    link: `/admin/orders/${existing.id}`,
+    entityType: "order",
+    entityId: existing.id,
+    permission: "orders.view",
+  });
+  notify("order_cancelled", {
+    email: existing.customer?.email,
+    mobile: existing.customer?.mobile,
+    vars: {
+      customer_name: existing.customer?.name || existing.shipping_address?.name || "Customer",
+      order_number: existing.order_number,
+      refund_note: refundNote,
+    },
+    entityType: "order",
+    entityId: existing.id,
+  }).catch(() => undefined);
+
+  return getCustomerOrder(customerId, String(existing.id));
+}
+
+/**
+ * After a cancellation: refund whatever was paid. Returns a sentence for the customer.
+ * Never throws — the cancellation itself has already happened.
+ */
+async function refundCancelledOrder(order, { actorType, actorId = null, adminUserId = null }) {
+  const summary = refundSummary(order);
+  if (summary.balance <= 0) return "No payment was collected, so nothing is due.";
+
+  const { refundProcessingDays } = await getGroup("returns").catch(() => ({ refundProcessingDays: "5-7" }));
+  const amount = BigInt(Math.round(summary.balance * 100));
+  let historyNote;
+  let customerNote;
+
+  if (summary.gatewayAvailable) {
+    const { refund, error } = await issueRefund({
+      orderId: order.id,
+      amountPaise: amount,
+      reason: "cancel",
+      mode: "gateway",
+      note: "Order cancelled",
+      adminUserId,
+    }).catch((err) => ({ refund: null, error: err }));
+    if (refund && !error) {
+      historyNote = `Refund of ${formatINR(amount)} initiated to the original payment method (${refund.gateway_refund_id || `refund #${refund.id}`})`;
+      customerNote = `${formatINR(amount)} will be refunded to your original payment method within ${refundProcessingDays} business days.`;
+    } else {
+      historyNote = `Automatic refund of ${formatINR(amount)} failed: ${error?.message || "unknown error"} — issue it from the order's Refunds panel`;
+      customerNote = `Your refund of ${formatINR(amount)} is being processed by our team.`;
+    }
+  } else {
+    historyNote = `Refund of ${formatINR(amount)} pending — no Razorpay payment to refund automatically; pay it by bank transfer / UPI from the Refunds panel`;
+    customerNote = `Your refund of ${formatINR(amount)} will be processed by our team within ${refundProcessingDays} business days.`;
+  }
+
+  await prisma.orderStatusHistory.create({
+    data: { order_id: order.id, from_status: "cancelled", to_status: "cancelled", actor_type: actorType, actor_id: actorId, note: historyNote },
+  });
+  return customerNote;
 }
 
 // ---------------------------------------------------------------------------
@@ -927,11 +1070,11 @@ export async function getAdminOrder(id) {
   return toAdminOrderDto(order, sellerSettings);
 }
 
-export async function updateAdminOrderStatus(id, { status, actor, note }) {
+export async function updateAdminOrderStatus(id, { status, actor, note, adminId = null }) {
   const isNumeric = /^\d+$/.test(String(id));
   const where = isNumeric ? { id: BigInt(id) } : { order_number: id };
 
-  const existing = await prisma.order.findFirst({ where });
+  const existing = await prisma.order.findFirst({ where, include: { customer: true, payments: true, refunds: true } });
   if (!existing) throw ApiError.notFound("Order not found");
 
   const DB_STATUS_MAP = {
@@ -943,18 +1086,23 @@ export async function updateAdminOrderStatus(id, { status, actor, note }) {
     cancelled: "cancelled",
     returned: "returned",
   };
-  const dbStatus = DB_STATUS_MAP[status] || status;
+  const dbStatus = DB_STATUS_MAP[status];
+  if (!dbStatus) throw ApiError.badRequest(`Unknown order status "${status}"`);
+  if (existing.status === "cancelled" && dbStatus !== "cancelled") {
+    throw ApiError.badRequest("Cancelled orders cannot be reopened. Ask the customer to place a new order.");
+  }
+  if (dbStatus === existing.status) throw ApiError.badRequest(`The order is already ${status}`);
 
-  const isCancelPrepaid = status === "cancelled" && existing.payment_status === "paid";
-  const updatedPaymentStatus = isCancelPrepaid ? "refunded" : existing.payment_status;
+  // Cash on delivery: the courier collected the money on delivery
+  const codCollected = dbStatus === "delivered" && existing.payment_method === "cod" && existing.payment_status === "pending";
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const order = await tx.order.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.order.update({
       where: { id: existing.id },
       data: {
         status: dbStatus,
-        payment_status: updatedPaymentStatus,
-        cancel_reason: status === "cancelled" ? (note || "Cancelled by admin") : existing.cancel_reason,
+        payment_status: codCollected ? "paid" : existing.payment_status,
+        cancel_reason: dbStatus === "cancelled" ? (note || "Cancelled by admin") : existing.cancel_reason,
         confirmed_at: dbStatus === "confirmed" && !existing.confirmed_at ? new Date() : existing.confirmed_at,
         delivered_at: dbStatus === "delivered" && !existing.delivered_at ? new Date() : existing.delivered_at,
         cancelled_at: dbStatus === "cancelled" && !existing.cancelled_at ? new Date() : existing.cancelled_at,
@@ -963,19 +1111,110 @@ export async function updateAdminOrderStatus(id, { status, actor, note }) {
             from_status: existing.status,
             to_status: dbStatus,
             actor_type: "admin",
-            note: isCancelPrepaid
-              ? `${note || "Cancelled by admin"} · Auto-refund triggered`
-              : note || `Marked as ${status}`,
+            actor_id: adminId,
+            note: note || `Marked as ${status} by ${actor || "Admin"}`,
           },
         },
       },
-      include: ORDER_INCLUDE,
     });
-    return order;
+    // Stock follows the status
+    const withItems = await tx.order.findUnique({ where: { id: existing.id }, include: { items: true } });
+    if (["confirmed", "packed"].includes(dbStatus)) await reserveOrder(tx, withItems, { adminId });
+    else if (["shipped", "delivered"].includes(dbStatus)) {
+      await reserveOrder(tx, withItems, { adminId }); // orders confirmed before stock tracking
+      await shipOrder(tx, withItems, { adminId });
+    } else if (dbStatus === "cancelled") await cancelOrderStock(tx, withItems, { adminId });
+    if (codCollected) {
+      await tx.payment.create({
+        data: {
+          order_id: existing.id,
+          purpose: "order",
+          gateway: "cod",
+          amount_paise: existing.total_paise,
+          status: "captured",
+          captured_at: new Date(),
+        },
+      });
+    }
   });
 
-  const sellerSettings = await getSellerSettings();
-  return toAdminOrderDto(updated, sellerSettings);
+  if (dbStatus === "cancelled") {
+    const refundNote = await refundCancelledOrder(existing, { actorType: "admin", actorId: adminId, adminUserId: adminId });
+    notify("order_cancelled", {
+      email: existing.customer?.email,
+      mobile: existing.customer?.mobile,
+      vars: {
+        customer_name: existing.customer?.name || existing.shipping_address?.name || "Customer",
+        order_number: existing.order_number,
+        refund_note: refundNote,
+      },
+      entityType: "order",
+      entityId: existing.id,
+    }).catch(() => undefined);
+  }
+
+  return getAdminOrder(String(existing.id));
+}
+
+/** Admin → order page → Refunds: refund part or all of an order (goodwill, cancellation, return without RMA). */
+export async function issueAdminOrderRefund(id, { amount, mode, reference, note, reason }, admin) {
+  const isNumeric = /^\d+$/.test(String(id));
+  const order = await prisma.order.findFirst({
+    where: isNumeric ? { id: BigInt(id) } : { order_number: id },
+    include: { customer: true },
+  });
+  if (!order) throw ApiError.notFound("Order not found");
+
+  const { refund } = await issueRefund({
+    orderId: order.id,
+    amountPaise: amount,
+    reason,
+    mode,
+    reference,
+    note,
+    adminUserId: admin.id,
+    throwOnFailure: true,
+  });
+
+  await prisma.orderStatusHistory.create({
+    data: {
+      order_id: order.id,
+      from_status: order.status,
+      to_status: order.status,
+      actor_type: "admin",
+      actor_id: admin.id,
+      note: `Refund of ${formatINR(amount)} via ${REFUND_METHOD_LABEL[mode].toLowerCase()}${
+        refund.reference ? ` (Ref ${refund.reference})` : refund.gateway_refund_id ? ` (${refund.gateway_refund_id})` : ""
+      }${note ? ` — ${note}` : ""}`,
+    },
+  });
+
+  const { refundProcessingDays } = await getGroup("returns");
+  notify("refund_processed", {
+    email: order.customer?.email,
+    mobile: order.customer?.mobile,
+    vars: {
+      customer_name: order.customer?.name || order.shipping_address?.name || "Customer",
+      order_number: order.order_number,
+      refund_amount: formatINR(amount, { symbol: false }),
+      refund_method: mode === "gateway" ? "original payment method" : REFUND_METHOD_LABEL[mode].toLowerCase(),
+      reference: refund.reference || refund.gateway_refund_id || String(refund.id),
+      refund_days: refundProcessingDays,
+    },
+    entityType: "order",
+    entityId: order.id,
+  }).catch(() => undefined);
+
+  return getAdminOrder(String(order.id));
+}
+
+/** Re-reads a "processing" Razorpay refund. */
+export async function syncAdminOrderRefund(id, refundId) {
+  const order = await getAdminOrder(id);
+  const belongs = order.refunds.some((r) => r.id === String(refundId));
+  if (!belongs) throw ApiError.notFound("Refund not found on this order");
+  await syncGatewayRefund(BigInt(refundId));
+  return getAdminOrder(id);
 }
 
 export async function createAdminOrderShipment(id, { courier, weightKg, lengthCm, widthCm, heightCm, actor }) {
@@ -1016,6 +1255,8 @@ export async function createAdminOrderShipment(id, { courier, weightKg, lengthCm
       },
       include: ORDER_INCLUDE,
     });
+    await reserveOrder(tx, order);
+    await shipOrder(tx, order);
 
     return order;
   });

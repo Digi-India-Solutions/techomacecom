@@ -3,7 +3,7 @@ import { ApiError } from "../../lib/http.js";
 import { GST_STATE_CODES } from "../../lib/money.js";
 import { publicUrl, parseStoredPath, deleteImage } from "../../lib/storage.js";
 import { saveImage } from "../uploads/service.js";
-import { DEFAULTS, IMAGE_SETTINGS, SCHEMAS, SETTING_GROUPS, STATE_OPTIONS, toAdminForm } from "./definitions.js";
+import { DEFAULTS, IMAGE_SETTINGS, KYC_DOCUMENT_TYPES, SCHEMAS, SETTING_GROUPS, STATE_OPTIONS, toAdminForm } from "./definitions.js";
 
 /**
  * Reading settings happens on almost every storefront request (fees, contact details),
@@ -86,8 +86,31 @@ export async function adminView() {
   out.options = {
     states: STATE_OPTIONS,
     gstRates: [0, 5, 12, 18, 28],
+    categories: await categoryOptions(),
+    kycDocumentTypes: KYC_DOCUMENT_TYPES,
   };
   return out;
+}
+
+/** Flat "Parent › Child" list for the non-returnable categories picker (Returns tab). */
+async function categoryOptions() {
+  const rows = await prisma.category.findMany({
+    select: { id: true, name: true, parent_id: true, status: true },
+    orderBy: [{ level: "asc" }, { sort_order: "asc" }, { name: "asc" }],
+  });
+  const byId = new Map(rows.map((r) => [String(r.id), r]));
+  const pathOf = (row) => {
+    const names = [row.name];
+    let parent = row.parent_id ? byId.get(String(row.parent_id)) : null;
+    for (let guard = 0; parent && guard < 5; guard++) {
+      names.unshift(parent.name);
+      parent = parent.parent_id ? byId.get(String(parent.parent_id)) : null;
+    }
+    return names.join(" › ");
+  };
+  return rows
+    .map((r) => ({ id: String(r.id), name: r.name, path: pathOf(r), active: r.status === "active" }))
+    .sort((a, b) => a.path.localeCompare(b.path));
 }
 
 // ---------------------------------------------------------------------------
@@ -129,11 +152,12 @@ const rupees = (paise) => Math.round(paise) / 100;
 const telHref = (phone) => (phone ? `tel:${phone.replace(/[^\d+]/g, "")}` : "");
 
 export async function publicView() {
-  const [store, shipping, tax, rental, pincodeCount] = await Promise.all([
+  const [store, shipping, tax, rental, returns, pincodeCount] = await Promise.all([
     getGroup("store"),
     getGroup("shipping"),
     getGroup("tax"),
     getGroup("rental"),
+    getGroup("returns"),
     countActivePincodes(),
   ]);
   return {
@@ -191,6 +215,26 @@ export async function publicView() {
       lateFeePerDay: rupees(rental.lateFeePerDayPaise),
       gracePeriodDays: rental.gracePeriodDays,
       depositRefundDays: rental.depositRefundDays,
+      advancePaymentPercent: rental.advancePaymentPercent,
+      balanceDue: rental.balanceDue,
+      minLeadDays: rental.minLeadDays,
+      kycRequired: rental.kycRequired,
+      kycDocuments: rental.kycRequired
+        ? rental.kycDocuments.map((key) => KYC_DOCUMENT_TYPES.find((d) => d.key === key)).filter(Boolean)
+        : [],
+      kycInstructions: rental.kycInstructions,
+    },
+    returns: {
+      returnsEnabled: returns.returnsEnabled,
+      returnWindowDays: returns.returnWindowDays,
+      refundEnabled: returns.refundEnabled,
+      replacementEnabled: returns.replacementEnabled,
+      photosRequired: returns.photosRequired,
+      maxPhotos: returns.maxPhotos,
+      refundProcessingDays: returns.refundProcessingDays,
+      returnReasons: returns.returnReasons,
+      cancelReasons: returns.cancelReasons,
+      conditions: returns.conditions,
     },
   };
 }
