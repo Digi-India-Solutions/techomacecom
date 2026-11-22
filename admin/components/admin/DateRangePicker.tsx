@@ -16,7 +16,7 @@ const PRESETS: { key: DateRangePreset; label: string }[] = [
 
 export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
   const selectPreset = (preset: DateRangePreset) => {
-    const today = new Date('2026-11-17');
+    const today = new Date();
     const to = today.toISOString().slice(0, 10);
     const fromDate = new Date(today);
     if (preset === '7d') fromDate.setDate(today.getDate() - 6);

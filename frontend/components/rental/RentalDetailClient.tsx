@@ -8,7 +8,7 @@ import { Product, RentalPlanType, RentalQuote } from '@/types';
 import { fetchRentalQuote } from '@/lib/api/rentals';
 import { errorMessage } from '@/lib/api/backend';
 import { useRentalStore, useToastStore, usePincodeStore } from '@/lib/store';
-import { checkPincodeServiceability } from '@/lib/api';
+import { checkRentalPincodeServiceability as checkPincodeServiceability } from '@/lib/api';
 import { getProductImageUrl } from '@/lib/utils';
 import { 
   Bed, 
@@ -116,37 +116,63 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
     serviceable: boolean;
     city?: string;
     deliveryDays?: string;
-  } | null>(
-    storedPin ? { serviceable: true, city: storedCity, deliveryDays: storedEstimate } : null
-  );
+  } | null>(null);
+
+  // Automatically verify the PIN against the rental serviceable list
+  useEffect(() => {
+    const pin = (inputPincode || '').trim();
+    if (/^[1-9]\d{5}$/.test(pin)) {
+      let alive = true;
+      checkPincodeServiceability(pin)
+        .then((res) => {
+          if (alive) setPinResult(res);
+        })
+        .catch(() => {
+          if (alive) setPinResult({ serviceable: false, city: '', deliveryDays: '' });
+        });
+      return () => {
+        alive = false;
+      };
+    } else {
+      setPinResult(null);
+    }
+  }, [inputPincode]);
 
   // Accordion state
   const [openTerms, setOpenTerms] = useState<number | null>(0);
 
   const handlePincodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputPincode || inputPincode.trim().length !== 6) {
+    const pin = inputPincode.trim();
+    if (!pin || pin.length !== 6 || !/^[1-9]\d{5}$/.test(pin)) {
       addToast({ type: 'error', title: 'Invalid PIN', message: 'Please enter a valid 6-digit Indian PIN code.' });
       return;
     }
     setIsCheckingPin(true);
     try {
-      const res = await checkPincodeServiceability(inputPincode.trim());
+      const res = await checkPincodeServiceability(pin);
       setPinResult(res);
       if (res.serviceable) {
-        setPincode(inputPincode.trim(), res.city, res.state, res.deliveryDays);
+        setPincode(pin, res.city, res.state, res.deliveryDays);
         addToast({
           type: 'success',
           title: 'Location Serviceable',
-          message: `Delivery & installation available in ${res.city}: ${res.deliveryDays}`
+          message: `Delivery & installation available in ${res.city}: ${res.deliveryDays}`,
         });
       } else {
         addToast({
           type: 'error',
           title: 'Not Serviceable',
-          message: 'Doorstep biomedical setup is currently not available for this pincode.'
+          message: 'Doorstep biomedical setup is currently not available for this pincode.',
         });
       }
+    } catch {
+      setPinResult({ serviceable: false, city: '', deliveryDays: '' });
+      addToast({
+        type: 'error',
+        title: 'Not Serviceable',
+        message: 'Doorstep biomedical setup is currently not available for this pincode.',
+      });
     } finally {
       setIsCheckingPin(false);
     }
@@ -154,6 +180,14 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
 
   const handleProceedToRentalCheckout = () => {
     if (!quote) return;
+    if (pinResult && !pinResult.serviceable) {
+      addToast({
+        type: 'error',
+        title: 'Location Not Serviceable',
+        message: 'Doorstep biomedical setup is currently not available for this pincode. Please enter a serviceable PIN code to proceed.',
+      });
+      return;
+    }
     setDraft({
       productSlug: product.slug,
       productName: product.name,
@@ -428,7 +462,12 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
                 </span>
                 {pinResult && pinResult.serviceable && (
                   <span className="text-[11px] text-[#16A34A] font-bold">
-                    ✓ Available in {pinResult.city}
+                    ✓ Available in {pinResult.city || inputPincode}
+                  </span>
+                )}
+                {pinResult && !pinResult.serviceable && (
+                  <span className="text-[11px] text-red-600 font-bold">
+                    ✕ Not serviceable
                   </span>
                 )}
               </div>
@@ -438,18 +477,26 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
                   type="text"
                   maxLength={6}
                   value={inputPincode}
-                  onChange={(e) => setInputPincode(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => {
+                    setInputPincode(e.target.value.replace(/\D/g, ''));
+                    setPinResult(null);
+                  }}
                   placeholder="6-Digit PIN"
                   className="flex-1 text-xs px-3 py-2 border border-[#DCE6F2] text-[#12263F] rounded-xl focus:outline-none focus:border-[#1D5FAF] font-semibold tracking-wider"
                 />
                 <button
                   type="submit"
-                  disabled={isCheckingPin}
+                  disabled={isCheckingPin || inputPincode.trim().length !== 6}
                   className="px-4 py-2 bg-[#0B2545] hover:bg-[#13335E] text-white font-bold text-xs rounded-xl disabled:opacity-50 transition-colors"
                 >
                   {isCheckingPin ? 'Checking...' : 'Verify'}
                 </button>
               </form>
+              {pinResult && !pinResult.serviceable && (
+                <p className="text-[11px] text-red-600 font-medium">
+                  Doorstep biomedical delivery &amp; setup is currently not available for PIN {inputPincode}.
+                </p>
+              )}
             </div>
 
             {/* 5. Live Price Breakdown (from the API) */}
@@ -547,7 +594,7 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
             <button
               type="button"
               onClick={handleProceedToRentalCheckout}
-              disabled={!quote || quoting || Boolean(quoteError) || !quote.inStock}
+              disabled={!quote || quoting || Boolean(quoteError) || !quote.inStock || Boolean(pinResult && !pinResult.serviceable)}
               className="w-full py-4 bg-[#1D5FAF] hover:bg-[#174E90] text-white font-black text-sm rounded-2xl shadow-xl shadow-[#1D5FAF]/20 transition-all active:scale-98 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Bed className="w-4 h-4" />

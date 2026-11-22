@@ -5,7 +5,7 @@ import { formatINR } from "../../lib/money.js";
 import { createOrder as createRazorpayOrder, verifyPaymentSignature } from "../../lib/razorpay.js";
 import { notify } from "../../services/notification.service.js";
 import { getGroup } from "../settings/service.js";
-import { check as checkPincode } from "../settings/pincodes.service.js";
+import { checkRental as checkPincode } from "../settings/pincodes.service.js";
 import { KYC_DOCUMENT_TYPES } from "../settings/definitions.js";
 import { issueRefund, rentalRefundSummary } from "../refunds/service.js";
 import { RENTAL_INCLUDE, RENTAL_STATUS_LABEL, toCustomerRentalDto } from "./dto.js";

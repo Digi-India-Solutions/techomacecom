@@ -178,6 +178,59 @@ export async function getPageBanners(
   return [];
 }
 
+const DEFAULT_PUBLIC_COUPONS: Coupon[] = [
+  {
+    id: 'c-ak47',
+    code: 'AK-47',
+    description: '10% instant discount on orders above ₹5,000 (Max discount ₹25)',
+    discountType: 'percentage',
+    discountValue: 10,
+    minOrderValue: 5000,
+    expiresAt: '2026-12-31',
+    firstOrderOnly: false,
+  } as any,
+  {
+    id: 'c-welcome10',
+    code: 'WELCOME10',
+    description: 'First order only: 10% instant discount on orders above ₹8,000 (Max discount ₹3,500)',
+    discountType: 'percentage',
+    discountValue: 10,
+    minOrderValue: 8000,
+    expiresAt: '2026-12-31',
+    firstOrderOnly: true,
+  } as any,
+  {
+    id: 'c-clinic2000',
+    code: 'CLINIC2000',
+    description: 'Flat ₹2,000 discount on orders above ₹25,000',
+    discountType: 'fixed',
+    discountValue: 2000,
+    minOrderValue: 25000,
+    expiresAt: '2026-12-31',
+    firstOrderOnly: false,
+  } as any,
+];
+
+/**
+ * Fetch active public coupons from PostgreSQL database
+ */
+export async function getActiveCoupons(): Promise<Coupon[]> {
+  try {
+    const res = await fetch(`${BACKEND_API_URL}/coupons/public`, {
+      cache: 'no-store',
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    if (body?.success && Array.isArray(body.data) && body.data.length > 0) {
+      return body.data;
+    }
+  } catch (err) {
+    console.warn('Could not fetch live coupons from backend, using database defaults:', err);
+  }
+  return DEFAULT_PUBLIC_COUPONS;
+}
+
 /**
  * Validate and apply coupon code via backend PostgreSQL coupons database
  */

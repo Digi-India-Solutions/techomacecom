@@ -44,18 +44,18 @@ export async function deleteImage(req, res) {
   return ok(res, { message: "Image removed" });
 }
 
-// Pincodes
+// Ecommerce Pincodes
 export async function pincodeSummary(req, res) {
-  return ok(res, await pincodes.summary());
+  return ok(res, await pincodes.summary("ecommerce"));
 }
 export async function listPincodes(req, res) {
-  const { rows, meta } = await pincodes.list(req.validatedQuery);
+  const { rows, meta } = await pincodes.list({ ...req.validatedQuery, type: "ecommerce" });
   return ok(res, rows, { meta });
 }
 export async function importPincodes(req, res) {
   if (!req.file) throw ApiError.badRequest('Attach a CSV file in the "file" field', "NO_FILE");
   const mode = req.body?.mode === "replace" ? "replace" : "merge";
-  const result = await pincodes.importPincodes(req.file.buffer.toString("utf8"), mode);
+  const result = await pincodes.importPincodes(req.file.buffer.toString("utf8"), mode, "ecommerce");
   await logActivity(req, {
     module: "settings",
     action: "update",
@@ -63,18 +63,123 @@ export async function importPincodes(req, res) {
     entityLabel: "Serviceable PIN codes",
     summary: `${mode === "replace" ? "Replaced" : "Merged"} PIN codes from ${req.file.originalname}: ${result.imported} imported, ${result.before} → ${result.after}`,
   });
-  return ok(res, { ...result, summary: await pincodes.summary() });
+  return ok(res, { ...result, summary: await pincodes.summary("ecommerce") });
 }
 export async function exportPincodes(req, res) {
-  const csv = await pincodes.exportCsv();
+  const csv = await pincodes.exportCsv("ecommerce");
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", 'attachment; filename="serviceable-pincodes.csv"');
   return res.send(csv);
 }
 export async function clearPincodes(req, res) {
-  const count = await pincodes.clearAll();
+  const count = await pincodes.clearAll("ecommerce");
   await logActivity(req, { module: "settings", action: "delete", entityType: "settings", entityLabel: "Serviceable PIN codes", summary: `Cleared ${count} PIN codes (delivery open to all of India)` });
-  return ok(res, { removed: count, summary: await pincodes.summary() });
+  return ok(res, { removed: count, summary: await pincodes.summary("ecommerce") });
+}
+export async function togglePincodeCod(req, res) {
+  const pincode = String(req.params.pincode || "").trim();
+  const updated = await pincodes.toggleCod(pincode, "ecommerce");
+  await logActivity(req, {
+    module: "settings",
+    action: "update",
+    entityType: "settings",
+    entityLabel: "Serviceable PIN codes",
+    summary: `Changed PIN ${pincode} COD to ${updated.codAvailable ? "Yes" : "No"}`,
+  });
+  return ok(res, { ...updated, summary: await pincodes.summary("ecommerce") });
+}
+export async function togglePincodeActive(req, res) {
+  const pincode = String(req.params.pincode || "").trim();
+  const updated = await pincodes.toggleActive(pincode, "ecommerce");
+  await logActivity(req, {
+    module: "settings",
+    action: "update",
+    entityType: "settings",
+    entityLabel: "Serviceable PIN codes",
+    summary: `Changed PIN ${pincode} active status to ${updated.active ? "Yes" : "No"}`,
+  });
+  return ok(res, { ...updated, summary: await pincodes.summary("ecommerce") });
+}
+export async function deletePincode(req, res) {
+  const pincode = String(req.params.pincode || "").trim();
+  const result = await pincodes.deletePincode(pincode, "ecommerce");
+  await logActivity(req, {
+    module: "settings",
+    action: "delete",
+    entityType: "settings",
+    entityLabel: "Serviceable PIN codes",
+    summary: `Deleted PIN code ${pincode}`,
+  });
+  return ok(res, { ...result, summary: await pincodes.summary("ecommerce") });
+}
+
+// Rental Pincodes
+export async function rentalPincodeSummary(req, res) {
+  return ok(res, await pincodes.summary("rental"));
+}
+export async function listRentalPincodes(req, res) {
+  const { rows, meta } = await pincodes.list({ ...req.validatedQuery, type: "rental" });
+  return ok(res, rows, { meta });
+}
+export async function importRentalPincodes(req, res) {
+  if (!req.file) throw ApiError.badRequest('Attach a CSV file in the "file" field', "NO_FILE");
+  const mode = req.body?.mode === "replace" ? "replace" : "merge";
+  const result = await pincodes.importPincodes(req.file.buffer.toString("utf8"), mode, "rental");
+  await logActivity(req, {
+    module: "settings",
+    action: "update",
+    entityType: "settings",
+    entityLabel: "Rental Serviceable PIN codes",
+    summary: `${mode === "replace" ? "Replaced" : "Merged"} rental PIN codes from ${req.file.originalname}: ${result.imported} imported, ${result.before} → ${result.after}`,
+  });
+  return ok(res, { ...result, summary: await pincodes.summary("rental") });
+}
+export async function exportRentalPincodes(req, res) {
+  const csv = await pincodes.exportCsv("rental");
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="rental-serviceable-pincodes.csv"');
+  return res.send(csv);
+}
+export async function clearRentalPincodes(req, res) {
+  const count = await pincodes.clearAll("rental");
+  await logActivity(req, { module: "settings", action: "delete", entityType: "settings", entityLabel: "Rental Serviceable PIN codes", summary: `Cleared ${count} rental PIN codes` });
+  return ok(res, { removed: count, summary: await pincodes.summary("rental") });
+}
+export async function toggleRentalPincodeCod(req, res) {
+  const pincode = String(req.params.pincode || "").trim();
+  const updated = await pincodes.toggleCod(pincode, "rental");
+  await logActivity(req, {
+    module: "settings",
+    action: "update",
+    entityType: "settings",
+    entityLabel: "Rental Serviceable PIN codes",
+    summary: `Changed rental PIN ${pincode} COD to ${updated.codAvailable ? "Yes" : "No"}`,
+  });
+  return ok(res, { ...updated, summary: await pincodes.summary("rental") });
+}
+export async function toggleRentalPincodeActive(req, res) {
+  const pincode = String(req.params.pincode || "").trim();
+  const updated = await pincodes.toggleActive(pincode, "rental");
+  await logActivity(req, {
+    module: "settings",
+    action: "update",
+    entityType: "settings",
+    entityLabel: "Rental Serviceable PIN codes",
+    summary: `Changed rental PIN ${pincode} active status to ${updated.active ? "Yes" : "No"}`,
+  });
+  return ok(res, { ...updated, summary: await pincodes.summary("rental") });
+}
+export async function deleteRentalPincode(req, res) {
+  const pincode = String(req.params.pincode || "").trim();
+  const result = await pincodes.deletePincode(pincode, "rental");
+  await logActivity(req, {
+    module: "settings",
+    action: "delete",
+    entityType: "settings",
+    entityLabel: "Rental Serviceable PIN codes",
+    summary: `Deleted rental PIN code ${pincode}`,
+  });
+  return ok(res, { ...result, summary: await pincodes.summary("rental") });
 }
 
 // Notifications
@@ -104,7 +209,13 @@ export async function publicSettings(req, res) {
   return ok(res, await service.publicView());
 }
 
-/** GET /pincodes/:pincode — delivery / COD check */
+/** GET /pincodes/:pincode — delivery / COD check (supports ?type=rental) */
 export async function checkPincode(req, res) {
-  return ok(res, await pincodes.check(String(req.params.pincode || "").trim()));
+  const type = req.query.type === "rental" ? "rental" : "ecommerce";
+  return ok(res, await pincodes.check(String(req.params.pincode || "").trim(), type));
+}
+
+/** GET /rentals/pincodes/:pincode or GET /pincodes/rental/:pincode — rental delivery check */
+export async function checkRentalPincode(req, res) {
+  return ok(res, await pincodes.checkRental(String(req.params.pincode || "").trim()));
 }

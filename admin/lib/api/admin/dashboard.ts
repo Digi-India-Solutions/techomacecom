@@ -4,7 +4,7 @@ import type {
   GlobalSearchResult,
   SalesTrendPoint,
 } from '@/types/admin';
-import { formatINR, mockDelay } from './client';
+import { adminGet, formatINR, mockDelay } from './client';
 import {
   INITIAL_RECENT_ENQUIRIES,
   INITIAL_RECENT_ORDERS,
@@ -42,6 +42,17 @@ const TREND_BY_PRESET: Record<string, SalesTrendPoint[]> = {
 };
 
 export async function getDashboardOverview(range: DateRangeValue): Promise<DashboardOverview> {
+  try {
+    const params = new URLSearchParams({
+      preset: range.preset,
+      from: range.from || '',
+      to: range.to || '',
+    });
+    return await adminGet<DashboardOverview>(`/admin/dashboard/overview?${params}`);
+  } catch (err) {
+    console.warn('[dashboard] live fetch error, using local fallback:', err);
+  }
+
   await mockDelay(180);
 
   const products = getProductsStore();
@@ -148,6 +159,12 @@ export async function getDashboardOverview(range: DateRangeValue): Promise<Dashb
       { status: 'confirmed', label: 'Confirmed', count: Math.round(8 * multiplier), color: '#0B2545' },
       { status: 'cancelled', label: 'Cancelled', count: Math.round(4 * multiplier), color: '#94A3B8' },
     ],
+    ordersByState: [
+      { state: 'Madhya Pradesh', ordersCount: 3, revenue: 516, percentage: 100 },
+    ],
+    rentalsByState: [
+      { state: 'Madhya Pradesh', ordersCount: 3, revenue: 14540, percentage: 100 },
+    ],
     topProducts: products.slice(0, 5).map((p, idx) => ({
       id: p.id,
       name: p.name,
@@ -218,9 +235,16 @@ export async function getDashboardOverview(range: DateRangeValue): Promise<Dashb
 }
 
 export async function globalSearchAdmin(query: string): Promise<GlobalSearchResult[]> {
-  await mockDelay(90);
-  const q = query.trim().toLowerCase();
+  const q = query.trim();
   if (!q) return [];
+
+  try {
+    return await adminGet<GlobalSearchResult[]>(`/admin/dashboard/search?q=${encodeURIComponent(q)}`);
+  } catch (err) {
+    console.warn('[globalSearch] live fetch error, using local fallback:', err);
+  }
+
+  await mockDelay(90);
 
   const results: GlobalSearchResult[] = [];
 

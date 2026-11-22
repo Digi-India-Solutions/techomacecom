@@ -9,7 +9,7 @@ import type {
   SettingsGroup,
   SettingsImage,
 } from '@/types/admin';
-import { adminDelete, adminFetch, adminGet, adminPost, adminPut, getApiBaseUrl, type ListMeta } from './client';
+import { adminDelete, adminFetch, adminGet, adminPatch, adminPost, adminPut, getApiBaseUrl, type ListMeta } from './client';
 
 /**
  * Settings — backend/src/modules/settings (/api/v1/admin/settings/*).
@@ -103,12 +103,59 @@ export async function importPincodesCsv(file: File, mode: 'merge' | 'replace') {
 
 export const clearPincodes = () => adminDelete<{ removed: number; summary: PincodeSummary }>('/admin/settings/pincodes');
 
+export const togglePincodeCod = (pincode: string) =>
+  adminPatch<PincodeRow & { summary?: PincodeSummary }>(`/admin/settings/pincodes/${pincode}/toggle-cod`);
+
+export const togglePincodeActive = (pincode: string) =>
+  adminPatch<PincodeRow & { summary?: PincodeSummary }>(`/admin/settings/pincodes/${pincode}/toggle-active`);
+
+export const deletePincodeRow = (pincode: string) =>
+  adminDelete<{ pincode: string; removed: boolean; summary?: PincodeSummary }>(`/admin/settings/pincodes/${pincode}`);
+
 /** Downloads the current list as CSV (uses the session cookie). */
 export async function downloadPincodesCsv() {
   const res = await fetch(`${getApiBaseUrl()}/admin/settings/pincodes/export`, { credentials: 'include' });
   if (!res.ok) throw new Error('Could not download the PIN code list');
   const url = URL.createObjectURL(await res.blob());
   const a = Object.assign(document.createElement('a'), { href: url, download: 'serviceable-pincodes.csv' });
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---- Rental Serviceable PIN codes ----
+
+export const getRentalPincodeSummary = () => adminGet<PincodeSummary>('/admin/settings/rental-pincodes/summary');
+
+export async function listRentalPincodes(q = '', page = 1, limit = 20): Promise<{ rows: PincodeRow[]; meta?: ListMeta }> {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit), ...(q ? { q } : {}) });
+  const { data, meta } = await adminFetch<PincodeRow[]>(`/admin/settings/rental-pincodes?${params}`);
+  return { rows: data, meta };
+}
+
+export async function importRentalPincodesCsv(file: File, mode: 'merge' | 'replace') {
+  const form = new FormData();
+  form.append('mode', mode);
+  form.append('file', file);
+  return adminPost<PincodeImportResult>('/admin/settings/rental-pincodes/import', form);
+}
+
+export const clearRentalPincodes = () => adminDelete<{ removed: number; summary: PincodeSummary }>('/admin/settings/rental-pincodes');
+
+export const toggleRentalPincodeCod = (pincode: string) =>
+  adminPatch<PincodeRow & { summary?: PincodeSummary }>(`/admin/settings/rental-pincodes/${pincode}/toggle-cod`);
+
+export const toggleRentalPincodeActive = (pincode: string) =>
+  adminPatch<PincodeRow & { summary?: PincodeSummary }>(`/admin/settings/rental-pincodes/${pincode}/toggle-active`);
+
+export const deleteRentalPincodeRow = (pincode: string) =>
+  adminDelete<{ pincode: string; removed: boolean; summary?: PincodeSummary }>(`/admin/settings/rental-pincodes/${pincode}`);
+
+/** Downloads the rental PIN code list as CSV (uses the session cookie). */
+export async function downloadRentalPincodesCsv() {
+  const res = await fetch(`${getApiBaseUrl()}/admin/settings/rental-pincodes/export`, { credentials: 'include' });
+  if (!res.ok) throw new Error('Could not download the rental PIN code list');
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: 'rental-serviceable-pincodes.csv' });
   a.click();
   URL.revokeObjectURL(url);
 }

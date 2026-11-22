@@ -113,6 +113,13 @@ export interface OrderStatusSlice {
   color: string;
 }
 
+export interface StateOrderSlice {
+  state: string;
+  ordersCount: number;
+  revenue: number;
+  percentage: number;
+}
+
 export interface TopSellingProduct {
   id: string;
   name: string;
@@ -163,6 +170,8 @@ export interface DashboardOverview {
   kpis: DashboardKpi[];
   salesTrend: SalesTrendPoint[];
   ordersByStatus: OrderStatusSlice[];
+  ordersByState?: StateOrderSlice[];
+  rentalsByState?: StateOrderSlice[];
   topProducts: TopSellingProduct[];
   actionNeeded: ActionNeededItem[];
   recentOrders: RecentOrderSummary[];

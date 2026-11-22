@@ -23,6 +23,7 @@ import { publicFaqRoutes, adminFaqRoutes } from "./modules/faqs/routes.js";
 import { publicBlogRoutes, adminBlogRoutes } from "./modules/blog/routes.js";
 import adminCustomerRoutes from "./modules/customers/routes.js";
 import adminNotificationRoutes from "./modules/admin-notifications/routes.js";
+import { adminDashboardRoutes } from "./modules/dashboard/routes.js";
 
 /**
  * All API routes live under /api/v1 (document §12).
@@ -32,6 +33,7 @@ import adminNotificationRoutes from "./modules/admin-notifications/routes.js";
 const api = Router();
 
 // ---- Storefront ----
+api.use(publicSettingsRoutes); // /settings/public (store details, fees, rules) · /pincodes/* · /rentals/pincodes/*
 api.use("/auth", customerAuthRoutes); // email + password sign-up / sign-in, forgot password, profile, signed-in devices
 api.use("/account", accountRoutes); // addresses, GST details, profile photo
 api.use("/orders", storefrontOrdersRoutes); // customer orders (create, list, detail, cancel, request a return)
@@ -40,7 +42,6 @@ api.use("/rentals", storefrontRentalRoutes); // rental quote (public) · booking
 api.use("/banners", bannerRoutes); // public hero banners for storefront
 api.use("/enquiries", publicEnquiryRoutes); // sleep-test, contact us, bulk enquiry, seller registration
 api.use("/reviews", publicReviewRoutes); // product reviews (read: public · write: signed-in customer)
-api.use(publicSettingsRoutes); // /settings/public (store details, fees, rules) · /pincodes/:pincode
 api.use("/coupons", couponRoutes); // storefront coupon apply / validate
 api.use("/deals", dealRoutes); // storefront deals of the day
 api.use("/pages", publicPageRoutes); // storefront public CMS pages
@@ -53,6 +54,7 @@ const admin = Router();
 admin.use("/auth", adminAuthRoutes); // login / refresh / reset are reachable without a session
 admin.use(requireAdmin); // everything below needs a signed-in, active staff member
 admin.use(staffRoutes); // /permissions, /roles, /staff, /activity-logs
+admin.use("/dashboard", adminDashboardRoutes); // operations dashboard overview & search
 admin.use("/uploads", uploadRoutes); // images → WebP on local disk
 admin.use("/notifications", adminNotificationRoutes); // bell: my alerts + live "needs attention" counts
 // Catalog used by the admin Products / Categories / Brands pages and the storefront:

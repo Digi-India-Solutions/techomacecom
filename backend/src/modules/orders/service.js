@@ -6,6 +6,7 @@ import { ApiError } from "../../lib/http.js";
 import { publicUrl } from "../../lib/storage.js";
 import { notify } from "../../services/notification.service.js";
 import { getGroup } from "../settings/service.js";
+import { check as checkPincode } from "../settings/pincodes.service.js";
 import { STATE_OPTIONS } from "../settings/definitions.js";
 import env from "../../../config/env.js";
 import { formatINR } from "../../lib/money.js";
@@ -513,6 +514,24 @@ export async function createCustomerOrder(customerId, data) {
   }
   if (!data.shippingAddress) {
     throw ApiError.badRequest("Delivery address is required");
+  }
+
+  const pin = await checkPincode(String(data.shippingAddress?.pincode || "").trim(), "ecommerce");
+  if (!pin.serviceable) {
+    throw ApiError.badRequest(`Delivery is not available to PIN ${data.shippingAddress?.pincode}`, "NOT_SERVICEABLE");
+  }
+  if (data.paymentMethod === "cod") {
+    const shipping = await getGroup("shipping");
+    if (!shipping.codEnabled) {
+      throw ApiError.badRequest("Cash on Delivery is currently disabled", "COD_DISABLED");
+    }
+    if (!pin.codAvailable) {
+      throw ApiError.badRequest(`Cash on Delivery is not available for PIN ${data.shippingAddress?.pincode}. Please choose online payment.`, "COD_NOT_AVAILABLE");
+    }
+    const totalRupees = Number(data.total) || 0;
+    if (shipping.codMaxOrderValue > 0 && totalRupees > shipping.codMaxOrderValue) {
+      throw ApiError.badRequest(`Cash on Delivery is only available for orders up to ₹${shipping.codMaxOrderValue.toLocaleString("en-IN")}. Please choose online payment.`, "COD_LIMIT_EXCEEDED");
+    }
   }
 
   const customer = await prisma.customer.findUnique({ where: { id: BigInt(customerId) } });

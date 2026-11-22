@@ -38,17 +38,27 @@ import type {
 } from '@/types/admin';
 import {
   clearPincodes,
+  clearRentalPincodes,
+  deletePincodeRow,
+  deleteRentalPincodeRow,
   downloadPincodesCsv,
+  downloadRentalPincodesCsv,
   getAdminSettings,
   getNotificationLogs,
   getNotificationTemplates,
   getPincodeSummary,
+  getRentalPincodeSummary,
   importPincodesCsv,
+  importRentalPincodesCsv,
   listPincodes,
+  listRentalPincodes,
   removeSettingsImage,
   saveNotificationTemplates,
   saveSettingsGroup,
   sendTestNotification,
+  togglePincodeCod,
+  toggleRentalPincodeActive,
+  toggleRentalPincodeCod,
   uploadSettingsImage,
 } from '@/lib/api/admin/settings';
 import { AdminApiError, formatDateTime, type ListMeta } from '@/lib/api/admin/client';
@@ -583,7 +593,16 @@ function ShippingTab({ s, set, errors, canEdit }: TabProps) {
   );
 }
 
-function PincodePanel({ canEdit, defaultDays }: { canEdit: boolean; defaultDays: string }) {
+function PincodePanel({
+  canEdit,
+  defaultDays,
+  type = 'ecommerce',
+}: {
+  canEdit: boolean;
+  defaultDays: string;
+  type?: 'ecommerce' | 'rental';
+}) {
+  const isRental = type === 'rental';
   const { showToast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [summary, setSummary] = useState<PincodeSummary | null>(null);
@@ -595,17 +614,69 @@ function PincodePanel({ canEdit, defaultDays }: { canEdit: boolean; defaultDays:
   const [meta, setMeta] = useState<ListMeta | undefined>();
   const [page, setPage] = useState(1);
   const [importErrors, setImportErrors] = useState<{ line: number; message: string }[]>([]);
+  const [togglingPin, setTogglingPin] = useState<string | null>(null);
+  const [deletingPin, setDeletingPin] = useState<string | null>(null);
+
+  const onToggle = async (pincode: string) => {
+    setTogglingPin(pincode);
+    try {
+      if (isRental) {
+        const res = await toggleRentalPincodeActive(pincode);
+        setRows((prev) => prev.map((r) => (r.pincode === pincode ? { ...r, active: res.active } : r)));
+        if (res.summary) setSummary(res.summary);
+        showToast({
+          title: `PIN ${pincode}`,
+          description: `Rental serviceability ${res.active ? 'Active (Yes)' : 'Inactive (No)'}.`,
+          variant: 'success',
+        });
+      } else {
+        const res = await togglePincodeCod(pincode);
+        setRows((prev) => prev.map((r) => (r.pincode === pincode ? { ...r, codAvailable: res.codAvailable } : r)));
+        if (res.summary) setSummary(res.summary);
+        showToast({
+          title: `PIN ${pincode}`,
+          description: `Cash on Delivery ${res.codAvailable ? 'enabled (Yes)' : 'disabled (No)'}.`,
+          variant: 'success',
+        });
+      }
+    } catch (err) {
+      showToast({ title: isRental ? 'Could not update status' : 'Could not update COD', description: errText(err), variant: 'error' });
+    } finally {
+      setTogglingPin(null);
+    }
+  };
+
+  const onDeleteSinglePin = async (pincode: string) => {
+    setDeletingPin(pincode);
+    try {
+      const res = isRental ? await deleteRentalPincodeRow(pincode) : await deletePincodeRow(pincode);
+      setRows((prev) => prev.filter((r) => r.pincode !== pincode));
+      if (res.summary) setSummary(res.summary);
+      showToast({
+        title: `PIN ${pincode} removed`,
+        description: `Removed from serviceable PIN codes.`,
+        variant: 'success',
+      });
+    } catch (err) {
+      showToast({ title: 'Could not delete PIN', description: errText(err), variant: 'error' });
+    } finally {
+      setDeletingPin(null);
+    }
+  };
 
   const refresh = useCallback(async () => {
     try {
-      const [sum, list] = await Promise.all([getPincodeSummary(), listPincodes(q, page, 10)]);
+      const [sum, list] = await Promise.all([
+        isRental ? getRentalPincodeSummary() : getPincodeSummary(),
+        isRental ? listRentalPincodes(q, page, 10) : listPincodes(q, page, 10),
+      ]);
       setSummary(sum);
       setRows(list.rows);
       setMeta(list.meta);
     } catch (err) {
       showToast({ title: 'Could not load PIN codes', description: errText(err), variant: 'error' });
     }
-  }, [q, page, showToast]);
+  }, [isRental, q, page, showToast]);
 
   useEffect(() => {
     const t = window.setTimeout(refresh, q ? 250 : 0);
@@ -619,7 +690,7 @@ function PincodePanel({ canEdit, defaultDays }: { canEdit: boolean; defaultDays:
     setBusy('import');
     setImportErrors([]);
     try {
-      const res = await importPincodesCsv(file, mode);
+      const res = await (isRental ? importRentalPincodesCsv(file, mode) : importPincodesCsv(file, mode));
       setImportErrors(res.errors);
       showToast({
         title: `${res.imported.toLocaleString('en-IN')} PIN codes imported`,
@@ -638,8 +709,12 @@ function PincodePanel({ canEdit, defaultDays }: { canEdit: boolean; defaultDays:
   const onClear = async () => {
     setBusy('clear');
     try {
-      const res = await clearPincodes();
-      showToast({ title: `Removed ${res.removed.toLocaleString('en-IN')} PIN codes`, description: 'Delivery is now open to every PIN code in India.', variant: 'success' });
+      const res = await (isRental ? clearRentalPincodes() : clearPincodes());
+      showToast({
+        title: `Removed ${res.removed.toLocaleString('en-IN')} PIN codes`,
+        description: isRental ? 'Rental delivery is now open to every PIN code in India.' : 'Delivery is now open to every PIN code in India.',
+        variant: 'success',
+      });
       setConfirmClear(false);
       refresh();
     } catch (err) {
@@ -653,11 +728,17 @@ function PincodePanel({ canEdit, defaultDays }: { canEdit: boolean; defaultDays:
     <section className={card}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className={sectionTitle}>Serviceable PIN codes</h2>
+          <h2 className={sectionTitle}>
+            {isRental ? 'Rental Serviceable PIN codes' : 'Serviceable PIN codes'}
+          </h2>
           <p className={sectionHint}>
-            {summary?.restricted
-              ? `Only these ${summary.active.toLocaleString('en-IN')} PIN codes can order (${summary.codAvailable.toLocaleString('en-IN')} with COD). Others see “We don't deliver here yet”.`
-              : `No list uploaded — every Indian PIN code is deliverable in ${defaultDays} days. Upload a CSV to limit delivery.`}
+            {isRental
+              ? summary?.restricted
+                ? `Only these ${summary.active.toLocaleString('en-IN')} PIN codes are serviceable for equipment rental & setup${summary.total > summary.active ? ` (${summary.total - summary.active} inactive)` : ''}. Other PINs show “Not serviceable”.`
+                : `No list uploaded — equipment rental delivery is open across India. Upload a CSV to restrict rental delivery to specific PIN codes.`
+              : summary?.restricted
+                ? `Only these ${summary.active.toLocaleString('en-IN')} PIN codes can order (${summary.codAvailable.toLocaleString('en-IN')} with COD). Others see “We don't deliver here yet”.`
+                : `No list uploaded — every Indian PIN code is deliverable in ${defaultDays} days. Upload a CSV to limit delivery.`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -681,7 +762,11 @@ function PincodePanel({ canEdit, defaultDays }: { canEdit: boolean; defaultDays:
               onClick={async () => {
                 setBusy('export');
                 try {
-                  await downloadPincodesCsv();
+                  if (isRental) {
+                    await downloadRentalPincodesCsv();
+                  } else {
+                    await downloadPincodesCsv();
+                  }
                 } catch (err) {
                   showToast({ title: 'Download failed', description: errText(err), variant: 'error' });
                 } finally {
@@ -702,9 +787,19 @@ function PincodePanel({ canEdit, defaultDays }: { canEdit: boolean; defaultDays:
       </div>
 
       <p className="mt-3 rounded-lg bg-[#F6F9FD] px-3 py-2 font-mono text-[11px] text-[#5B6B82]">
-        pincode,city,state,cod,delivery_days
-        <br />
-        110020,New Delhi,Delhi,yes,1-2
+        {isRental ? (
+          <>
+            pincode,city,state,active,delivery_days
+            <br />
+            110020,New Delhi,Delhi,yes,1-2
+          </>
+        ) : (
+          <>
+            pincode,city,state,cod,delivery_days
+            <br />
+            110020,New Delhi,Delhi,yes,1-2
+          </>
+        )}
       </p>
 
       {importErrors.length > 0 && (
@@ -741,23 +836,71 @@ function PincodePanel({ canEdit, defaultDays }: { canEdit: boolean; defaultDays:
                   <th className="px-3 py-2 font-semibold">PIN code</th>
                   <th className="px-3 py-2 font-semibold">City</th>
                   <th className="px-3 py-2 font-semibold">State</th>
-                  <th className="px-3 py-2 font-semibold">COD</th>
+                  <th className="px-3 py-2 font-semibold">{isRental ? 'Active' : 'COD'}</th>
                   <th className="px-3 py-2 font-semibold">Delivery</th>
+                  {canEdit && <th className="px-3 py-2 font-semibold text-right">Action</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#DCE6F2]">
-                {rows.map((r) => (
-                  <tr key={r.pincode}>
-                    <td className="px-3 py-2 font-mono font-semibold text-[#12263F]">{r.pincode}</td>
-                    <td className="px-3 py-2">{r.city || '—'}</td>
-                    <td className="px-3 py-2">{r.state || '—'}</td>
-                    <td className="px-3 py-2">{r.codAvailable ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-[#C5D2E3]" />}</td>
-                    <td className="px-3 py-2">{r.deliveryDays ? `${r.deliveryDays} days` : <span className="text-[#5B6B82]">Default ({defaultDays})</span>}</td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const isYes = isRental ? r.active : r.codAvailable;
+                  return (
+                    <tr key={r.pincode}>
+                      <td className="px-3 py-2 font-mono font-semibold text-[#12263F]">{r.pincode}</td>
+                      <td className="px-3 py-2">{r.city || '—'}</td>
+                      <td className="px-3 py-2">{r.state || '—'}</td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          disabled={!canEdit || togglingPin === r.pincode}
+                          onClick={() => onToggle(r.pincode)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50 ${
+                            isYes
+                              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300'
+                              : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-300'
+                          }`}
+                          title={
+                            canEdit
+                              ? isRental
+                                ? isYes
+                                  ? 'Click to set Inactive (No)'
+                                  : 'Click to set Active (Yes)'
+                                : isYes
+                                  ? 'Click to set COD to No'
+                                  : 'Click to set COD to Yes'
+                              : undefined
+                          }
+                        >
+                          {togglingPin === r.pincode ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : isYes ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                          ) : (
+                            <XCircle className="h-3.5 w-3.5 text-red-600" />
+                          )}
+                          <span>{isYes ? 'Yes' : 'No'}</span>
+                        </button>
+                      </td>
+                      <td className="px-3 py-2">{r.deliveryDays ? `${r.deliveryDays} days` : <span className="text-[#5B6B82]">Default ({defaultDays})</span>}</td>
+                      {canEdit && (
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            disabled={deletingPin === r.pincode}
+                            onClick={() => onDeleteSinglePin(r.pincode)}
+                            className="text-[#8A97A8] hover:text-red-600 transition-colors p-1 disabled:opacity-50 inline-flex items-center"
+                            title={`Delete ${r.pincode}`}
+                          >
+                            {deletingPin === r.pincode ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
                 {!rows.length && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-[#5B6B82]">
+                    <td colSpan={canEdit ? 6 : 5} className="px-3 py-6 text-center text-[#5B6B82]">
                       No PIN codes match “{q}”.
                     </td>
                   </tr>
@@ -1326,9 +1469,7 @@ function RentalTab({ s, set, errors, canEdit }: TabProps) {
         </div>
       </section>
 
-      <p className="flex items-center gap-1.5 text-[11px] text-[#5B6B82]">
-        <MapPin className="h-3.5 w-3.5" /> Rental delivery uses the same serviceable PIN codes as the Shipping tab.
-      </p>
+      <PincodePanel canEdit={canEdit} defaultDays={r.minLeadDays != null ? String(r.minLeadDays) : '1-2'} type="rental" />
     </div>
   );
 }

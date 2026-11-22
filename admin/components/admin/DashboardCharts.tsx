@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import type { OrderStatusSlice, SalesTrendPoint, TopSellingProduct } from '@/types/admin';
+import { MapPin } from 'lucide-react';
+import type { OrderStatusSlice, SalesTrendPoint, StateOrderSlice, TopSellingProduct } from '@/types/admin';
 import { formatINR } from '@/lib/api/admin/client';
 import { SafeImage } from './SafeImage';
 
@@ -290,6 +291,127 @@ export function TopSellingProductsChart({ products }: { products: TopSellingProd
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+export function OrdersByStateChart({
+  orderStates = [],
+  rentalStates = [],
+  states, // backward compatibility
+}: {
+  orderStates?: StateOrderSlice[];
+  rentalStates?: StateOrderSlice[];
+  states?: StateOrderSlice[];
+}) {
+  const [tab, setTab] = useState<'orders' | 'rentals'>('orders');
+  const actualOrderStates = orderStates.length > 0 ? orderStates : states || [];
+  const activeList = tab === 'orders' ? actualOrderStates : rentalStates;
+  const maxCount = Math.max(...activeList.map((s) => s.ordersCount), 1);
+  const totalCount = activeList.reduce((acc, s) => acc + s.ordersCount, 0);
+
+  return (
+    <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 flex flex-col justify-between">
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-base font-semibold text-[#12263F]">
+              {tab === 'orders' ? 'Orders by State' : 'Rentals by State'}
+            </h3>
+            <p className="text-xs text-[#5B6B82]">
+              {tab === 'orders'
+                ? 'Geographical product orders across India'
+                : 'Equipment rental deployment across India'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1 rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] p-1">
+            <button
+              type="button"
+              onClick={() => setTab('orders')}
+              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
+                tab === 'orders'
+                  ? 'bg-[#1D5FAF] text-white shadow-xs'
+                  : 'text-[#5B6B82] hover:text-[#12263F] hover:bg-[#EAF2FC]/50'
+              }`}
+            >
+              Orders ({actualOrderStates.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('rentals')}
+              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
+                tab === 'rentals'
+                  ? 'bg-[#1D5FAF] text-white shadow-xs'
+                  : 'text-[#5B6B82] hover:text-[#12263F] hover:bg-[#EAF2FC]/50'
+              }`}
+            >
+              Rentals ({rentalStates.length})
+            </button>
+          </div>
+        </div>
+
+        {activeList.length === 0 ? (
+          <div className="py-10 text-center flex flex-col items-center justify-center text-[#5B6B82]">
+            <MapPin className="h-8 w-8 text-[#8A97A8] mb-2 stroke-[1.5]" />
+            <p className="text-xs font-medium">
+              {tab === 'orders' ? 'No state order delivery data yet' : 'No state rental deployment data yet'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3.5">
+            {activeList.slice(0, 6).map((item, idx) => {
+              const widthPct = Math.max(8, Math.round((item.ordersCount / maxCount) * 100));
+              const barColors = [
+                'bg-[#1D5FAF]', // Primary Blue
+                'bg-[#0B2545]', // Navy
+                'bg-[#F28C38]', // Accent Amber
+                'bg-[#10B981]', // Emerald
+                'bg-[#8B5CF6]', // Purple
+                'bg-[#64748B]', // Slate
+              ];
+              const barColor = barColors[idx % barColors.length];
+
+              return (
+                <div key={item.state} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <MapPin className="h-3.5 w-3.5 text-[#1D5FAF] shrink-0" />
+                      <span className="text-xs font-semibold text-[#12263F] truncate">{item.state}</span>
+                    </div>
+                    <div className="text-right shrink-0 tabular-nums flex items-center gap-2">
+                      <span className="text-xs font-bold text-[#12263F]">
+                        {item.ordersCount} {tab === 'orders' ? (item.ordersCount === 1 ? 'order' : 'orders') : (item.ordersCount === 1 ? 'rental' : 'rentals')}
+                      </span>
+                      <span className="text-[11px] text-[#5B6B82]">({formatINR(item.revenue)})</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-2 w-full rounded-full bg-[#EAF2FC] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${barColor} transition-all duration-300`}
+                        style={{ width: `${widthPct}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-semibold text-[#5B6B82] w-8 text-right shrink-0">
+                      {item.percentage}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-[#DCE6F2] flex items-center justify-between text-[11px] text-[#5B6B82]">
+        <span>
+          Total {tab === 'orders' ? 'Orders' : 'Rentals'}: <strong className="text-[#12263F]">{totalCount}</strong>
+        </span>
+        <span className="text-[#1D5FAF] font-medium">
+          {activeList.length} {activeList.length === 1 ? 'Active State' : 'Active States'}
+        </span>
       </div>
     </div>
   );

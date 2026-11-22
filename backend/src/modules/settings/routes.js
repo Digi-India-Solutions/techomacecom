@@ -41,6 +41,19 @@ adminSettingsRoutes.get("/pincodes/export", view, c.exportPincodes);
 adminSettingsRoutes.get("/pincodes", view, validate({ query: listQuery({}) }), c.listPincodes);
 adminSettingsRoutes.post("/pincodes/import", edit, csvUpload, c.importPincodes);
 adminSettingsRoutes.delete("/pincodes", edit, c.clearPincodes);
+adminSettingsRoutes.patch("/pincodes/:pincode/toggle-cod", edit, c.togglePincodeCod);
+adminSettingsRoutes.patch("/pincodes/:pincode/toggle-active", edit, c.togglePincodeActive);
+adminSettingsRoutes.delete("/pincodes/:pincode", edit, c.deletePincode);
+
+// Rental serviceable PIN codes (Settings → Rental)
+adminSettingsRoutes.get("/rental-pincodes/summary", view, c.rentalPincodeSummary);
+adminSettingsRoutes.get("/rental-pincodes/export", view, c.exportRentalPincodes);
+adminSettingsRoutes.get("/rental-pincodes", view, validate({ query: listQuery({}) }), c.listRentalPincodes);
+adminSettingsRoutes.post("/rental-pincodes/import", edit, csvUpload, c.importRentalPincodes);
+adminSettingsRoutes.delete("/rental-pincodes", edit, c.clearRentalPincodes);
+adminSettingsRoutes.patch("/rental-pincodes/:pincode/toggle-cod", edit, c.toggleRentalPincodeCod);
+adminSettingsRoutes.patch("/rental-pincodes/:pincode/toggle-active", edit, c.toggleRentalPincodeActive);
+adminSettingsRoutes.delete("/rental-pincodes/:pincode", edit, c.deleteRentalPincode);
 
 adminSettingsRoutes.get("/notifications", view, c.listTemplates);
 adminSettingsRoutes.put("/notifications", edit, validate({ body: saveTemplatesSchema }), c.saveTemplates);
@@ -51,4 +64,6 @@ adminSettingsRoutes.put("/:group", edit, groupParam, c.saveGroup);
 
 export const publicSettingsRoutes = Router();
 publicSettingsRoutes.get("/settings/public", c.publicSettings);
+publicSettingsRoutes.get("/pincodes/rental/:pincode", c.checkRentalPincode);
+publicSettingsRoutes.get("/rentals/pincodes/:pincode", c.checkRentalPincode);
 publicSettingsRoutes.get("/pincodes/:pincode", c.checkPincode);
