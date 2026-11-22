@@ -11,6 +11,7 @@ import productRoutes from "./modules/products/routes.js";
 import rentalUnitRoutes from "./modules/rental-units/routes.js";
 import bannerRoutes from "./modules/banners/routes.js";
 import { publicEnquiryRoutes, adminEnquiryRoutes } from "./modules/enquiries/routes.js";
+import { publicReviewRoutes, adminReviewRoutes } from "./modules/reviews/routes.js";
 import { adminSettingsRoutes, publicSettingsRoutes } from "./modules/settings/routes.js";
 import { adminOrdersRoutes, storefrontOrdersRoutes } from "./modules/orders/index.js";
 import { adminReturnRoutes, customerReturnRoutes } from "./modules/returns/routes.js";
@@ -37,7 +38,8 @@ api.use("/orders", storefrontOrdersRoutes); // customer orders (create, list, de
 api.use("/returns", customerReturnRoutes); // customer's return / replacement requests, photo upload
 api.use("/rentals", storefrontRentalRoutes); // rental quote (public) · bookings, KYC, payments, extensions, pickup
 api.use("/banners", bannerRoutes); // public hero banners for storefront
-api.use("/enquiries", publicEnquiryRoutes); // sleep-test callback form (+ risk quiz answers)
+api.use("/enquiries", publicEnquiryRoutes); // sleep-test, contact us, bulk enquiry, seller registration
+api.use("/reviews", publicReviewRoutes); // product reviews (read: public · write: signed-in customer)
 api.use(publicSettingsRoutes); // /settings/public (store details, fees, rules) · /pincodes/:pincode
 api.use("/coupons", couponRoutes); // storefront coupon apply / validate
 api.use("/deals", dealRoutes); // storefront deals of the day
@@ -66,7 +68,8 @@ admin.use("/orders", adminOrdersRoutes); // sales orders & fulfilment
 admin.use("/returns", adminReturnRoutes); // RMA: approve, pickup, inspect, refund / replace
 admin.use("/customers", adminCustomerRoutes); // customer management
 admin.use("/banners", bannerRoutes); // hero banners & marketing management
-admin.use("/enquiries", adminEnquiryRoutes); // leads from public forms (enquiries.view)
+admin.use("/enquiries", adminEnquiryRoutes); // leads from public forms (enquiries.view / .edit)
+admin.use("/reviews", adminReviewRoutes); // review moderation (reviews.view / .edit / .delete)
 admin.use("/settings", adminSettingsRoutes); // store, shipping, tax & invoice, notifications, rental
 admin.use("/coupons", couponRoutes); // coupons & discount management
 admin.use("/deals", dealRoutes); // deals of the day flash sales

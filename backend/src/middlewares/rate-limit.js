@@ -68,3 +68,13 @@ export const enquiryLimiter = limiter({
   limit: Number(process.env.ENQUIRY_RATE_LIMIT) || 10,
   message: "Too many requests from this network. Please call us or try again in a few minutes.",
 });
+
+/**
+ * Review submit + review photo upload: 20 per 15 min per IP (already behind sign-in).
+ * REVIEW_RATE_LIMIT overrides it (the integration tests raise it).
+ */
+export const reviewLimiter = limiter({
+  windowMs: 15 * 60 * 1000,
+  limit: Number(process.env.REVIEW_RATE_LIMIT) || 20,
+  message: "Too many review requests. Please try again in a few minutes.",
+});

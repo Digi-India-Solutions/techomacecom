@@ -50,6 +50,11 @@ export function CustomerDetailPage() {
     setLoading(true);
     Promise.all([
       getCustomerById(id),
+      listOrders(),
+      listRentals(),
+      // real customer filters on the API (linked account / same mobile or email); [] if the role cannot view them
+      listEnquiries({ customerId: id }).catch(() => [] as EnquiryRecord[]),
+      listReviews('all', { customerId: id }).catch(() => [] as ProductReview[]),
       listOrders().catch(() => []), // the profile still loads if orders cannot be read
       listRentals()
         .then((res) => res.items)
@@ -66,6 +71,13 @@ export function CustomerDetailPage() {
               (o) => o.customerId === cust.id || o.customerName === cust.name
             )
           );
+          setRentals(
+            allRentals.filter(
+              (r) => r.customerId === cust.id || r.customerName === cust.name
+            )
+          );
+          setEnquiries(allEnquiries);
+          setReviews(allReviews);
           setRentals(allRentals.filter((r) => r.customer.id === cust.id));
           setEnquiries(
             allEnquiries.filter(

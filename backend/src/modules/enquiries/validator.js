@@ -90,4 +90,75 @@ export const adminListQuery = listQuery({
   type: z.enum(["sleep_test", "bulk", "contact"]).optional(),
   status: z.enum(ENQUIRY_STATUSES).optional(),
   risk: z.enum(["low", "moderate", "high"]).optional(),
+  // seller registrations are stored as type "contact"; this narrows the contact tab
+  kind: z.enum(["contact_us", "seller_registration"]).optional(),
+  // a customer's enquiries: linked account, or the same mobile / email
+  customerId: z.string().regex(/^[1-9][0-9]{0,18}$/, "Invalid id").optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Contact Us + Bulk / institutional enquiry (public forms)
+// ---------------------------------------------------------------------------
+
+const requiredEmail = z
+  .string({ error: "Email is required" })
+  .trim()
+  .toLowerCase()
+  .max(200)
+  .pipe(z.email("Enter a valid email address"));
+
+/** POST /enquiries/contact — Contact Us page. Sending the form is the request to be contacted. */
+export const contactEnquirySchema = z.object({
+  name: z.string({ error: "Name is required" }).trim().min(2, "Name is required").max(120),
+  mobile: mobileField(),
+  email: requiredEmail,
+  subject: z.string({ error: "Subject is required" }).trim().min(2, "Subject is required").max(150),
+  message: z.string({ error: "Message is required" }).trim().min(5, "Please write a short message").max(2000),
+  honeypot: z.string().max(200).optional().default(""),
+  sourcePage: optionalText(200),
+});
+
+/** POST /enquiries/bulk — hospital / clinic bulk-order enquiry. */
+export const bulkEnquirySchema = z.object({
+  name: z.string({ error: "Name is required" }).trim().min(2, "Name is required").max(120),
+  organizationName: z.string({ error: "Organisation is required" }).trim().min(2, "Organisation is required").max(200),
+  email: requiredEmail,
+  mobile: mobileField(),
+  city: z.string({ error: "City is required" }).trim().min(2, "City is required").max(80),
+  state: optionalText(80),
+  pincode: z
+    .string()
+    .trim()
+    .optional()
+    .default("")
+    .refine((v) => v === "" || /^[1-9][0-9]{5}$/.test(v), "Enter a valid 6-digit PIN code")
+    .transform((v) => v || null),
+  equipmentRequired: z.array(z.string().trim().min(1).max(120)).max(30).optional().default([]),
+  estimatedBudget: optionalText(80),
+  timeline: optionalText(80),
+  message: optionalText(2000),
+  honeypot: z.string().max(200).optional().default(""),
+  sourcePage: optionalText(200),
+});
+
+// ---------------------------------------------------------------------------
+// Admin follow-up
+// ---------------------------------------------------------------------------
+
+const idString = z.string().regex(/^[1-9][0-9]{0,18}$/, "Invalid id");
+
+/** PATCH /admin/enquiries/:id — any subset of status / assigned staff / next follow-up date. */
+export const adminUpdateSchema = z
+  .object({
+    status: z.enum(ENQUIRY_STATUSES).optional(),
+    assignedTo: z.union([idString, z.null()]).optional(), // null = unassign
+    nextFollowUpDate: z
+      .union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date"), z.literal(""), z.null()])
+      .optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Nothing to update" });
+
+/** POST /admin/enquiries/:id/notes */
+export const adminNoteSchema = z.object({
+  note: z.string({ error: "Write a note" }).trim().min(1, "Write a note").max(2000),
 });

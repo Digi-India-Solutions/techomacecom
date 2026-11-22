@@ -1,138 +1,108 @@
 import type { ProductReview, ReviewStatus } from '@/types/admin';
-import { mockDelay } from './client';
-import { PRODUCT_IMAGES } from './mockData';
+import { adminDelete, adminFetch, adminGet, adminPatch, adminPost, adminPut, type ListMeta } from './client';
 
-let reviewsStore: ProductReview[] = [
-  {
-    id: 'rev-1',
-    productId: 'prod-oxy-5l',
-    productName: 'MedixPulse 5L Stationary Oxygen Concentrator',
-    productImage: PRODUCT_IMAGES.oxygenConcentrator,
-    reviewerName: 'Sandeep Kulkarni',
-    reviewerMobileMasked: '+91 98XXX XX412',
-    rating: 5,
-    title: 'Whisper-quiet 24/7 operation for my father',
-    comment: 'We ordered this for post-hospital recovery at home. Purity stays at 94% even at 4 LPM and the humidifier bottle works smoothly.',
-    images: [PRODUCT_IMAGES.oxygenConcentrator],
-    verifiedBuyer: true,
-    status: 'pending',
-    createdAt: '2026-11-17T06:15:00Z',
-  },
-  {
-    id: 'rev-2',
-    productId: 'prod-dental-chair',
-    productName: 'DentaLux 5000 Electromechanical Dental Chair Unit',
-    productImage: PRODUCT_IMAGES.dentalChair,
-    reviewerName: 'Dr. Neha Verma',
-    reviewerMobileMasked: '+91 97XXX XX901',
-    rating: 5,
-    title: 'Smooth actuator and bright sensor LED lamp',
-    comment: 'Technician arrived within 24 hours of chair delivery and completed plumbing + compressor testing cleanly.',
-    images: [PRODUCT_IMAGES.dentalChair],
-    verifiedBuyer: true,
-    status: 'pending',
-    createdAt: '2026-11-16T18:30:00Z',
-  },
-  {
-    id: 'rev-3',
-    productId: 'prod-wheelchair',
-    productName: 'Karma ErgoLite Ultra-Light Folding Wheelchair',
-    productImage: PRODUCT_IMAGES.wheelchair,
-    reviewerName: 'Arjun Nair',
-    reviewerMobileMasked: '+91 99XXX XX118',
-    rating: 4,
-    title: 'Fits easily in hatchback car boot',
-    comment: 'Very light at around 10 kg. Cushioning is firm and comfortable for senior citizens.',
-    images: [],
-    verifiedBuyer: true,
-    status: 'approved',
-    createdAt: '2026-11-14T10:15:00Z',
-  },
-  {
-    id: 'rev-4',
-    productId: 'prod-patient-monitor',
-    productName: 'MediCore Med-Vitals 7000 5-Para Patient Monitor',
-    productImage: PRODUCT_IMAGES.patientMonitor,
-    reviewerName: 'City Pulse Nursing Home',
-    reviewerMobileMasked: '+91 98XXX XX772',
-    rating: 5,
-    title: 'Accurate NIBP and clear ECG screen',
-    comment: 'Using 3 units in our step-down ICU ward. Battery easily lasts 3.5–4 hours during power backup switchovers.',
-    images: [PRODUCT_IMAGES.patientMonitor],
-    verifiedBuyer: true,
-    status: 'approved',
-    createdAt: '2026-11-12T12:00:00Z',
-  },
-  {
-    id: 'rev-5',
-    productId: 'prod-oxy-5l',
-    productName: 'MedixPulse 5L Stationary Oxygen Concentrator',
-    productImage: PRODUCT_IMAGES.oxygenConcentrator,
-    reviewerName: 'Unknown Guest',
-    reviewerMobileMasked: '+91 90XXX XX009',
-    rating: 1,
-    title: 'Spam link comment',
-    comment: 'Buy cheap medicines from external site xyz...',
-    images: [],
-    verifiedBuyer: false,
-    status: 'rejected',
-    rejectionReason: 'Promotional spam / unverified purchase',
-    createdAt: '2026-11-10T08:45:00Z',
-  },
-];
+/**
+ * Product reviews — live data from the API (backend/src/modules/reviews).
+ *
+ *   GET    /admin/reviews              ?status=&rating=&productId=&customerId=&verified=&featured=&withImages=&from=&to=&q=&page=&limit=
+ *   GET    /admin/reviews/summary      tab counts + per-product ratings
+ *   PATCH  /admin/reviews/:id/status   { status, reason }        approve / reject / back to pending
+ *   PUT    /admin/reviews/:id          { title, comment }
+ *   PATCH  /admin/reviews/:id/reply    { reply }                 '' removes it
+ *   PATCH  /admin/reviews/:id/feature  { featured }              home-page testimonial
+ *   PATCH  /admin/reviews/:id/verified { verified }              verified-buyer badge
+ *   DELETE /admin/reviews/:id                                    (reviews.delete)
+ *   POST   /admin/reviews/bulk         { ids, action: approve|reject|delete, reason }
+ *
+ * Product rating (avg + count) is recomputed on the server after every change.
+ */
 
-export async function listReviews(status?: 'all' | ReviewStatus): Promise<ProductReview[]> {
-  await mockDelay(120);
-  const list = status && status !== 'all' ? reviewsStore.filter((r) => r.status === status) : reviewsStore;
-  return structuredClone(list);
+export interface ReviewFilters {
+  status?: 'all' | ReviewStatus;
+  rating?: number;
+  productId?: string;
+  customerId?: string;
+  verified?: boolean;
+  featured?: boolean;
+  withImages?: boolean;
+  from?: string;
+  to?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
 }
 
-export async function getAllReviewsForSummary(): Promise<ProductReview[]> {
-  return structuredClone(reviewsStore);
+export interface ReviewSummary {
+  counts: { pending: number; approved: number; rejected: number; total: number; featured: number };
+  products: { productId: string; productName: string; avgRating: number; count: number }[];
 }
 
-export async function updateReviewStatus(
-  id: string,
-  status: ReviewStatus,
-  rejectionReason?: string
-): Promise<ProductReview> {
-  await mockDelay(130);
-  const existing = reviewsStore.find((r) => r.id === id);
-  if (!existing) throw new Error('Review not found');
-  const updated: ProductReview = {
-    ...existing,
-    status,
-    rejectionReason: status === 'rejected' ? rejectionReason : undefined,
-  };
-  reviewsStore = reviewsStore.map((r) => (r.id === id ? updated : r));
-  return structuredClone(updated);
+function query(f: ReviewFilters): string {
+  const p = new URLSearchParams();
+  if (f.status && f.status !== 'all') p.set('status', f.status);
+  if (f.rating) p.set('rating', String(f.rating));
+  if (f.productId) p.set('productId', f.productId);
+  if (f.customerId) p.set('customerId', f.customerId);
+  if (f.verified !== undefined) p.set('verified', String(f.verified));
+  if (f.featured !== undefined) p.set('featured', String(f.featured));
+  if (f.withImages) p.set('withImages', 'true');
+  if (f.from) p.set('from', f.from);
+  if (f.to) p.set('to', f.to);
+  if (f.search?.trim()) p.set('q', f.search.trim().slice(0, 100));
+  p.set('page', String(f.page || 1));
+  p.set('limit', String(Math.min(f.limit || 50, 100)));
+  return p.toString();
 }
 
-export async function editReviewText(
-  id: string,
-  title: string,
-  comment: string
-): Promise<ProductReview> {
-  await mockDelay(130);
-  const existing = reviewsStore.find((r) => r.id === id);
-  if (!existing) throw new Error('Review not found');
-  const updated: ProductReview = { ...existing, title, comment };
-  reviewsStore = reviewsStore.map((r) => (r.id === id ? updated : r));
-  return structuredClone(updated);
+export async function listReviewsPage(filters: ReviewFilters = {}): Promise<{ rows: ProductReview[]; meta?: ListMeta }> {
+  const { data, meta } = await adminFetch<ProductReview[]>(`/admin/reviews?${query(filters)}`);
+  return { rows: data, meta };
+}
+
+/** First page (max 100) of one status — kept for the customer detail page. */
+export async function listReviews(status: 'all' | ReviewStatus = 'all', extra: Omit<ReviewFilters, 'status'> = {}): Promise<ProductReview[]> {
+  return (await listReviewsPage({ status, limit: 100, ...extra })).rows;
+}
+
+export async function getReviewSummary(): Promise<ReviewSummary> {
+  return adminGet<ReviewSummary>('/admin/reviews/summary');
+}
+
+const path = (id: string, suffix = '') => `/admin/reviews/${encodeURIComponent(id)}${suffix}`;
+
+export async function updateReviewStatus(id: string, status: ReviewStatus, rejectionReason?: string): Promise<ProductReview> {
+  return adminPatch<ProductReview>(path(id, '/status'), { status, reason: rejectionReason || '' });
+}
+
+export async function editReviewText(id: string, title: string, comment: string): Promise<ProductReview> {
+  return adminPut<ProductReview>(path(id), { title, comment });
+}
+
+export async function replyToReview(id: string, reply: string): Promise<ProductReview> {
+  return adminPatch<ProductReview>(path(id, '/reply'), { reply });
+}
+
+export async function setReviewFeatured(id: string, featured: boolean): Promise<ProductReview> {
+  return adminPatch<ProductReview>(path(id, '/feature'), { featured });
+}
+
+export async function setReviewVerified(id: string, verified: boolean): Promise<ProductReview> {
+  return adminPatch<ProductReview>(path(id, '/verified'), { verified });
 }
 
 export async function deleteReview(id: string): Promise<void> {
-  await mockDelay(110);
-  reviewsStore = reviewsStore.filter((r) => r.id !== id);
+  await adminDelete(path(id));
 }
 
-export async function bulkUpdateReviews(
+export async function bulkReviewAction(
   ids: string[],
-  status: 'approved' | 'rejected',
+  action: 'approve' | 'reject' | 'delete',
   rejectionReason?: string
-): Promise<void> {
-  await mockDelay(160);
-  reviewsStore = reviewsStore.map((r) =>
-    ids.includes(r.id) ? { ...r, status, rejectionReason } : r
-  );
+): Promise<{ count: number; message: string }> {
+  return adminPost('/admin/reviews/bulk', { ids, action, reason: rejectionReason || '' });
+}
+
+/** Kept for older callers: bulk approve / reject. */
+export async function bulkUpdateReviews(ids: string[], status: 'approved' | 'rejected', rejectionReason?: string): Promise<void> {
+  await bulkReviewAction(ids, status === 'approved' ? 'approve' : 'reject', rejectionReason);
 }

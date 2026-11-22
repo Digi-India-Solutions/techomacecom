@@ -1271,6 +1271,11 @@ model Review {
   reject_reason     String?
   moderated_by      BigInt?
   moderated_at      DateTime? @db.Timestamptz(6)
+  // + added: shown in the home-page testimonials (approved reviews only)
+  is_featured       Boolean   @default(false)
+  // + added: public reply from the store under the review
+  admin_reply       String?
+  admin_reply_at    DateTime? @db.Timestamptz(6)
   created_at        DateTime  @default(now()) @db.Timestamptz(6)
   updated_at        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
@@ -1279,7 +1284,9 @@ model Review {
   moderator AdminUser?    @relation("ReviewModerator", fields: [moderated_by], references: [id], onDelete: SetNull)
   images    ReviewImage[]
 
+  @@unique([product_id, customer_id]) // one review per customer per product (guests: NULL, not limited)
   @@index([product_id, status])
+  @@index([status, is_featured])
   @@map("reviews")
 }
 

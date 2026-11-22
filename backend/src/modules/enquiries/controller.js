@@ -1,5 +1,5 @@
 import { ok, clientIp } from "../../lib/http.js";
-import { alertStaff } from "../../services/admin-alerts.service.js";
+import { logActivity } from "../../services/activity.service.js";
 import * as service from "./service.js";
 
 /**
@@ -73,7 +73,71 @@ export async function list(req, res) {
   return ok(res, rows, { meta });
 }
 
+/** GET /admin/enquiries/assignees */
+export async function assignees(req, res) {
+  return ok(res, await service.assignees());
+}
+
 /** GET /admin/enquiries/:id */
 export async function getOne(req, res) {
   return ok(res, await service.getById(BigInt(req.validatedParams.id)));
+}
+
+/**
+ * POST /enquiries/contact — Contact Us page.
+ * POST /enquiries/bulk    — hospital / clinic bulk-order enquiry.
+ * Same honeypot rule as above: bots get a believable answer, nothing is stored.
+ */
+export async function createContact(req, res) {
+  if (req.body.honeypot) {
+    return ok(res, { enquiryId: service.enquiryCode(Date.now() % 1_000_000, "contact"), message: "Thank you! We will get back to you shortly." }, { status: 201 });
+  }
+  const row = await service.createContactEnquiry(req.body, { customerId: req.customer?.id, ip: clientIp(req) });
+  return ok(
+    res,
+    { enquiryId: service.enquiryCode(row.id, row.type), message: "Thank you! Our team will get back to you within 24 hours." },
+    { status: 201 }
+  );
+}
+
+export async function createBulk(req, res) {
+  if (req.body.honeypot) {
+    return ok(res, { enquiryId: service.enquiryCode(Date.now() % 1_000_000, "bulk"), message: "Thank you! Our B2B team will contact you shortly." }, { status: 201 });
+  }
+  const row = await service.createBulkEnquiry(req.body, { customerId: req.customer?.id, ip: clientIp(req) });
+  return ok(
+    res,
+    { enquiryId: service.enquiryCode(row.id, row.type), message: "Thank you! Our B2B team will share a quotation within 24–48 hours." },
+    { status: 201 }
+  );
+}
+
+/** PATCH /admin/enquiries/:id — status / assigned staff / next follow-up date. */
+export async function update(req, res) {
+  const { enquiry, changes } = await service.updateEnquiry(BigInt(req.validatedParams.id), req.body, req.admin);
+  if (changes.length) {
+    await logActivity(req, {
+      module: "enquiries",
+      action: req.body.status !== undefined && changes.some((c) => c.startsWith("Status")) ? "status_change" : "update",
+      entityType: "enquiry",
+      entityId: BigInt(enquiry.id),
+      entityLabel: `${enquiry.code} · ${enquiry.name}`,
+      summary: changes.join(" · "),
+    });
+  }
+  return ok(res, enquiry);
+}
+
+/** POST /admin/enquiries/:id/notes */
+export async function addNote(req, res) {
+  const enquiry = await service.addNote(BigInt(req.validatedParams.id), req.body.note, req.admin);
+  await logActivity(req, {
+    module: "enquiries",
+    action: "note",
+    entityType: "enquiry",
+    entityId: BigInt(enquiry.id),
+    entityLabel: `${enquiry.code} · ${enquiry.name}`,
+    summary: "Added a follow-up note",
+  });
+  return ok(res, enquiry, { status: 201 });
 }

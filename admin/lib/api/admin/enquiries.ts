@@ -1,200 +1,210 @@
 import type { EnquiryCategory, EnquiryRecord, EnquiryStatus } from '@/types/admin';
-import { downloadCsv, mockDelay } from './client';
+import { adminFetch, adminGet, adminPatch, adminPost, downloadCsv, type ListMeta } from './client';
 
-let enquiriesStore: EnquiryRecord[] = [
-  {
-    id: 'enq-st-1',
-    enquiryNumber: 'ENQ-9045',
-    category: 'sleep_test',
-    name: 'Rajiv Menon',
-    mobile: '+91 98452 11092',
-    email: 'rajiv.menon@gmail.com',
-    city: 'Bengaluru',
-    testType: 'Home Level-3 Sleep Study',
-    preferredDate: '2026-11-19',
-    message: 'Experiencing daytime fatigue & snoring; doctor advised Home Sleep Apnea Test.',
-    status: 'new',
-    assignedStaffId: 'usr-2',
-    assignedStaffName: 'Priya Nair',
-    nextFollowUpDate: '2026-11-18',
-    notes: [
-      {
-        id: 'en-1',
-        author: 'System',
-        text: 'Lead captured from Sleep Test Landing Page.',
-        createdAt: '2026-11-17T07:10:00Z',
-      },
-    ],
-    createdAt: '2026-11-17T07:10:00Z',
-  },
-  {
-    id: 'enq-st-2',
-    enquiryNumber: 'ENQ-9043',
-    category: 'sleep_test',
-    name: 'Deepa Chawla',
-    mobile: '+91 98114 55391',
-    email: 'deepa.c@outlook.com',
-    city: 'Gurugram',
-    testType: 'CPAP Titration',
-    preferredDate: '2026-11-20',
-    message: 'Need auto-CPAP titration + mask fitting at home.',
-    status: 'contacted',
-    assignedStaffId: 'usr-3',
-    assignedStaffName: 'Vikram Singh',
-    nextFollowUpDate: '2026-11-18',
-    notes: [
-      {
-        id: 'en-2',
-        author: 'Vikram Singh',
-        text: 'Spoke on call; explained ₹2,500 home titration package.',
-        createdAt: '2026-11-16T16:40:00Z',
-      },
-    ],
-    createdAt: '2026-11-16T14:20:00Z',
-  },
-  {
-    id: 'enq-b2b-1',
-    enquiryNumber: 'ENQ-9042',
-    category: 'bulk_b2b',
-    name: 'Dr. Siddharth Mehta',
-    mobile: '+91 98204 55120',
-    email: 'dr.mehta@smilecraftdental.in',
-    city: 'Mumbai',
-    organization: 'SmileCraft Multispecialty Dental',
-    gstin: '27AAACS8129M1Z9',
-    productsSummary: 'DentaLux 5000 Dental Chair × 4, AuraFlow 18B Autoclave × 2',
-    estimatedQty: 6,
-    message: 'Setting up new Andheri West 4-chair clinic. Need turnkey institutional quote with AMC.',
-    status: 'new',
-    assignedStaffId: 'usr-1',
-    assignedStaffName: 'Rohan Malhotra',
-    nextFollowUpDate: '2026-11-18',
-    notes: [],
-    createdAt: '2026-11-17T07:50:00Z',
-  },
-  {
-    id: 'enq-b2b-2',
-    enquiryNumber: 'ENQ-9039',
-    category: 'bulk_b2b',
-    name: 'Dr. Pooja Hegde',
-    mobile: '+91 99001 44781',
-    email: 'procurement@orthocarerehab.in',
-    city: 'Hyderabad',
-    organization: 'Orthocare Rehab Center',
-    gstin: '36AABCO9120F1Z4',
-    productsSummary: 'Karma ErgoLite Folding Wheelchair × 6',
-    estimatedQty: 6,
-    message: 'Requesting GST B2B proforma invoice for 6 wheelchairs.',
-    status: 'follow_up',
-    assignedStaffId: 'usr-2',
-    assignedStaffName: 'Priya Nair',
-    nextFollowUpDate: '2026-11-19',
-    notes: [
-      {
-        id: 'en-3',
-        author: 'Priya Nair',
-        text: 'Shared 8% institutional discount quote via email.',
-        createdAt: '2026-11-15T18:10:00Z',
-      },
-    ],
-    createdAt: '2026-11-15T16:45:00Z',
-  },
-  {
-    id: 'enq-con-1',
-    enquiryNumber: 'ENQ-9041',
-    category: 'contact',
-    name: 'Farhan Siddiqui',
-    mobile: '+91 98118 90234',
-    email: 'farhan.s@gmail.com',
-    city: 'New Delhi',
-    subject: 'Urgent 3-month Home ICU setup',
-    message: 'Need 5-Function Bed + 5-Para Patient Monitor + Oxygen Concentrator delivered today.',
-    status: 'new',
-    assignedStaffId: 'usr-2',
-    assignedStaffName: 'Priya Nair',
-    nextFollowUpDate: '2026-11-17',
-    notes: [],
-    createdAt: '2026-11-16T21:15:00Z',
-  },
-];
+/**
+ * Enquiries — live data from the API (backend/src/modules/enquiries).
+ *
+ *   GET   /admin/enquiries            ?type=&status=&kind=&q=&customerId=&page=&limit=
+ *   GET   /admin/enquiries/assignees  active staff for "Assign to"
+ *   GET   /admin/enquiries/:id
+ *   PATCH /admin/enquiries/:id        { status?, assignedTo?, nextFollowUpDate? }   (enquiries.edit)
+ *   POST  /admin/enquiries/:id/notes  { note }                                     (enquiries.edit)
+ *
+ * Sources: sleep-test form / quiz → sleep_test · /bulk-enquiry → bulk ·
+ * /contact → contact (kind contact_us) · /sell → contact (kind seller_registration).
+ */
 
-export async function listEnquiries(filters?: {
+/** API row (enquiries/service.js → toAdminDto) */
+interface ApiEnquiry {
+  id: string;
+  code: string;
+  type: 'sleep_test' | 'bulk' | 'contact' | 'seller_registration';
+  name: string;
+  mobile: string;
+  email: string;
+  city: string;
+  message: string;
+  status: EnquiryStatus;
+  sourcePage: string;
+  testType: string | null;
+  preferredDate: string | null;
+  sellerDetails: EnquiryRecord['sellerDetails'];
+  quiz: EnquiryRecord['quiz'];
+  customerId: string | null;
+  subject: string | null;
+  organization: string | null;
+  gstin: string | null;
+  productsSummary: string | null;
+  estimatedBudget: string | null;
+  timeline: string | null;
+  state: string | null;
+  pincode: string | null;
+  assignedStaffId: string | null;
+  assignedStaffName: string | null;
+  nextFollowUpDate: string | null;
+  notes: { id: string; author: string; text: string; createdAt: string }[];
+  createdAt: string;
+}
+
+const CATEGORY_TO_TYPE: Record<EnquiryCategory, 'sleep_test' | 'bulk' | 'contact'> = {
+  sleep_test: 'sleep_test',
+  bulk_b2b: 'bulk',
+  contact: 'contact',
+  seller_registration: 'contact',
+};
+
+const opt = <T>(v: T | null | undefined) => (v === null || v === undefined || v === '' ? undefined : v);
+
+function toRecord(e: ApiEnquiry): EnquiryRecord {
+  const category: EnquiryCategory =
+    e.type === 'seller_registration'
+      ? 'seller_registration'
+      : e.type === 'sleep_test'
+        ? 'sleep_test'
+        : e.type === 'bulk'
+          ? 'bulk_b2b'
+          : 'contact';
+  return {
+    id: e.id,
+    enquiryNumber: e.code,
+    category,
+    kind: e.type === 'seller_registration' ? 'seller_registration' : e.type === 'contact' ? 'contact_us' : e.type,
+    name: e.name,
+    mobile: e.mobile,
+    email: e.email,
+    city: e.city,
+    testType: opt(e.testType),
+    preferredDate: opt(e.preferredDate),
+    organization: opt(e.organization),
+    gstin: opt(e.gstin),
+    productsSummary: opt(e.productsSummary),
+    estimatedBudget: opt(e.estimatedBudget),
+    timeline: opt(e.timeline),
+    state: opt(e.state),
+    pincode: opt(e.pincode),
+    sourcePage: opt(e.sourcePage),
+    quiz: e.quiz,
+    sellerDetails: e.sellerDetails,
+    subject: opt(e.subject),
+    message: e.message,
+    status: e.status,
+    assignedStaffId: opt(e.assignedStaffId),
+    assignedStaffName: opt(e.assignedStaffName),
+    nextFollowUpDate: opt(e.nextFollowUpDate),
+    notes: e.notes || [],
+    createdAt: e.createdAt,
+  };
+}
+
+export interface EnquiryFilters {
   category?: EnquiryCategory;
   status?: 'all' | EnquiryStatus;
   search?: string;
-}): Promise<EnquiryRecord[]> {
-  await mockDelay(120);
-  let list = [...enquiriesStore];
-
-  if (filters?.category) {
-    list = list.filter((e) => e.category === filters.category);
-  }
-  if (filters?.status && filters.status !== 'all') {
-    list = list.filter((e) => e.status === filters.status);
-  }
-  if (filters?.search) {
-    const q = filters.search.trim().toLowerCase();
-    list = list.filter(
-      (e) =>
-        e.name.toLowerCase().includes(q) ||
-        e.mobile.toLowerCase().includes(q) ||
-        e.city.toLowerCase().includes(q) ||
-        e.enquiryNumber.toLowerCase().includes(q) ||
-        (e.organization && e.organization.toLowerCase().includes(q))
-    );
-  }
-
-  return structuredClone(list);
+  /** Contact tab only: Contact Us messages vs seller registrations */
+  kind?: 'all' | 'contact_us' | 'seller_registration';
+  risk?: 'all' | 'low' | 'moderate' | 'high';
+  customerId?: string;
+  page?: number;
+  limit?: number;
 }
 
-export async function updateEnquiry(
-  id: string,
-  patch: Partial<
-    Pick<EnquiryRecord, 'status' | 'assignedStaffId' | 'assignedStaffName' | 'nextFollowUpDate'>
-  >
-): Promise<EnquiryRecord> {
-  await mockDelay(130);
-  const existing = enquiriesStore.find((e) => e.id === id);
-  if (!existing) throw new Error('Enquiry not found');
-  const updated: EnquiryRecord = { ...existing, ...patch };
-  enquiriesStore = enquiriesStore.map((e) => (e.id === id ? updated : e));
-  return structuredClone(updated);
+function query(f: EnquiryFilters = {}): string {
+  const p = new URLSearchParams();
+  if (f.category === 'seller_registration') {
+    p.set('type', 'contact');
+    p.set('kind', 'seller_registration');
+  } else if (f.category === 'contact') {
+    p.set('type', 'contact');
+    p.set('kind', f.kind && f.kind !== 'all' ? f.kind : 'contact_us');
+  } else if (f.category) {
+    p.set('type', CATEGORY_TO_TYPE[f.category]);
+    if (f.kind && f.kind !== 'all') p.set('kind', f.kind);
+  }
+  if (f.status && f.status !== 'all') p.set('status', f.status);
+  if (f.risk && f.risk !== 'all') p.set('risk', f.risk);
+  if (f.search?.trim()) p.set('q', f.search.trim().slice(0, 100));
+  if (f.customerId) p.set('customerId', f.customerId);
+  p.set('page', String(f.page || 1));
+  p.set('limit', String(Math.min(f.limit || 50, 100)));
+  return p.toString();
 }
 
-export async function addEnquiryNote(
-  id: string,
-  author: string,
-  text: string
-): Promise<EnquiryRecord> {
-  await mockDelay(110);
-  const existing = enquiriesStore.find((e) => e.id === id);
-  if (!existing) throw new Error('Enquiry not found');
-  const updated: EnquiryRecord = {
-    ...existing,
-    notes: [
-      { id: `en-${Date.now()}`, author, text, createdAt: new Date().toISOString() },
-      ...existing.notes,
-    ],
-  };
-  enquiriesStore = enquiriesStore.map((e) => (e.id === id ? updated : e));
-  return structuredClone(updated);
+/** One page of enquiries + list meta (total, hasNextPage …). */
+export async function listEnquiriesPage(filters: EnquiryFilters = {}): Promise<{ rows: EnquiryRecord[]; meta?: ListMeta }> {
+  const { data, meta } = await adminFetch<ApiEnquiry[]>(`/admin/enquiries?${query(filters)}`);
+  return { rows: data.map(toRecord), meta };
 }
 
-export function exportEnquiriesCsv(list: EnquiryRecord[]): void {
+/** First page (max 100) — used by the customer detail page. */
+export async function listEnquiries(filters: EnquiryFilters = {}): Promise<EnquiryRecord[]> {
+  return (await listEnquiriesPage({ limit: 100, ...filters })).rows;
+}
+
+export async function getEnquiry(id: string): Promise<EnquiryRecord> {
+  return toRecord(await adminGet<ApiEnquiry>(`/admin/enquiries/${encodeURIComponent(id)}`));
+}
+
+/** Active staff for the "Assign to" dropdown. */
+export async function listAssignees(): Promise<{ id: string; name: string }[]> {
+  return adminGet<{ id: string; name: string }[]>('/admin/enquiries/assignees');
+}
+
+export interface EnquiryPatch {
+  status?: EnquiryStatus;
+  /** staff id, or null to unassign */
+  assignedTo?: string | null;
+  /** 'YYYY-MM-DD', or '' to clear */
+  nextFollowUpDate?: string;
+}
+
+/** Every change is also written as a timeline note on the server. */
+export async function updateEnquiry(id: string, patch: EnquiryPatch): Promise<EnquiryRecord> {
+  return toRecord(await adminPatch<ApiEnquiry>(`/admin/enquiries/${encodeURIComponent(id)}`, patch));
+}
+
+/** The author is the signed-in staff member (taken from the session on the server). */
+export async function addEnquiryNote(id: string, text: string): Promise<EnquiryRecord> {
+  return toRecord(await adminPost<ApiEnquiry>(`/admin/enquiries/${encodeURIComponent(id)}/notes`, { note: text }));
+}
+
+const CATEGORY_LABEL: Record<EnquiryCategory, string> = {
+  sleep_test: 'Sleep test',
+  bulk_b2b: 'Bulk / B2B',
+  contact: 'Contact',
+  seller_registration: 'Seller registration',
+};
+
+/** Downloads every enquiry matching the filters (all pages, not only the ones on screen). */
+export async function exportEnquiriesCsv(filters: EnquiryFilters = {}): Promise<number> {
+  const rows: EnquiryRecord[] = [];
+  for (let page = 1; page <= 50; page++) {
+    const res = await listEnquiriesPage({ ...filters, page, limit: 100 });
+    rows.push(...res.rows);
+    if (!res.meta?.hasNextPage) break;
+  }
   downloadCsv(
     `buydenmed-enquiries-${new Date().toISOString().slice(0, 10)}.csv`,
-    ['Enquiry #', 'Type', 'Date', 'Name', 'Mobile', 'City', 'Details', 'Status', 'Assigned Staff', 'Follow-up'],
-    list.map((e) => [
+    [
+      'Enquiry #', 'Type', 'Date', 'Name', 'Mobile', 'Email', 'City', 'Organisation', 'Details', 'Message',
+      'Risk', 'Status', 'Assigned Staff', 'Follow-up', 'Source',
+    ],
+    rows.map((e) => [
       e.enquiryNumber,
-      e.category,
+      e.kind === 'seller_registration' ? 'Seller registration' : CATEGORY_LABEL[e.category],
       e.createdAt.slice(0, 10),
       e.name,
       e.mobile,
+      e.email,
       e.city,
-      e.testType || e.productsSummary || e.subject || e.message,
+      e.organization || '',
+      e.testType || e.productsSummary || e.subject || '',
+      e.message,
+      e.quiz?.risk || '',
       e.status,
       e.assignedStaffName || 'Unassigned',
       e.nextFollowUpDate || '',
+      e.sourcePage || '',
     ])
   );
+  return rows.length;
 }

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { submitBulkEnquiry } from '@/lib/api';
+import { ApiClientError } from '@/lib/api/backend';
 import { useToastStore } from '@/lib/store';
 import type { Enquiry } from '@/types';
 import {
@@ -111,6 +112,8 @@ export default function BulkEnquiryPage() {
   const [formData, setFormData] = useState<Enquiry>(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [honeypot, setHoneypot] = useState('');
 
   const set = <K extends keyof Enquiry>(key: K, value: Enquiry[K]) =>
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -123,16 +126,40 @@ export default function BulkEnquiryPage() {
         : [...prev.equipmentRequired, item]
     }));
 
+  /** Same rules as the API (backend/src/modules/enquiries/validator.js → bulkEnquirySchema). */
+  const validate = (f: Enquiry): Record<string, string> => {
+    const found: Record<string, string> = {};
+    if (f.name.trim().length < 2) found.name = 'Contact name is required';
+    if (f.organizationName.trim().length < 2) found.organizationName = 'Clinic / hospital name is required';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) found.email = 'Enter a valid email address';
+    if (!/^[6-9]\d{9}$/.test(f.phone)) found.mobile = 'Enter a valid 10-digit mobile number';
+    if (f.city.trim().length < 2) found.city = 'City is required';
+    if (f.pincode && !/^[1-9][0-9]{5}$/.test(f.pincode)) found.pincode = 'Enter a valid 6-digit PIN code';
+    return found;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const found = validate(formData);
+    setErrors(found);
+    if (Object.keys(found).length) {
+      addToast({ type: 'error', title: 'Please check the form', message: Object.values(found)[0] });
+      return;
+    }
     setLoading(true);
     try {
-      const res = await submitBulkEnquiry(formData);
-      if (res.success) {
-        setSubmittedId(res.enquiryId);
-        addToast({ type: 'success', title: 'Enquiry submitted', message: res.message });
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
+      // Saved by the live API (POST /enquiries/bulk) → Admin → Enquiries → Bulk / B2B
+      const res = await submitBulkEnquiry({ ...formData, honeypot });
+      setSubmittedId(res.enquiryId);
+      addToast({ type: 'success', title: 'Enquiry submitted', message: res.message });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      if (err instanceof ApiClientError && err.fields) setErrors(err.fields);
+      addToast({
+        type: 'error',
+        title: 'Could not submit your enquiry',
+        message: err instanceof Error ? err.message : 'Please try again or call our procurement desk.',
+      });
     } finally {
       setLoading(false);
     }
@@ -214,6 +241,7 @@ export default function BulkEnquiryPage() {
                 onClick={() => {
                   setSubmittedId(null);
                   setFormData(EMPTY_FORM);
+                  setErrors({});
                 }}
                 className="px-6 py-3 rounded-lg border border-[#D5DEEA] hover:border-[#1D5FAF] text-[#12263F] text-sm font-semibold transition-colors cursor-pointer"
               >
@@ -419,6 +447,29 @@ export default function BulkEnquiryPage() {
                 </Field>
               </div>
             </section>
+
+            {/* Spam trap: hidden from people, bots fill it */}
+            <input
+              type="text"
+              name="company_website"
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden="true"
+              value={honeypot}
+              onChange={(e) => setHoneypot(e.target.value)}
+              className="hidden"
+            />
+
+            {Object.keys(errors).length > 0 && (
+              <div role="alert" className="px-6 sm:px-8 py-4 bg-red-50 text-[13px] text-[#B91C1C]">
+                <p className="font-semibold">Please fix the following:</p>
+                <ul className="mt-1 list-disc pl-5 space-y-0.5">
+                  {Object.entries(errors).map(([field, msg]) => (
+                    <li key={field}>{msg}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Submit */}
             <div className="p-6 sm:p-8 bg-[#FAFBFD] rounded-b-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
