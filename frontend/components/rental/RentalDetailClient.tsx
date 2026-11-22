@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Product, RentalPlan, RentalPlanType } from '@/types';
+import { Product, RentalPlanType, RentalQuote } from '@/types';
+import { fetchRentalQuote } from '@/lib/api/rentals';
+import { errorMessage } from '@/lib/api/backend';
 import { useRentalStore, useToastStore, usePincodeStore } from '@/lib/store';
 import { checkPincodeServiceability } from '@/lib/api';
 import { getProductImageUrl } from '@/lib/utils';
@@ -71,35 +73,41 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
   // Update duration if activePlan changes and current duration is outside min/max
   const validDuration = Math.max(minDuration, Math.min(maxDuration, duration));
 
-  // Start date (defaults to tomorrow)
-  const defaultStartDate = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
-  }, []);
+  // Start date — earliest allowed comes from admin → Settings → Rental ("earliest start")
+  const [openedAt] = useState(() => Date.now());
+  const earliestStart = useMemo(
+    () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(openedAt + (rentalRules.minLeadDays || 0) * 86_400_000)),
+    [openedAt, rentalRules.minLeadDays]
+  );
+  const [pickedStart, setStartDate] = useState<string>('');
+  const startDate = pickedStart && pickedStart >= earliestStart ? pickedStart : earliestStart;
 
-  const [startDate, setStartDate] = useState<string>(defaultStartDate);
+  // Live price from the API (GST, deposit, delivery and the advance % are all decided server-side)
+  const [quote, setQuote] = useState<RentalQuote | null>(null);
+  const [quoteError, setQuoteError] = useState('');
+  const [quoting, setQuoting] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(() => {
+      setQuoting(true);
+      fetchRentalQuote({ productSlug: product.slug, period: activePlan.type as 'daily' | 'weekly' | 'monthly', periods: validDuration, startDate })
+        .then((q) => {
+          if (!alive) return;
+          setQuote(q);
+          setQuoteError('');
+        })
+        .catch((err) => alive && setQuoteError(errorMessage(err, 'Could not calculate the price. Please try again.')))
+        .finally(() => alive && setQuoting(false));
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [product.slug, activePlan.type, validDuration, startDate]);
 
-  // Calculated End Date
-  const calculatedEndDate = useMemo(() => {
-    if (!startDate) return '';
-    const d = new Date(startDate);
-    if (activePlan.type === 'daily') {
-      d.setDate(d.getDate() + validDuration);
-    } else if (activePlan.type === 'weekly') {
-      d.setDate(d.getDate() + validDuration * 7);
-    } else {
-      d.setMonth(d.getMonth() + validDuration);
-    }
-    return d.toISOString().split('T')[0];
-  }, [startDate, activePlan.type, validDuration]);
-
-  // Pricing breakdown calculations
-  const rentAmount = (activePlan.price ?? activePlan.pricePerMonth ?? 1000) * validDuration;
-  const securityDeposit = product.securityDeposit || 10000;
-  const deliveryPickupCharge = product.deliveryPickupCharge || 500;
-  const gstAmount = Math.round(rentAmount * 0.12);
-  const totalPayableNow = rentAmount + securityDeposit + deliveryPickupCharge + gstAmount;
+  const calculatedEndDate = quote?.endDate || '';
+  const formatDay = (d: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+  const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
   // Pincode checking state
   const [inputPincode, setInputPincode] = useState(storedPin || '110001');
@@ -145,26 +153,15 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
   };
 
   const handleProceedToRentalCheckout = () => {
-    // Save draft into useRentalStore
+    if (!quote) return;
     setDraft({
-      product,
-      plan: activePlan,
-      duration: validDuration,
+      productSlug: product.slug,
+      productName: product.name,
+      productImage: activeImage,
+      period: activePlan.type as 'daily' | 'weekly' | 'monthly',
+      periods: validDuration,
       startDate,
-      endDate: calculatedEndDate,
-      deposit: securityDeposit,
-      rentAmount,
-      deliveryPickupCharge,
-      gstAmount,
-      totalPayable: totalPayableNow
     });
-
-    addToast({
-      type: 'info',
-      title: 'Rental Plan Configured',
-      message: `Proceeding to booking for ${product.name.slice(0, 30)}...`
-    });
-
     router.push('/rent/checkout');
   };
 
@@ -410,15 +407,15 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
               <div className="relative">
                 <input
                   type="date"
-                  min={defaultStartDate}
+                  min={earliestStart}
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className="w-full text-xs font-semibold px-3.5 py-2.5 border border-[#DCE6F2] text-[#12263F] rounded-xl bg-white focus:outline-none focus:border-[#1D5FAF]"
                 />
               </div>
               <div className="flex items-center justify-between text-[12px] text-[#5B6B82] px-1">
-                <span>Start: <strong>{startDate}</strong></span>
-                <span>Calculated End: <strong>{calculatedEndDate}</strong></span>
+                <span>From <strong>{formatDay(startDate)}</strong></span>
+                <span>Return by <strong>{calculatedEndDate ? formatDay(calculatedEndDate) : '…'}</strong></span>
               </div>
             </div>
 
@@ -455,74 +452,106 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
               </form>
             </div>
 
-            {/* 5. Live Price Breakdown */}
-            <div className="space-y-3 pt-3 border-t border-[#DCE6F2] bg-[#F6F9FD] p-4 rounded-2xl border border-[#DCE6F2]">
+            {/* 5. Live Price Breakdown (from the API) */}
+            <div className="space-y-3 bg-[#F6F9FD] p-4 rounded-2xl border border-[#DCE6F2]" aria-live="polite" aria-busy={quoting}>
               <div className="text-xs font-bold text-[#12263F] uppercase tracking-wider flex items-center justify-between">
                 <span>Price Breakdown</span>
-                <span className="text-[11px] text-[#16A34A] bg-[#16A34A]/10 px-2 py-0.5 rounded font-bold">
-                  Zero Maintenance
-                </span>
+                {quoting && <span className="text-[11px] font-semibold normal-case text-[#5B6B82]">Updating…</span>}
               </div>
 
-              <div className="space-y-2 text-xs text-[#12263F]">
-                {/* Rent × Duration */}
-                <div className="flex justify-between items-center">
-                  <span>
-                    Rental Charge ({validDuration} {planUnitLabel(activePlan.type)} × ₹{activePlan.price.toLocaleString('en-IN')})
-                  </span>
-                  <span className="font-bold text-[#12263F]">₹{rentAmount.toLocaleString('en-IN')}</span>
+              {quoteError ? (
+                <p className="flex items-start gap-2 text-xs text-red-700">
+                  <AlertCircle className="w-4 h-4 shrink-0" /> {quoteError}
+                </p>
+              ) : !quote ? (
+                <div className="space-y-2">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="h-4 rounded bg-[#E2E8F0] animate-pulse" />
+                  ))}
                 </div>
-
-                {/* Refundable Security Deposit */}
-                <div className="flex justify-between items-center text-[#16A34A] font-semibold bg-[#16A34A]/5 p-2 rounded-lg border border-[#16A34A]/20">
-                  <div className="flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
-                    <span>Refundable Security Deposit</span>
+              ) : (
+                <div className={`space-y-2 text-xs text-[#12263F] transition-opacity ${quoting ? 'opacity-60' : ''}`}>
+                  <div className="flex justify-between items-center">
+                    <span>Rent ({quote.durationLabel} × {inr(quote.rate)})</span>
+                    <span className="font-bold">{inr(quote.rent)}</span>
                   </div>
-                  <span>₹{securityDeposit.toLocaleString('en-IN')}</span>
-                </div>
-
-                {/* Delivery & Pickup Charge */}
-                <div className="flex justify-between items-center">
-                  <span>Two-Way Sanitized Delivery & Return Pickup</span>
-                  <span className="font-semibold text-[#12263F]">₹{deliveryPickupCharge.toLocaleString('en-IN')}</span>
-                </div>
-
-                {/* GST */}
-                <div className="flex justify-between items-center text-[#5B6B82]">
-                  <span>GST (12% on Rental Amount)</span>
-                  <span>₹{gstAmount.toLocaleString('en-IN')}</span>
-                </div>
-
-                {/* Total Payable Now */}
-                <div className="pt-2 border-t border-[#DCE6F2] flex justify-between items-baseline">
-                  <div>
-                    <span className="font-black text-sm text-[#12263F] block">Total Payable Now</span>
-                    <span className="text-[11px] text-[#5B6B82] font-normal">
-                      Includes ₹{securityDeposit.toLocaleString('en-IN')} 100% refundable deposit
-                    </span>
-                    {rentalRules.lateFeePerDay > 0 && (
-                      <span className="text-[11px] text-[#5B6B82] font-normal block">
-                        Late return: ₹{rentalRules.lateFeePerDay.toLocaleString('en-IN')}/day
-                        {rentalRules.gracePeriodDays > 0 ? ` after ${rentalRules.gracePeriodDays} grace day${rentalRules.gracePeriodDays === 1 ? '' : 's'}` : ''}
+                  {quote.delivery > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span>Delivery, installation &amp; pickup</span>
+                      <span className="font-semibold">{inr(quote.delivery)}</span>
+                    </div>
+                  )}
+                  {quote.gst > 0 && (
+                    <div className="flex justify-between items-center text-[#5B6B82]">
+                      <span>GST ({quote.gstRate}% on rent &amp; delivery)</span>
+                      <span>{inr(quote.gst)}</span>
+                    </div>
+                  )}
+                  {quote.deposit > 0 && (
+                    <div className="flex justify-between items-center text-[#16A34A] font-semibold bg-[#16A34A]/5 p-2 rounded-lg border border-[#16A34A]/20">
+                      <span className="flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 shrink-0" /> Refundable security deposit
                       </span>
-                    )}
+                      <span>{inr(quote.deposit)}</span>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-[#DCE6F2] flex justify-between items-baseline">
+                    <span className="font-bold">Booking total</span>
+                    <span className="font-bold">{inr(quote.total)}</span>
                   </div>
-                  <span className="font-black text-xl text-[#1D5FAF]">
-                    ₹{totalPayableNow.toLocaleString('en-IN')}
-                  </span>
+                  <div className="flex justify-between items-baseline rounded-xl bg-white border border-[#CFE0F5] px-3 py-2.5">
+                    <div>
+                      <span className="font-black text-sm block">Pay now{quote.advancePercent < 100 ? ` (${quote.advancePercent}% advance)` : ''}</span>
+                      {quote.balance > 0 && (
+                        <span className="text-[11px] text-[#5B6B82]">
+                          Balance {inr(quote.balance)} {quote.balanceDue === 'on_delivery' ? 'payable on delivery' : 'due before dispatch'}
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-black text-xl text-[#1D5FAF]">{inr(quote.payNow)}</span>
+                  </div>
+                  {rentalRules.lateFeePerDay > 0 && (
+                    <p className="text-[11px] text-[#5B6B82]">
+                      Late return: {inr(rentalRules.lateFeePerDay)}/day
+                      {rentalRules.gracePeriodDays > 0 ? ` after ${rentalRules.gracePeriodDays} grace day${rentalRules.gracePeriodDays === 1 ? '' : 's'}` : ''}, deducted from the deposit.
+                    </p>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
+
+            {/* Documents needed */}
+            {quote?.kyc.required && (
+              <div className="rounded-2xl border border-[#F28C38]/30 bg-[#FFF7EF] p-4 text-xs text-[#12263F] space-y-1.5">
+                <p className="flex items-center gap-1.5 font-bold">
+                  <FileText className="w-4 h-4 text-[#F28C38]" /> Documents needed at checkout
+                </p>
+                <ul className="list-disc pl-5 text-[#5B6B82] space-y-0.5">
+                  {quote.kyc.documents.map((d) => (
+                    <li key={d.key}>
+                      <span className="text-[#12263F] font-semibold">{d.label}</span> — {d.hint}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {quote && !quote.inStock && (
+              <p className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                All units of this equipment are booked right now. Call us on {store.supportPhone} and we&apos;ll tell you when one is free.
+              </p>
+            )}
 
             {/* Rent Now Action Button */}
             <button
               type="button"
               onClick={handleProceedToRentalCheckout}
-              className="w-full py-4 bg-[#1D5FAF] hover:bg-[#174E90] text-white font-black text-sm rounded-2xl shadow-xl shadow-[#1D5FAF]/20 transition-all active:scale-98 flex items-center justify-center gap-2"
+              disabled={!quote || quoting || Boolean(quoteError) || !quote.inStock}
+              className="w-full py-4 bg-[#1D5FAF] hover:bg-[#174E90] text-white font-black text-sm rounded-2xl shadow-xl shadow-[#1D5FAF]/20 transition-all active:scale-98 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Bed className="w-4 h-4" />
-              <span>Rent Now • ₹{totalPayableNow.toLocaleString('en-IN')}</span>
+              <span>{!quote ? 'Calculating price…' : !quote.inStock ? 'Currently unavailable' : `Book now • Pay ${inr(quote.payNow)}`}</span>
               <ArrowRight className="w-4 h-4 ml-1" />
             </button>
 

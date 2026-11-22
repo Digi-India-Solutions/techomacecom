@@ -514,10 +514,29 @@ export interface GlobalSearchResult {
 
 export interface AdminNotification {
   id: string;
+  /** e.g. order_new, return_requested, rental_booked, refund_failed */
+  type?: string;
   title: string;
   message: string;
   severity: 'urgent' | 'warning' | 'info';
   href: string;
   read: boolean;
   createdAt: string;
+}
+
+/** Live "needs attention" count (computed on every request, never stale) */
+export interface AdminAttentionItem {
+  key: string;
+  severity: 'urgent' | 'warning' | 'info';
+  title: string;
+  message: string;
+  href: string;
+  count: number;
+}
+
+export interface AdminNotificationFeed {
+  items: AdminNotification[];
+  unread: number;
+  attention: AdminAttentionItem[];
+  serverTime: string;
 }

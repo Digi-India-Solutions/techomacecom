@@ -379,14 +379,13 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
 
             {/* Rent Button if rentEnabled */}
             {product.rentEnabled && (
-              <button
-                type="button"
-                onClick={() => setIsRentalModalOpen(true)}
+              <Link
+                href={`/rent/${product.slug}`}
                 className="w-full h-11 px-4 bg-[#EAF2FC] hover:bg-[#DCE6F2] text-[#174E90] border border-[#1D5FAF]/30 font-bold text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center gap-2 font-heading cursor-pointer"
               >
                 <Bed className="w-4 h-4" />
                 <span>Rent this Product from ₹{product.rentPricePerMonth?.toLocaleString('en-IN')}/Month</span>
-              </button>
+              </Link>
             )}
           </div>
 
@@ -553,80 +552,6 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
         />
       )}
 
-      {/* Rent Modal */}
-      {isRentalModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#DCE6F2] space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-[#DCE6F2]">
-              <div className="font-bold text-base text-[#12263F] flex items-center gap-2 font-heading">
-                <Bed className="w-5 h-5 text-[#1D5FAF]" />
-                <span>Rent {product.name.slice(0, 25)}...</span>
-              </div>
-              <button
-                onClick={() => setIsRentalModalOpen(false)}
-                className="text-[#5B6B82] hover:text-[#12263F]"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-[#5B6B82] font-body">
-              Select your required rental tenure. All rental contracts include free doorstep setup, calibration, and zero repair liability.
-            </p>
-
-            <div className="space-y-2 font-body">
-              {product.rentalPlans?.map((plan) => (
-                <label
-                  key={plan.tenureMonths}
-                  className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
-                    selectedRentalTenure === plan.tenureMonths
-                      ? 'border-[#1D5FAF] bg-[#EAF2FC]'
-                      : 'border-[#DCE6F2] hover:border-[#1D5FAF]/50'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="rentalTenure"
-                      checked={selectedRentalTenure === plan.tenureMonths}
-                      onChange={() => setSelectedRentalTenure(plan.tenureMonths)}
-                      className="text-[#1D5FAF] focus:ring-[#1D5FAF]"
-                    />
-                    <div>
-                      <div className="font-bold text-xs text-[#12263F] font-heading">
-                        {plan.tenureMonths} Month Plan
-                      </div>
-                      <div className="text-[12px] text-[#5B6B82] font-body">
-                        Refundable Deposit: ₹{(plan.securityDeposit ?? product.securityDeposit ?? 0).toLocaleString('en-IN')}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-sm text-[#1D5FAF] font-body">
-                      ₹{(plan.pricePerMonth ?? plan.price ?? 0).toLocaleString('en-IN')}/mo
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
-
-            <div className="pt-2 flex gap-2 font-heading">
-              <button
-                onClick={() => setIsRentalModalOpen(false)}
-                className="flex-1 py-2.5 border border-[#1D5FAF] rounded-xl text-xs font-semibold text-[#1D5FAF] bg-white hover:bg-[#EAF2FC]"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddRentalToCart}
-                className="flex-1 py-2.5 bg-[#1D5FAF] hover:bg-[#174E90] text-white rounded-xl text-xs font-bold"
-              >
-                Add Rental to Cart
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

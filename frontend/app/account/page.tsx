@@ -4,9 +4,9 @@ import React, { useState, useEffect, Suspense, useCallback, useRef } from 'react
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { useUserStore, useWishlistStore, useRentalStore, useToastStore } from '@/lib/store';
+import { useUserStore, useWishlistStore, useToastStore } from '@/lib/store';
 import { getOrders } from '@/lib/api';
-import type { Order } from '@/types';
+import type { CustomerRental, Order, OrderReturnRequest } from '@/types';
 import type { SiteSettings } from '@/lib/settings/types';
 import { useSiteSettings } from '@/lib/settings/store';
 import ProductCard from '@/components/product/ProductCard';
@@ -34,15 +34,25 @@ import {
   Lock,
   XCircle,
   RotateCcw,
-  X
+  AlertTriangle,
+  RefreshCw,
+  ShieldCheck
 } from 'lucide-react';
-import { cancelCustomerOrder, requestOrderReturn } from '@/lib/api/orders';
+import { fetchOrderById } from '@/lib/api/orders';
+import { fetchMyRentals } from '@/lib/api/rentals';
+import { OPEN_RENTAL } from '@/components/account/rentals/rentalUi';
+import { errorMessage } from '@/lib/api/backend';
+import CancelOrderModal from '@/components/account/orders/CancelOrderModal';
+import ReturnRequestModal from '@/components/account/orders/ReturnRequestModal';
+import ReturnTracker from '@/components/account/orders/ReturnTracker';
+import ReturnsTabContent from '@/components/account/orders/ReturnsTabContent';
+import { OPEN_RETURN_STATUSES, REFUND_STATUS_LABEL } from '@/components/account/orders/returnUi';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { AccountSkeleton, OrderListSkeleton } from '@/components/skeletons/PageSkeletons';
 import { fetchCurrentCustomer, logoutCustomer } from '@/lib/api/customerAuth';
 
-type Tab = 'orders' | 'rentals' | 'wishlist' | 'addresses' | 'gst' | 'profile' | 'security';
-const TABS: Tab[] = ['orders', 'rentals', 'wishlist', 'addresses', 'gst', 'profile', 'security'];
+type Tab = 'orders' | 'returns' | 'rentals' | 'wishlist' | 'addresses' | 'gst' | 'profile' | 'security';
+const TABS: Tab[] = ['orders', 'returns', 'rentals', 'wishlist', 'addresses', 'gst', 'profile', 'security'];
 
 const formatINR = (n: number) => `₹${n.toLocaleString('en-IN')}`;
 const formatDate = (d: string) =>
@@ -55,13 +65,13 @@ const STATUS_STYLES: Record<string, string> = {
   Dispatched: 'bg-indigo-50 text-indigo-700',
   Delivered: 'bg-green-50 text-green-700',
   Cancelled: 'bg-red-50 text-red-700',
+  Returned: 'bg-slate-100 text-slate-700',
   'Return Requested': 'bg-purple-100 text-purple-800 border border-purple-200',
   'Return Approved': 'bg-blue-100 text-blue-800 border border-blue-200',
   'Pickup Scheduled': 'bg-sky-100 text-sky-800 border border-sky-200',
   'Return Received': 'bg-amber-100 text-amber-800 border border-amber-200',
   Refunded: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
-  'Return Rejected': 'bg-rose-100 text-rose-700 border border-rose-200',
-  Returned: 'bg-purple-100 text-purple-800 border border-purple-200'
+  'Return Rejected': 'bg-rose-100 text-rose-700 border border-rose-200'
 };
 
 /** Opens a print-ready GST invoice in a new tab (user can Save as PDF).
@@ -136,367 +146,6 @@ function openInvoice(order: Order, { store, tax }: Pick<SiteSettings, 'store' | 
   return true;
 }
 
-/* ─────────────────────────────── Modals ─────────────────────────────── */
-
-const CANCEL_REASONS = [
-  'Ordered by mistake',
-  'Found a better price / alternative elsewhere',
-  'Delivery timeframe is too long',
-  'Need to modify clinic delivery address or GST details',
-  'Decided on a different equipment model',
-  'Other reason'
-];
-
-interface CancelOrderModalProps {
-  order: Order;
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: (updatedOrder: Order) => void;
-}
-
-function CancelOrderModal({ order, isOpen, onClose, onSuccess }: CancelOrderModalProps) {
-  const [reason, setReason] = useState(CANCEL_REASONS[0]);
-  const [note, setNote] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const { addToast } = useToastStore();
-
-  if (!isOpen) return null;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      const updated = await cancelCustomerOrder(order.id, { reason, note });
-      addToast({
-        type: 'success',
-        title: 'Order Cancelled',
-        message: `Order #${order.orderNumber} has been successfully cancelled.`
-      });
-      onSuccess(updated);
-      onClose();
-    } catch (err: any) {
-      addToast({
-        type: 'error',
-        title: 'Cancellation Failed',
-        message: err.message || 'Could not cancel order. Please contact support.'
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const isPrepaid = order.paymentMethod.includes('Razorpay') || order.paymentStatus === 'Paid';
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/60 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-[#DCE6F2] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between border-b border-[#E8EEF5] px-6 py-4 bg-[#F8FAFD]">
-          <div>
-            <h3 className="text-base font-bold text-[#12263F]">Cancel Order</h3>
-            <p className="text-xs text-[#5B6B82] font-mono mt-0.5">{order.orderNumber}</p>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-[#8A97A8] hover:bg-[#EAF2FC] hover:text-[#12263F]">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs sm:text-sm">
-          <div>
-            <label className="block text-xs font-semibold text-[#12263F] mb-1.5">
-              Reason for Cancellation <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="w-full rounded-xl border border-[#DCE6F2] bg-[#F8FAFD] px-3.5 py-2.5 text-xs text-[#12263F] focus:outline-none focus:border-[#1D5FAF]"
-            >
-              {CANCEL_REASONS.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[#12263F] mb-1.5">
-              Additional Details / Comments (Optional)
-            </label>
-            <textarea
-              rows={3}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Tell us what happened or why you would like to cancel..."
-              className="w-full rounded-xl border border-[#DCE6F2] bg-white px-3.5 py-2.5 text-xs text-[#12263F] placeholder:text-[#8A97A8] focus:outline-none focus:border-[#1D5FAF]"
-            />
-          </div>
-
-          {isPrepaid ? (
-            <div className="rounded-xl border border-blue-200 bg-[#EAF2FC]/60 p-3.5 text-xs text-[#1D5FAF] leading-relaxed">
-              <span className="font-semibold block mb-0.5">Prepaid Order Refund Policy:</span>
-              Your total payment of <strong>{formatINR(order.totalAmount)}</strong> will be refunded to your original payment method within <strong>3-5 business days</strong>.
-            </div>
-          ) : (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-[#5B6B82] leading-relaxed">
-              <span className="font-semibold text-[#12263F] block mb-0.5">Cash on Delivery Order:</span>
-              No amount has been collected. Your order will be immediately cancelled with no fee.
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2.5 pt-2 border-t border-[#E8EEF5]">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="rounded-xl border border-[#DCE6F2] px-4 py-2.5 text-xs font-semibold text-[#12263F] hover:bg-[#F8FAFD]"
-            >
-              Keep Order
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2.5 text-xs font-semibold text-white shadow-xs disabled:opacity-50"
-            >
-              {submitting ? 'Cancelling...' : 'Confirm Cancellation'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-const RETURN_REASONS = [
-  'Defective / Not powering on or functioning properly',
-  'Physical damage received during courier transit',
-  'Wrong product model or variant delivered',
-  'Missing accessories, cables, or manufacturer components',
-  'Performance does not match technical specifications',
-  'Other reason'
-];
-
-interface ReturnOrderModalProps {
-  order: Order;
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: (updatedOrder: Order) => void;
-}
-
-function ReturnOrderModal({ order, isOpen, onClose, onSuccess }: ReturnOrderModalProps) {
-  const [reason, setReason] = useState(RETURN_REASONS[0]);
-  const [customerNote, setCustomerNote] = useState('');
-  const [selectedItemIds, setSelectedItemIds] = useState<string[]>(order.items.map((it) => it.productId));
-  const [accountHolder, setAccountHolder] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [ifsc, setIfsc] = useState('');
-  const [bankName, setBankName] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const { addToast } = useToastStore();
-
-  if (!isOpen) return null;
-
-  const isCod = order.paymentMethod.includes('Cash on Delivery');
-
-  const toggleItem = (id: string) => {
-    setSelectedItemIds((prev) =>
-      prev.includes(id) ? (prev.length > 1 ? prev.filter((i) => i !== id) : prev) : [...prev, id]
-    );
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedItemIds.length === 0) {
-      addToast({ type: 'error', title: 'Select Items', message: 'Please select at least one item to return.' });
-      return;
-    }
-    if (isCod && (!accountHolder.trim() || !accountNumber.trim() || !ifsc.trim())) {
-      addToast({ type: 'error', title: 'Bank Details Required', message: 'Please fill account holder, account number and IFSC for your COD refund.' });
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const res = await requestOrderReturn(order.id, {
-        reason,
-        customerNote,
-        itemIds: selectedItemIds,
-        bankDetails: isCod
-          ? { accountHolder: accountHolder.trim(), accountNumber: accountNumber.trim(), ifsc: ifsc.trim().toUpperCase(), bankName: bankName.trim() }
-          : undefined
-      });
-      addToast({
-        type: 'success',
-        title: 'Return Request Submitted',
-        message: `RMA #${res.returnRequest.returnNumber} submitted. Our logistics team will arrange reverse pickup.`
-      });
-      onSuccess(res.order);
-      onClose();
-    } catch (err: any) {
-      addToast({
-        type: 'error',
-        title: 'Return Request Failed',
-        message: err.message || 'Could not submit return request. Please try again.'
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/60 p-4 overflow-y-auto">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-[#DCE6F2] overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-6 max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between border-b border-[#E8EEF5] px-6 py-4 bg-[#F8FAFD] shrink-0">
-          <div>
-            <h3 className="text-base font-bold text-[#12263F]">Request Return / Replacement</h3>
-            <p className="text-xs text-[#5B6B82] font-mono mt-0.5">Order #{order.orderNumber} · 7-Day Guarantee</p>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-[#8A97A8] hover:bg-[#EAF2FC] hover:text-[#12263F]">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs sm:text-sm overflow-y-auto flex-1">
-          {/* Policy Banner */}
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs text-emerald-900 leading-relaxed">
-            <span className="font-semibold block mb-0.5">Doctor-Friendly 7-Day Replacement Policy</span>
-            Report defects, damage, or wrong items within 7 days of delivery. Our logistics team will arrange reverse pickup from your clinic and inspect the unit.
-          </div>
-
-          {/* Select Items */}
-          <div>
-            <label className="block text-xs font-semibold text-[#12263F] mb-1.5">
-              Select Item(s) to Return <span className="text-red-500">*</span>
-            </label>
-            <div className="space-y-2 border border-[#DCE6F2] rounded-xl p-3 bg-[#F8FAFD]">
-              {order.items.map((it) => {
-                const checked = selectedItemIds.includes(it.productId);
-                return (
-                  <label key={it.productId} className="flex items-center gap-3 cursor-pointer p-1.5 rounded-lg hover:bg-white">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleItem(it.productId)}
-                      className="w-4 h-4 rounded text-[#1D5FAF] focus:ring-[#1D5FAF]"
-                    />
-                    <div className="min-w-0 flex-1 text-xs">
-                      <p className="font-medium text-[#12263F] truncate">{it.productName}</p>
-                      <p className="text-[#8A97A8]">Qty: {it.quantity} · {formatINR(it.totalPrice)}</p>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Reason */}
-          <div>
-            <label className="block text-xs font-semibold text-[#12263F] mb-1.5">
-              Primary Reason for Return <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="w-full rounded-xl border border-[#DCE6F2] bg-[#F8FAFD] px-3.5 py-2.5 text-xs text-[#12263F] focus:outline-none focus:border-[#1D5FAF]"
-            >
-              {RETURN_REASONS.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Customer Note */}
-          <div>
-            <label className="block text-xs font-semibold text-[#12263F] mb-1.5">
-              Observations / Fault Details <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              required
-              rows={3}
-              value={customerNote}
-              onChange={(e) => setCustomerNote(e.target.value)}
-              placeholder="Please describe what is wrong with the device or packaging..."
-              className="w-full rounded-xl border border-[#DCE6F2] bg-white px-3.5 py-2.5 text-xs text-[#12263F] placeholder:text-[#8A97A8] focus:outline-none focus:border-[#1D5FAF]"
-            />
-          </div>
-
-          {/* If COD: Bank Details */}
-          {isCod && (
-            <div className="rounded-xl border border-[#DCE6F2] bg-[#F8FAFD] p-3.5 space-y-3">
-              <p className="font-semibold text-xs text-[#1D5FAF]">
-                Bank Account for COD Refund
-              </p>
-              <p className="text-[11px] text-[#5B6B82]">
-                Since this order was placed via Cash on Delivery, your refund will be transferred via NEFT/IMPS following warehouse inspection.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                <div>
-                  <label className="block text-[11px] font-medium text-[#5B6B82] mb-1">Account Holder Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={accountHolder}
-                    onChange={(e) => setAccountHolder(e.target.value)}
-                    placeholder="e.g. Dr. Ankit Bowade"
-                    className="w-full rounded-lg border border-[#DCE6F2] bg-white px-3 py-2 text-xs text-[#12263F]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-[#5B6B82] mb-1">Bank Name</label>
-                  <input
-                    type="text"
-                    value={bankName}
-                    onChange={(e) => setBankName(e.target.value)}
-                    placeholder="e.g. State Bank of India"
-                    className="w-full rounded-lg border border-[#DCE6F2] bg-white px-3 py-2 text-xs text-[#12263F]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-[#5B6B82] mb-1">Account Number *</label>
-                  <input
-                    type="text"
-                    required
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                    placeholder="Account Number"
-                    className="w-full rounded-lg border border-[#DCE6F2] bg-white px-3 py-2 text-xs text-[#12263F] font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-[#5B6B82] mb-1">IFSC Code *</label>
-                  <input
-                    type="text"
-                    required
-                    value={ifsc}
-                    onChange={(e) => setIfsc(e.target.value)}
-                    placeholder="e.g. SBIN0001234"
-                    className="w-full rounded-lg border border-[#DCE6F2] bg-white px-3 py-2 text-xs text-[#12263F] font-mono uppercase"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2.5 pt-2 border-t border-[#E8EEF5]">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="rounded-xl border border-[#DCE6F2] px-4 py-2.5 text-xs font-semibold text-[#12263F] hover:bg-[#F8FAFD]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="rounded-xl bg-[#1D5FAF] hover:bg-[#174D8F] px-5 py-2.5 text-xs font-semibold text-white shadow-xs disabled:opacity-50"
-            >
-              {submitting ? 'Submitting Request...' : 'Submit Return Request'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 /* ─────────────────────────────── Orders tab ─────────────────────────────── */
 
 const OrderCard: React.FC<{
@@ -505,23 +154,29 @@ const OrderCard: React.FC<{
   onInvoice: (o: Order) => void;
   onCancel: (o: Order) => void;
   onReturn: (o: Order) => void;
+  onReturnChanged: (orderId: string, updated: OrderReturnRequest) => void;
 }> = ({
   order,
   onReview,
   onInvoice,
   onCancel,
-  onReturn
+  onReturn,
+  onReturnChanged
 }) => {
   const [showDetails, setShowDetails] = useState(false);
+  const returns = order.returns || [];
+  const [showReturns, setShowReturns] = useState(() => returns.some((r) => OPEN_RETURN_STATUSES.includes(r.status)));
+  const cancelRefunds = (order.refunds || []).filter((r) => r.reason === 'cancel' && r.status !== 'failed');
+  const policy = order.returnPolicy;
   const doneCount = order.timeline.filter((e) => e.completed).length;
 
   const addr = order.shippingAddress;
   const hasTracking = !!order.trackingNumber;
   const isCancelled = order.status === 'Cancelled';
-  const isDelivered = order.status === 'Delivered';
+  const isDelivered = order.status === 'Delivered' || order.status === 'Returned';
 
   return (
-    <article className="border border-[#DCE6F2] rounded-2xl overflow-hidden transition-shadow duration-200 hover:shadow-[0_10px_30px_-12px_rgba(11,37,69,0.18)]">
+    <article id={`order-${order.id}`} className="scroll-mt-6 border border-[#DCE6F2] rounded-2xl overflow-hidden transition-shadow duration-200 hover:shadow-[0_10px_30px_-12px_rgba(11,37,69,0.18)]">
       {/* Header */}
       <div className="bg-[#F8FAFD] px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 border-b border-[#E8EEF5]">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[13px]">
@@ -565,7 +220,7 @@ const OrderCard: React.FC<{
               className="inline-flex items-center gap-1 px-2.5 py-1 text-[12px] font-semibold rounded-lg border border-[#1D5FAF] text-[#1D5FAF] bg-[#EAF2FC]/70 hover:bg-[#1D5FAF] hover:text-white transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Return Product
+              Return or replace
             </button>
           )}
           <button type="button" onClick={() => onInvoice(order)} className={`${btnSecondary} !px-3 !py-1.5 !text-[13px]`}>
@@ -575,40 +230,35 @@ const OrderCard: React.FC<{
         </div>
       </div>
 
-      {/* Return Request Banner */}
-      {order.returnRequest && (
-        <div className="mx-5 mt-4 p-3.5 rounded-xl border border-purple-200 bg-[#FAF5FF] flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-purple-950 font-mono">
-                {order.returnRequest.returnNumber}
-              </span>
-              <span className="text-purple-400">·</span>
-              <span className="font-medium text-purple-900">
-                Reason: {order.returnRequest.reason}
-              </span>
-            </div>
-            <p className="text-[11px] text-purple-700 mt-0.5">
-              Return request submitted on {formatDate(order.returnRequest.createdAt)} · 7-day Doctor Protection Policy
-            </p>
-            {order.returnRequest.adminNote && (
-              <p className="text-[11px] text-[#5B6B82] mt-1 bg-white/80 p-2 rounded-lg border border-purple-100">
-                <span className="font-semibold text-purple-900">Store Update: </span>
-                {order.returnRequest.adminNote}
-              </p>
-            )}
-          </div>
-          <span className="px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide bg-purple-100 text-purple-800 border border-purple-200 uppercase">
-            {order.returnRequest.status.replace(/_/g, ' ')}
-          </span>
-        </div>
+      {/* Return window */}
+      {isDelivered && policy && (policy.windowEndsAt || policy.blockReason) && (
+        <p className={`mx-5 mt-4 flex items-start gap-2 text-[13px] ${order.canReturn ? 'text-[#14532D]' : 'text-[#8A97A8]'}`}>
+          <ShieldCheck className={`w-4 h-4 mt-0.5 shrink-0 ${order.canReturn ? 'text-[#16A34A]' : 'text-[#C5CFDC]'}`} />
+          {order.canReturn && policy.windowEndsAt
+            ? `Eligible for return or replacement until ${formatDate(policy.windowEndsAt)}.`
+            : policy.blockReason}
+        </p>
       )}
 
       {/* Cancellation Notice */}
-      {order.status === 'Cancelled' && (
-        <div className="mx-5 mt-4 p-3 rounded-xl border border-red-200 bg-red-50/60 text-xs text-red-700 flex flex-wrap items-center justify-between gap-2">
-          <span>{order.cancelReason ? `Cancellation reason: ${order.cancelReason}` : 'Order was cancelled'}</span>
-          <span className="text-[11px] text-red-600 font-medium">Payment status: {order.paymentStatus}</span>
+      {isCancelled && (
+        <div className="mx-5 mt-4 rounded-xl border border-red-200 bg-red-50/60 p-3.5 text-[13px] text-red-800 space-y-1.5">
+          <p>
+            <span className="font-semibold">Cancelled{order.cancelledAt ? ` on ${formatDate(order.cancelledAt)}` : ''}.</span>{' '}
+            {order.cancelReason && <span className="text-red-700">Reason: {order.cancelReason}</span>}
+          </p>
+          {cancelRefunds.map((r) => (
+            <p key={r.id} className="flex flex-wrap items-center gap-2 text-[#12263F]">
+              Refund of <span className="font-semibold">{formatINR(r.amount)}</span> to{' '}
+              {r.method === 'gateway' ? 'your original payment method' : r.methodLabel.toLowerCase()}
+              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${REFUND_STATUS_LABEL[r.status]?.style}`}>
+                {REFUND_STATUS_LABEL[r.status]?.label}
+              </span>
+            </p>
+          ))}
+          {cancelRefunds.length === 0 && (order.paymentStatus === 'Paid' || order.paymentStatus === 'Partially Refunded') && (
+            <p className="text-[#12263F]">Your refund is being processed by our team.</p>
+          )}
         </div>
       )}
 
@@ -637,6 +287,18 @@ const OrderCard: React.FC<{
                   <span className="ml-2 text-[#C5CFDC]">·</span>
                   <span className="ml-2 font-mono text-[11px] text-[#8A97A8]">{item.sku}</span>
                 </p>
+                {isDelivered && (item.nonReturnable || (item.returnedQty ?? 0) > 0) && (
+                  <p className="mt-1 flex flex-wrap gap-1.5">
+                    {item.nonReturnable && (
+                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">Not returnable</span>
+                    )}
+                    {(item.returnedQty ?? 0) > 0 && (
+                      <span className="rounded-md bg-[#EAF2FC] px-2 py-0.5 text-[11px] font-medium text-[#1D5FAF]">
+                        {item.returnedQty} in return request
+                      </span>
+                    )}
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0">
@@ -655,6 +317,27 @@ const OrderCard: React.FC<{
           </li>
         ))}
       </ul>
+
+      {/* Return / replacement requests */}
+      {returns.length > 0 && (
+        <div className="px-5 py-4 border-t border-[#EEF2F7] space-y-3">
+          <button
+            type="button"
+            onClick={() => setShowReturns((v) => !v)}
+            aria-expanded={showReturns}
+            className="inline-flex items-center gap-2 text-left cursor-pointer group"
+          >
+            <span className="text-[13px] font-semibold text-[#12263F]">
+              Returns &amp; replacements <span className="font-normal text-[#8A97A8]">({returns.length})</span>
+            </span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[#DCE6F2] text-[#5B6B82] group-hover:border-[#1D5FAF] group-hover:text-[#1D5FAF] transition-colors">
+              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showReturns ? 'rotate-180' : ''}`} />
+            </span>
+          </button>
+          {showReturns &&
+            returns.map((r) => <ReturnTracker key={r.id} ret={r} onChanged={(u) => onReturnChanged(order.id, u)} />)}
+        </div>
+      )}
 
       {/* Tracking stepper */}
       <div className="px-5 py-4 border-t border-[#EEF2F7]">
@@ -811,7 +494,6 @@ function AccountInner() {
 
   const { user, isAuthenticated, logout, setUser, setAuthModalOpen } = useUserStore();
   const { items: wishlistItems } = useWishlistStore();
-  const { rentals } = useRentalStore();
   const { addToast } = useToastStore();
   const hydrated = useHydrated();
   const siteSettings = useSiteSettings();
@@ -825,11 +507,26 @@ function AccountInner() {
   }
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState('');
+  const [rentals, setRentals] = useState<CustomerRental[]>([]);
+  const [rentalsLoading, setRentalsLoading] = useState(true);
+  const [rentalsError, setRentalsError] = useState('');
   const [reviewModalData, setReviewModalData] = useState<{ productId: string; productName: string } | null>(null);
   const [cancelModalOrder, setCancelModalOrder] = useState<Order | null>(null);
   const [returnModalOrder, setReturnModalOrder] = useState<Order | null>(null);
 
   const contentRef = useRef<HTMLElement>(null);
+
+  // The site header is sticky too — keep the account menu just below it while the content scrolls
+  const [headerOffset, setHeaderOffset] = useState(24);
+  useEffect(() => {
+    const header = document.querySelector('header');
+    if (!header) return;
+    const update = () => setHeaderOffset(header.getBoundingClientRect().height + 24);
+    const ro = new ResizeObserver(update);
+    ro.observe(header);
+    return () => ro.disconnect();
+  }, []);
 
   const changeTab = useCallback(
     (tab: Tab, scrollToContent = false) => {
@@ -863,16 +560,64 @@ function AccountInner() {
     };
   }, [hydrated, isAuthenticated, setUser, logout]);
 
-  // Load orders
-  useEffect(() => {
+  // Load orders (live API; on failure show the error with a retry, never sample data)
+  const loadOrders = useCallback(() => {
+    if (!isAuthenticated) return () => undefined;
     let alive = true;
     getOrders()
-      .then((o) => alive && setOrders(o))
+      .then((o) => {
+        if (!alive) return;
+        setOrders(o);
+        setOrdersError('');
+      })
+      .catch((err) => alive && setOrdersError(errorMessage(err, 'Could not load your orders.')))
       .finally(() => alive && setOrdersLoading(false));
     return () => {
       alive = false;
     };
+  }, [isAuthenticated]);
+
+  useEffect(() => loadOrders(), [loadOrders]);
+
+  const loadRentals = useCallback(() => {
+    if (!isAuthenticated) return () => undefined;
+    let alive = true;
+    fetchMyRentals()
+      .then((list) => {
+        if (!alive) return;
+        setRentals(list);
+        setRentalsError('');
+      })
+      .catch((err) => alive && setRentalsError(errorMessage(err, 'Could not load your rentals.')))
+      .finally(() => alive && setRentalsLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => loadRentals(), [loadRentals]);
+
+  const replaceOrder = useCallback((updated: Order) => {
+    setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
   }, []);
+
+  /** A return changed (e.g. withdrawn) — reload that order so eligibility and quantities are current. */
+  const refreshOrder = useCallback(
+    (orderId: string) => {
+      fetchOrderById(orderId).then(replaceOrder).catch(() => undefined);
+    },
+    [replaceOrder]
+  );
+
+  const openOrder = useCallback(
+    (orderId: string) => {
+      changeTab('orders');
+      if (orderId) {
+        setTimeout(() => document.getElementById(`order-${orderId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+      }
+    },
+    [changeTab]
+  );
 
   /* ── Signed-out state ── */
   if (!hydrated) return <AccountSkeleton />;
@@ -915,7 +660,13 @@ function AccountInner() {
 
   const navItems: { id: Tab; label: string; icon: React.ElementType; badge?: number; alert?: boolean }[] = [
     { id: 'orders', label: 'Orders', icon: Package, badge: orders.length },
-    { id: 'rentals', label: 'Rentals', icon: Bed, badge: rentals.length },
+    {
+      id: 'returns',
+      label: 'Returns & refunds',
+      icon: RotateCcw,
+      badge: orders.reduce((n, o) => n + (o.returns || []).filter((r) => OPEN_RETURN_STATUSES.includes(r.status)).length, 0)
+    },
+    { id: 'rentals', label: 'Rentals', icon: Bed, badge: rentals.filter((r) => OPEN_RENTAL.includes(r.status)).length },
     { id: 'wishlist', label: 'Wishlist', icon: Heart, badge: wishlistItems.length },
     { id: 'addresses', label: 'Addresses', icon: MapPin, badge: user.addresses.length },
     { id: 'gst', label: 'GST details', icon: FileText, badge: user.gstProfiles?.length },
@@ -929,7 +680,11 @@ function AccountInner() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-6 items-start">
         {/* ── Navigation ── */}
-        <nav aria-label="Account sections" className="lg:sticky lg:top-6">
+        <nav
+          aria-label="Account sections"
+          className="lg:sticky lg:self-start"
+          style={{ top: headerOffset }}
+        >
           <ul className="flex lg:flex-col gap-1 overflow-x-auto no-scrollbar bg-white rounded-2xl border border-[#DCE6F2] p-2">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -983,9 +738,25 @@ function AccountInner() {
           {/* ORDERS */}
           {activeTab === 'orders' && (
             <>
-              <SectionHeader title="Your orders" subtitle="Track shipments, download GST invoices and review products." />
+              <SectionHeader title="Your orders" subtitle="Track shipments, download GST invoices, request returns and review products." />
               {ordersLoading ? (
                 <OrderListSkeleton />
+              ) : ordersError ? (
+                <div className="text-center py-12 border border-dashed border-[#D5DEEA] rounded-2xl">
+                  <AlertTriangle className="w-8 h-8 text-[#F28C38] mx-auto" />
+                  <p className="mt-3 text-[15px] font-semibold text-[#12263F]">{ordersError}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrdersError('');
+                      setOrdersLoading(true);
+                      loadOrders();
+                    }}
+                    className={`${btnSecondary} mt-4`}
+                  >
+                    <RefreshCw className="w-4 h-4" /> Try again
+                  </button>
+                </div>
               ) : orders.length === 0 ? (
                 <EmptyState
                   icon={Package}
@@ -1003,6 +774,7 @@ function AccountInner() {
                       onReview={(productId, productName) => setReviewModalData({ productId, productName })}
                       onCancel={(o) => setCancelModalOrder(o)}
                       onReturn={(o) => setReturnModalOrder(o)}
+                      onReturnChanged={(orderId) => refreshOrder(orderId)}
                     />
                   ))}
                 </div>
@@ -1010,8 +782,23 @@ function AccountInner() {
             </>
           )}
 
+          {/* RETURNS & REFUNDS */}
+          {activeTab === 'returns' && <ReturnsTabContent onOpenOrder={openOrder} onChanged={() => loadOrders()} />}
+
           {/* RENTALS */}
-          {activeTab === 'rentals' && <RentalsTabContent />}
+          {activeTab === 'rentals' && (
+            <RentalsTabContent
+              rentals={rentals}
+              loading={rentalsLoading}
+              error={rentalsError}
+              onReload={() => {
+                setRentalsError('');
+                setRentalsLoading(true);
+                loadRentals();
+              }}
+              onChanged={(u) => setRentals((prev) => prev.map((x) => (x.id === u.id ? u : x)))}
+            />
+          )}
 
           {/* WISHLIST */}
           {activeTab === 'wishlist' && (
@@ -1058,24 +845,14 @@ function AccountInner() {
       )}
 
       {cancelModalOrder && (
-        <CancelOrderModal
-          order={cancelModalOrder}
-          isOpen={Boolean(cancelModalOrder)}
-          onClose={() => setCancelModalOrder(null)}
-          onSuccess={(updated) => {
-            setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
-          }}
-        />
+        <CancelOrderModal order={cancelModalOrder} onClose={() => setCancelModalOrder(null)} onCancelled={replaceOrder} />
       )}
 
       {returnModalOrder && (
-        <ReturnOrderModal
+        <ReturnRequestModal
           order={returnModalOrder}
-          isOpen={Boolean(returnModalOrder)}
           onClose={() => setReturnModalOrder(null)}
-          onSuccess={(updated) => {
-            setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
-          }}
+          onSubmitted={(updated) => replaceOrder(updated)}
         />
       )}
     </div>

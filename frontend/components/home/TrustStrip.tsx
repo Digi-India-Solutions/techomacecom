@@ -2,8 +2,10 @@
 
 import React from 'react';
 import { ShieldCheck, Tag, Truck, CreditCard, Lock, RotateCcw } from 'lucide-react';
+import { useSiteSettings } from '@/lib/settings/store';
 
 export const TrustStrip: React.FC = () => {
+  const { returns } = useSiteSettings();
   const pillars = [
     {
       icon: ShieldCheck,
@@ -33,7 +35,9 @@ export const TrustStrip: React.FC = () => {
     {
       icon: RotateCcw,
       title: 'Easy Returns Policy',
-      desc: 'Hassle-free replacement for transit damage'
+      desc: returns.returnsEnabled
+        ? `${returns.returnWindowDays}-day ${returns.replacementEnabled ? 'replacement' : 'returns'} for damaged or faulty items`
+        : 'Dedicated support for damaged or faulty items'
     }
   ];
 

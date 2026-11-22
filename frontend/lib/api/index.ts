@@ -19,9 +19,6 @@ import {
   MOCK_COUPONS,
   MOCK_BLOG_POSTS,
   MOCK_SLEEP_TEST_PACKAGES,
-  MOCK_ORDERS,
-  MOCK_ACTIVE_RENTALS,
-  MOCK_RENTALS,
   MOCK_REVIEWS
 } from '@/lib/mock/data';
 // import { sendLoginOtp, verifyLoginOtp } from './customerAuth'; // mobile OTP sign-in disabled
@@ -289,153 +286,20 @@ export async function submitSellerRegistration(data: SellerRegistrationInput): P
  * Customer orders — fetched from the live backend (/api/v1/account/orders).
  * Falls back to mock data only when the backend is not reachable.
  */
+/** The signed-in customer's orders (live API only — errors are shown, never sample orders). */
 export async function getOrders(): Promise<Order[]> {
-  try {
-    const { fetchOrders } = await import('./orders');
-    return await fetchOrders();
-  } catch {
-    // Backend not available → dev fallback
-    return [...MOCK_ORDERS];
-  }
+  const { fetchOrders } = await import('./orders');
+  return fetchOrders();
 }
 
 export async function getOrderById(orderId: string): Promise<Order | null> {
-  try {
-    const { fetchOrderById } = await import('./orders');
-    return await fetchOrderById(orderId);
-  } catch {
-    return MOCK_ORDERS.find((o) => o.id === orderId || o.orderNumber === orderId) || null;
-  }
+  const { fetchOrderById } = await import('./orders');
+  return fetchOrderById(orderId);
 }
 
 /**
- * Rentals
+ * Rentals — live API in lib/api/rentals.ts (quote, booking, KYC, payments, extensions, pickup).
  */
-export async function getActiveRentals(): Promise<ActiveRental[]> {
-  return fetchOrMock('/api/rentals/active', () => [...MOCK_ACTIVE_RENTALS]);
-}
-
-export async function getRentals(): Promise<Rental[]> {
-  return fetchOrMock('/api/rentals', () => [...MOCK_RENTALS]);
-}
-
-export async function getRentalById(id: string): Promise<Rental | null> {
-  return fetchOrMock(`/api/rentals/${id}`, () => {
-    return MOCK_RENTALS.find((r) => r.id === id || r.bookingNumber === id) || null;
-  });
-}
-
-export async function createRentalBooking(data: Partial<Rental>): Promise<{ success: boolean; rental: Rental; message: string }> {
-  return fetchOrMock(
-    '/api/rentals/book',
-    () => {
-      const newRental: Rental = {
-        id: `rnt-${Date.now()}`,
-        bookingNumber: `BDM-RNT-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
-        product: data.product!,
-        plan: data.plan!,
-        duration: data.duration || 1,
-        startDate: data.startDate || new Date().toISOString().split('T')[0],
-        endDate: data.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        deposit: data.deposit || 0,
-        rentAmount: data.rentAmount || 0,
-        charges: data.charges || { deliveryPickup: 500, gst: 0 },
-        status: 'pending_approval',
-        address: data.address!,
-        payments: data.payments || [],
-        createdAt: new Date().toISOString()
-      };
-      MOCK_RENTALS.unshift(newRental);
-      return {
-        success: true,
-        rental: newRental,
-        message: 'Rental booking created successfully! Our team will confirm availability shortly.'
-      };
-    },
-    {
-      method: 'POST',
-      body: JSON.stringify(data)
-    }
-  );
-}
-
-export async function requestRentalExtension(
-  rentalId: string,
-  extraDuration: number,
-  extraRent: number,
-  paymentMethod = 'Online Razorpay'
-): Promise<{ success: boolean; rental: Rental; message: string }> {
-  return fetchOrMock(
-    `/api/rentals/${rentalId}/extend`,
-    () => {
-      const rental = MOCK_RENTALS.find((r) => r.id === rentalId || r.bookingNumber === rentalId);
-      if (!rental) throw new Error('Rental not found');
-
-      // Calculate extended end date
-      const currentEnd = new Date(rental.endDate);
-      if (rental.plan.type === 'daily') {
-        currentEnd.setDate(currentEnd.getDate() + extraDuration);
-      } else if (rental.plan.type === 'weekly') {
-        currentEnd.setDate(currentEnd.getDate() + extraDuration * 7);
-      } else {
-        currentEnd.setMonth(currentEnd.getMonth() + extraDuration);
-      }
-      const newEndDate = currentEnd.toISOString().split('T')[0];
-
-      rental.duration += extraDuration;
-      rental.endDate = newEndDate;
-      rental.rentAmount += extraRent;
-      rental.status = 'active';
-      rental.extensionRequestedDuration = undefined;
-
-      rental.payments.push({
-        id: `pay-ext-${Date.now()}`,
-        amount: extraRent,
-        date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-        method: paymentMethod,
-        type: 'extension',
-        status: 'paid',
-        transactionId: `pay_ext_${Math.floor(1000000 + Math.random() * 9000000)}`
-      });
-
-      return {
-        success: true,
-        rental,
-        message: `Rental successfully extended to ${newEndDate}. Receipt generated.`
-      };
-    },
-    {
-      method: 'POST',
-      body: JSON.stringify({ extraDuration, extraRent, paymentMethod })
-    }
-  );
-}
-
-export async function scheduleRentalReturn(
-  rentalId: string,
-  pickupDate: string
-): Promise<{ success: boolean; rental: Rental; message: string }> {
-  return fetchOrMock(
-    `/api/rentals/${rentalId}/schedule-return`,
-    () => {
-      const rental = MOCK_RENTALS.find((r) => r.id === rentalId || r.bookingNumber === rentalId);
-      if (!rental) throw new Error('Rental not found');
-
-      rental.status = 'return_scheduled';
-      rental.returnPickupDate = pickupDate;
-
-      return {
-        success: true,
-        rental,
-        message: `Doorstep return pickup scheduled for ${pickupDate}. Our logistics partner will arrive with sanitized packing material.`
-      };
-    },
-    {
-      method: 'POST',
-      body: JSON.stringify({ pickupDate })
-    }
-  );
-}
 
 /**
  * Blog

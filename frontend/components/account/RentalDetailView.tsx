@@ -1,571 +1,507 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Rental, RentalStatus, RentalPayment } from '@/types';
-import { useRentalStore, useToastStore } from '@/lib/store';
-import { getProductImageUrl } from '@/lib/utils';
-import { 
-  Bed, 
-  ShieldCheck, 
-  CheckCircle2, 
-  Clock, 
-  Calendar, 
-  Download, 
-  RotateCcw, 
-  MapPin, 
-  FileText, 
-  Truck, 
-  CreditCard,
-  Layers,
-  PhoneCall,
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Bed,
+  CalendarPlus,
   Check,
-  X
+  ExternalLink,
+  Eye,
+  FileText,
+  Loader2,
+  Lock,
+  MapPin,
+  RefreshCw,
+  Truck,
+  Upload,
+  XCircle,
 } from 'lucide-react';
+import type { CustomerRental, RentalKycDoc } from '@/types';
+import { useToastStore, useUserStore } from '@/lib/store';
 import { useSiteSettings } from '@/lib/settings/store';
+import { errorMessage } from '@/lib/api/backend';
+import { cancelMyRental, fetchMyRental, openKycDocument, requestRentalPickup, uploadRentalKycDocument } from '@/lib/api/rentals';
+import { PaymentCancelled } from '@/lib/razorpay';
+import { StatusPill, Steps, TONE, day, inr, rentalMessage } from './rentals/rentalUi';
+import { payExtension, payRental } from './rentals/payments';
 
-interface RentalDetailViewProps {
-  initialRental: Rental;
-}
+const card = 'bg-white rounded-2xl border border-[#DCE6F2] p-5 sm:p-6';
+const h2 = 'text-[16px] font-semibold text-[#12263F]';
+const btn =
+  'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[14px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
+const CANCEL_REASONS = ['Plans changed', 'Patient recovered / no longer needed', 'Found another option', 'Booked by mistake', 'Other'];
 
-export default function RentalDetailView({ initialRental }: RentalDetailViewProps) {
-  const { store, rental: rentalRules } = useSiteSettings();
-  // Settings → Rental → deposit refund promise
-  const refundWindow = `${rentalRules.depositRefundDays} day${rentalRules.depositRefundDays === 1 ? '' : 's'}`;
-  const { rentals, extendRental, scheduleReturn } = useRentalStore();
+const ymdFrom = (base: number, offsetDays: number) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(base + offsetDays * 86_400_000));
+
+export default function RentalDetailView({ id }: { id: string }) {
+  const { store, rental: rules } = useSiteSettings();
+  const { user, isAuthenticated, setAuthModalOpen } = useUserStore();
   const { addToast } = useToastStore();
+  const [r, setR] = useState<CustomerRental | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [extendBy, setExtendBy] = useState(1);
+  const [pickupDate, setPickupDate] = useState('');
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
+  const [openedAt] = useState(() => Date.now());
+  const ymd = (offset: number) => ymdFrom(openedAt, offset);
+  const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  // Pick fresh rental from store if updated
-  const rental = rentals.find((r) => r.id === initialRental.id || r.bookingNumber === initialRental.bookingNumber) || initialRental;
+  const load = useCallback(
+    () =>
+      fetchMyRental(id)
+        .then((x) => {
+          setR(x);
+          setError('');
+        })
+        .catch((err) => setError(errorMessage(err, 'We could not load this rental.'))),
+    [id]
+  );
 
-  // Extension Modal
-  const [isExtendOpen, setIsExtendOpen] = useState(false);
-  const [extraDuration, setExtraDuration] = useState(1);
-  const [isExtending, setIsExtending] = useState(false);
+  useEffect(() => {
+    if (isAuthenticated) load();
+  }, [isAuthenticated, load]);
 
-  // Return Pickup Modal
-  const [isReturnOpen, setIsReturnOpen] = useState(false);
-  const [pickupDate, setPickupDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 2);
-    return d.toISOString().split('T')[0];
-  });
-  const [pickupSlot, setPickupSlot] = useState('10:00 AM - 01:00 PM');
-  const [isScheduling, setIsScheduling] = useState(false);
+  if (!isAuthenticated) {
+    return (
+      <div className="text-center py-16">
+        <Lock className="w-8 h-8 text-[#1D5FAF] mx-auto" />
+        <p className="mt-3 text-[15px] font-semibold text-[#12263F]">Sign in to see this rental</p>
+        <button type="button" onClick={() => setAuthModalOpen(true)} className={`${btn} mt-4 bg-[#1D5FAF] text-white`}>
+          Login / Sign up
+        </button>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="text-center py-16 border border-dashed border-[#D5DEEA] rounded-2xl">
+        <AlertTriangle className="w-8 h-8 text-[#F28C38] mx-auto" />
+        <p className="mt-3 text-[15px] font-semibold text-[#12263F]">{error}</p>
+        <button type="button" onClick={load} className={`${btn} mt-4 border border-[#D5DEEA] text-[#12263F]`}>
+          <RefreshCw className="w-4 h-4" /> Try again
+        </button>
+      </div>
+    );
+  }
+  if (!r) {
+    return (
+      <div className="space-y-4" aria-busy="true">
+        <div className="h-28 rounded-2xl bg-[#F1F5F9] animate-pulse" />
+        <div className="h-64 rounded-2xl bg-[#F1F5F9] animate-pulse" />
+      </div>
+    );
+  }
 
-  const renderBadge = (status: RentalStatus) => {
-    switch (status) {
-      case 'pending_approval':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
-            <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-            <span>Pending Approval</span>
-          </span>
-        );
-      case 'approved':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
-            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
-            <span>Approved & Scheduled</span>
-          </span>
-        );
-      case 'dispatched':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
-            <Truck className="w-3.5 h-3.5 text-purple-600" />
-            <span>Out for Delivery</span>
-          </span>
-        );
-      case 'active':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span>Active Contract</span>
-          </span>
-        );
-      case 'extension_requested':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
-            <Clock className="w-3.5 h-3.5 text-cyan-600" />
-            <span>Extension Requested</span>
-          </span>
-        );
-      case 'return_scheduled':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-            <Truck className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Return Scheduled</span>
-          </span>
-        );
-      case 'returned':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-300">
-            <RotateCcw className="w-3.5 h-3.5 text-gray-500" />
-            <span>Device Returned</span>
-          </span>
-        );
-      case 'deposit_refunded':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Deposit Refunded</span>
-          </span>
-        );
-      case 'cancelled':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
-            <X className="w-3.5 h-3.5 text-red-500" />
-            <span>Cancelled</span>
-          </span>
-        );
-    }
-  };
-
-  const handleDownloadInvoice = () => {
-    const content = `BUY DENMED HEALTHCARE PVT LTD
-TAX INVOICE & RENTAL CONTRACT AGREEMENT
-=============================================================
-Contract / Booking Number: ${rental.bookingNumber}
-Date: ${rental.createdAt.split('T')[0]}
-Status: ${rental.status.toUpperCase()}
-
-CLIENT INFORMATION:
-Clinic / Doctor: ${rental.address.clinicHospitalName || rental.address.name}
-Doctor in Charge: ${rental.address.name}
-Phone: ${rental.address.phone}
-Delivery Address: ${rental.address.addressLine1}, ${rental.address.city}, ${rental.address.state} - ${rental.address.pincode}
-
-EQUIPMENT DETAILS:
-Name: ${rental.product.name}
-Brand: ${rental.product.brandName}
-SKU / Serial No: ${rental.product.sku}
-Plan: ${rental.plan.type.toUpperCase()} (${rental.duration} units)
-Period: ${rental.startDate} to ${rental.endDate}
-
-FINANCIALS:
-Rent Charges: ₹${rental.rentAmount.toLocaleString('en-IN')}
-Refundable Security Deposit: ₹${rental.deposit.toLocaleString('en-IN')} (100% Refundable)
-Doorstep Delivery & Return Pickup: ₹${rental.charges.deliveryPickup.toLocaleString('en-IN')}
-GST (12%): ₹${(rental.charges.gst || 0).toLocaleString('en-IN')}
--------------------------------------------------------------
-TOTAL AMOUNT PAID: ₹${(rental.rentAmount + rental.deposit + rental.charges.deliveryPickup + (rental.charges.gst || 0)).toLocaleString('en-IN')}
-
-TRANSACTIONS:
-${rental.payments.map((p) => `- ${p.date}: ₹${p.amount.toLocaleString('en-IN')} via ${p.method} (Ref: ${p.transactionId || 'N/A'})`).join('\n')}
-
-TERMS:
-1. 100% Security Deposit will be refunded to client within ${refundWindow} following equipment pickup and functional verification.
-2. 100% Free biomedical maintenance, periodic calibration check, and emergency breakdown replacement are covered under this contract.
-Support Helpline: ${store.supportPhone} | ${store.supportEmail}
-=============================================================`;
-
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Rental-Agreement-${rental.bookingNumber}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    // Revoke after the browser has started the download (immediate revoke breaks Safari/Firefox)
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    addToast({
-      type: 'success',
-      title: 'Invoice Downloaded',
-      message: `Tax invoice for rental ${rental.bookingNumber} downloaded.`
-    });
-  };
-
-  const handleConfirmExtension = () => {
-    setIsExtending(true);
+  const msg = rentalMessage(r, rules.depositRefundDays);
+  const act = async (key: string, fn: () => Promise<CustomerRental>, success: string) => {
+    setBusy(key);
     try {
-      const extraRent = rental.plan.price * extraDuration;
-      const payment: RentalPayment = {
-        id: `pay-ext-${Date.now()}`,
-        amount: extraRent,
-        date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
-        method: 'Razorpay Instant UPI',
-        type: 'extension',
-        status: 'paid',
-        transactionId: `pay_rzp_ext_${Math.floor(1000000 + Math.random() * 9000000)}`
-      };
-
-      extendRental(rental.id, extraDuration, extraRent, payment);
-
-      addToast({
-        type: 'success',
-        title: 'Rental Extended',
-        message: `Extended by ${extraDuration} ${rental.plan.type}(s). New end date recorded.`
-      });
-      setIsExtendOpen(false);
+      setR(await fn());
+      addToast({ type: 'success', title: success, message: '' });
+      return true;
+    } catch (err) {
+      if (!(err instanceof PaymentCancelled)) addToast({ type: 'error', title: 'Something went wrong', message: errorMessage(err) });
+      return false;
     } finally {
-      setIsExtending(false);
+      setBusy(null);
     }
   };
 
-  const handleConfirmReturn = () => {
-    setIsScheduling(true);
+  const viewDoc = async (doc: RentalKycDoc) => {
+    const win = window.open('', '_blank');
     try {
-      scheduleReturn(rental.id, pickupDate);
-      addToast({
-        type: 'success',
-        title: 'Return Pickup Scheduled',
-        message: `Pickup confirmed for ${pickupDate}.`
-      });
-      setIsReturnOpen(false);
-    } finally {
-      setIsScheduling(false);
+      const url = await openKycDocument(doc.id);
+      if (win) win.location.href = url;
+    } catch (err) {
+      win?.close();
+      addToast({ type: 'error', title: 'Could not open the file', message: errorMessage(err) });
     }
   };
+
+  const extendCost = extendBy * r.plan.rate;
+  const minPickup = ymd(1);
+  const maxPickup = ymd(60);
+  // Default: the booked end date (within the allowed window), else tomorrow
+  const defaultPickup = r.endDate && r.endDate > minPickup ? (r.endDate < maxPickup ? r.endDate : maxPickup) : minPickup;
+  const chosenPickup = pickupDate || defaultPickup;
 
   return (
-    <div className="space-y-6">
-      {/* Overview Card */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-200/80 shadow-xs space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2.5">
-              {renderBadge(rental.status)}
-              <span className="text-xs font-mono font-bold text-gray-500">
-                {rental.bookingNumber}
-              </span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black text-gray-900 mt-1">
-              {rental.product.name}
-            </h1>
-            <p className="text-xs text-gray-500">
-              Brand: {rental.product.brandName} • SKU: {rental.product.sku}
+    <div className="space-y-5">
+      <Link href="/account?tab=rentals" className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#5B6B82] hover:text-[#1D5FAF]">
+        <ArrowLeft className="w-4 h-4" /> Back to my rentals
+      </Link>
+
+      {/* Header */}
+      <div className={`${card} flex flex-col sm:flex-row sm:items-center gap-4`}>
+        <div className="w-20 h-20 rounded-xl bg-[#F6F9FD] border border-[#E8EEF5] relative overflow-hidden shrink-0">
+          {r.product.image ? <Image src={r.product.image} alt={r.product.name} fill className="object-contain p-2" sizes="80px" referrerPolicy="no-referrer" /> : <Bed className="w-8 h-8 m-auto mt-6 text-[#C5CFDC]" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold text-[#12263F]">{r.product.name}</h1>
+            <StatusPill r={r} />
+          </div>
+          <p className="mt-1 text-[13px] text-[#5B6B82]">
+            Rental <span className="font-mono font-semibold text-[#12263F]">{r.rentalNumber}</span> · booked {day(r.createdAt)} · {r.plan.durationLabel} at {inr(r.plan.rate)}/{r.plan.unit}
+          </p>
+          {r.product.slug && (
+            <Link href={`/rent/${r.product.slug}`} className="mt-1 inline-flex items-center gap-1 text-[12px] font-semibold text-[#1D5FAF] hover:underline">
+              View equipment <ExternalLink className="w-3 h-3" />
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* What now */}
+      {msg.text && <p className={`rounded-xl border px-4 py-3 text-[14px] leading-relaxed ${TONE[msg.tone]}`}>{msg.text}</p>}
+
+      {(r.actions.payAdvance || r.actions.payBalance) && (
+        <div className={`${card} flex flex-wrap items-center justify-between gap-3`}>
+          <div>
+            <p className={h2}>{r.actions.payAdvance ? 'Complete your booking payment' : 'Pay the balance'}</p>
+            <p className="text-[13px] text-[#5B6B82]">
+              {r.actions.payAdvance
+                ? `${r.amounts.advancePercent < 100 ? `${r.amounts.advancePercent}% advance` : 'Full amount'} of ${inr(r.amounts.advanceDue)}`
+                : `${inr(r.amounts.balanceDue)} ${r.balanceDuePolicy === 'on_delivery' && ['dispatched', 'approved'].includes(r.status) ? '(you can also pay the delivery team)' : 'remaining'}`}
             </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleDownloadInvoice}
-              className="px-4 py-2 border border-gray-300 hover:border-gray-400 bg-gray-50 text-gray-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download Contract</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => act('pay', () => payRental(r, r.actions.payAdvance ? 'advance' : 'balance', store.brandName, user), 'Payment received — thank you!')}
+            className={`${btn} bg-[#1D5FAF] hover:bg-[#174E90] text-white`}
+          >
+            {busy === 'pay' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+            Pay {inr(r.actions.payAdvance ? r.amounts.advanceDue : r.amounts.balanceDue)}
+          </button>
         </div>
+      )}
 
-        {/* Equipment + Photo + Tenure Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-          <div className="relative w-full aspect-square rounded-2xl bg-[#FBFBFB] border border-gray-100 p-4 overflow-hidden flex items-center justify-center">
-            <Image
-              src={getProductImageUrl(rental.product)}
-              alt={rental.product.name}
-              fill
-              className="object-contain"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-
-          <div className="md:col-span-2 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-1">
-                <span className="text-gray-500 text-[12px] font-semibold uppercase tracking-wider">
-                  Contract Tenure
-                </span>
-                <div className="font-bold text-gray-900 text-sm">
-                  {rental.duration} {rental.plan.type}(s) Plan
-                </div>
-                <div className="text-gray-600">
-                  {rental.startDate} to {rental.endDate}
-                </div>
-              </div>
-
-              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-1">
-                <span className="text-gray-500 text-[12px] font-semibold uppercase tracking-wider">
-                  Total Rent Paid
-                </span>
-                <div className="font-black text-gray-900 text-sm">
-                  ₹{rental.rentAmount.toLocaleString('en-IN')}
-                </div>
-                <div className="text-gray-500 text-[12px]">
-                  Rate: ₹{rental.plan.price.toLocaleString('en-IN')}/{rental.plan.type}
-                </div>
-              </div>
-            </div>
-
-            {/* Refundable Security Deposit Box */}
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-start gap-3">
-              <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-              <div className="space-y-0.5 text-xs">
-                <div className="font-bold text-emerald-900">
-                  Refundable Security Deposit: ₹{rental.deposit.toLocaleString('en-IN')}
-                </div>
-                <p className="text-emerald-700 leading-relaxed">
-                  {rental.status === 'deposit_refunded'
-                    ? 'Deposit has been refunded back to your bank account.'
-                    : `100% of this deposit will be refunded within ${refundWindow} following equipment return pickup.`}
-                </p>
-              </div>
-            </div>
-
-            {/* Buttons */}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsExtendOpen(true)}
-                className="px-5 py-2.5 bg-[#1D5FAF] hover:bg-[#174E90] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
-              >
-                <Calendar className="w-4 h-4" />
-                <span>Request Extension</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsReturnOpen(true)}
-                className="px-5 py-2.5 bg-[#0B2545] hover:bg-[#13335E] text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1.5"
-              >
-                <Truck className="w-4 h-4" />
-                <span>Schedule Return Pickup</span>
-              </button>
-            </div>
-          </div>
+      {r.status !== 'pending_payment' && (
+        <div className={card}>
+          <Steps r={r} />
         </div>
-      </div>
+      )}
 
-      {/* Contract & Logistics Timeline */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-200/80 shadow-xs space-y-4">
-        <h3 className="font-black text-sm text-gray-900 uppercase tracking-wider">
-          Contract Lifecycle & Logistics Status
-        </h3>
-
-        <div className="space-y-4 text-xs pl-3 border-l-2 border-gray-200">
-          {[
-            {
-              title: '1. Booking Placed & Deposit Received',
-              desc: `Booking #${rental.bookingNumber} confirmed. Deposit of ₹${rental.deposit.toLocaleString('en-IN')} secured in escrow.`,
-              done: true
-            },
-            {
-              title: '2. Booking Confirmed',
-              desc: 'Availability and delivery slot confirmed by our rental desk.',
-              done: rental.status !== 'pending_approval'
-            },
-            {
-              title: '3. Biomedical Calibration & Hospital Grade Sanitization',
-              desc: 'Tested for continuous operational pressure and vacuum-sealed.',
-              done: rental.status === 'dispatched' || rental.status === 'active' || rental.status === 'return_scheduled' || rental.status === 'returned' || rental.status === 'deposit_refunded'
-            },
-            {
-              title: '4. Doorstep Installation & Training',
-              desc: 'Delivered by certified biomedical technician with full operating demo.',
-              done: rental.status === 'active' || rental.status === 'return_scheduled' || rental.status === 'returned' || rental.status === 'deposit_refunded'
-            },
-            {
-              title: '5. Return Logistics & Inspection',
-              desc: rental.returnPickupDate ? `Scheduled for ${rental.returnPickupDate}.` : 'Scheduled upon your completion notice.',
-              done: rental.status === 'returned' || rental.status === 'deposit_refunded'
-            },
-            {
-              title: '6. 100% Security Deposit Refund',
-              desc: 'Credited directly to original payment method.',
-              done: rental.status === 'deposit_refunded'
-            }
-          ].map((step, idx) => (
-            <div key={idx} className="relative pl-4 space-y-0.5">
-              <div
-                className={`absolute -left-[9px] top-1 w-3.5 h-3.5 rounded-full border-2 ${
-                  step.done ? 'bg-green-600 border-green-600' : 'bg-white border-gray-300'
-                }`}
-              />
-              <div className={`font-bold ${step.done ? 'text-gray-900' : 'text-gray-400'}`}>
-                {step.title}
-              </div>
-              <p className="text-[12px] text-gray-500 leading-relaxed">{step.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Payment History */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-200/80 shadow-xs space-y-4">
-        <h3 className="font-black text-sm text-gray-900 uppercase tracking-wider">
-          Payment Transactions
-        </h3>
-
-        <div className="border border-gray-200 rounded-2xl overflow-hidden divide-y divide-gray-100 text-xs">
-          {rental.payments.map((p) => (
-            <div key={p.id} className="p-3.5 bg-white flex items-center justify-between">
-              <div>
-                <div className="font-bold text-gray-900 capitalize">{p.type} Payment</div>
-                <div className="text-[12px] text-gray-500">{p.date} • {p.method}</div>
-                {p.transactionId && (
-                  <div className="text-[11px] font-mono text-gray-400">Ref: {p.transactionId}</div>
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start">
+        <div className="space-y-5 min-w-0">
+          {/* Documents */}
+          {r.kyc.required && (
+            <section className={card}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className={h2}>Documents</h2>
+                {r.kyc.statusLabel && (
+                  <span className={`rounded-full border px-2.5 py-0.5 text-[12px] font-semibold ${r.kyc.status === 'approved' ? TONE.ok : r.kyc.status === 'rejected' ? TONE.bad : TONE.info}`}>{r.kyc.statusLabel}</span>
                 )}
               </div>
-              <div className="text-right">
-                <div className="font-black text-gray-900 text-sm">₹{p.amount.toLocaleString('en-IN')}</div>
-                <span className="text-[11px] text-green-600 font-bold">Paid</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* EXTENSION MODAL */}
-      {isExtendOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 space-y-4 shadow-2xl relative border border-gray-200">
-            <button
-              onClick={() => setIsExtendOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-lg font-bold w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"
-            >
-              ✕
-            </button>
-
-            <div className="space-y-1">
-              <div className="text-xs font-bold text-[#1D5FAF] uppercase tracking-wider">
-                Tenure Extension
-              </div>
-              <h3 className="text-lg font-black text-[#12263F]">
-                Extend Equipment Usage
-              </h3>
-              <p className="text-xs text-[#5B6B82]">
-                Continue using {rental.product.name} without paying an additional security deposit.
+              <ul className="mt-3 space-y-2.5">
+                {r.kyc.requirements.map((q) => {
+                  const d = q.document;
+                  const needsUpload = r.actions.uploadKyc && (!d || d.status === 'rejected');
+                  return (
+                    <li key={q.key} className={`rounded-xl border p-3.5 ${d?.status === 'rejected' ? 'border-red-200 bg-red-50/50' : 'border-[#E8EEF5]'}`}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${d?.status === 'approved' ? 'bg-[#16A34A] text-white' : 'bg-[#EAF2FC] text-[#1D5FAF]'}`}>
+                            {d?.status === 'approved' ? <Check className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                          </span>
+                          <div className="min-w-0 text-[13px]">
+                            <p className="font-semibold text-[#12263F]">{q.label}</p>
+                            {d ? (
+                              <button type="button" onClick={() => viewDoc(d)} className="inline-flex items-center gap-1 text-[#1D5FAF] hover:underline cursor-pointer">
+                                <Eye className="w-3.5 h-3.5" /> {d.fileName}
+                              </button>
+                            ) : (
+                              <p className="text-[#8A97A8]">{q.hint}</p>
+                            )}
+                            {d?.status === 'rejected' && d.rejectReason && <p className="text-red-700">Not accepted: {d.rejectReason}</p>}
+                            {d?.status === 'approved' && <p className="text-[#16A34A]">Verified</p>}
+                          </div>
+                        </div>
+                        {needsUpload && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={busy !== null}
+                              onClick={() => fileInputs.current[q.key]?.click()}
+                              className={`${btn} !py-2 border border-[#D5DEEA] bg-white text-[#12263F] hover:border-[#1D5FAF]`}
+                            >
+                              {busy === `kyc-${q.key}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} {d ? 'Upload again' : 'Upload'}
+                            </button>
+                            <input
+                              ref={(el) => {
+                                fileInputs.current[q.key] = el;
+                              }}
+                              type="file"
+                              accept="application/pdf,image/jpeg,image/png,image/webp"
+                              hidden
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                e.target.value = '';
+                                if (!f) return;
+                                if (f.size > 8 * 1024 * 1024) return addToast({ type: 'error', title: 'File too large', message: 'Upload a file under 8 MB.' });
+                                act(`kyc-${q.key}`, () => uploadRentalKycDocument(r.id, q.key, f), 'Document uploaded');
+                              }}
+                            />
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-2 flex items-center gap-1 text-[12px] text-[#8A97A8]">
+                <Lock className="w-3.5 h-3.5" /> Only our verification team can see these files.
               </p>
-            </div>
+            </section>
+          )}
 
-            <div className="space-y-2 pt-2">
-              <label className="block text-xs font-bold text-[#12263F]">
-                Extra Duration ({rental.plan.type}s):
-              </label>
-              <div className="flex items-center border border-[#DCE6F2] rounded-xl overflow-hidden bg-[#F6F9FD]">
-                <button
-                  type="button"
-                  onClick={() => setExtraDuration((d) => Math.max(1, d - 1))}
-                  className="px-4 py-2 hover:bg-[#EAF2FC] text-[#12263F] font-bold"
-                >
-                  -
-                </button>
-                <div className="flex-1 text-center font-bold text-sm text-[#12263F]">
-                  +{extraDuration} {rental.plan.type}(s)
+          {/* Extend */}
+          {r.actions.extend && (
+            <section className={card}>
+              <h2 className={`${h2} flex items-center gap-2`}>
+                <CalendarPlus className="w-4 h-4 text-[#1D5FAF]" /> Extend this rental
+              </h2>
+              <p className="mt-1 text-[13px] text-[#5B6B82]">Currently till {day(r.endDate)}. Pay online and the new end date applies immediately.</p>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <div>
+                  <label htmlFor="ext" className="block text-[13px] font-semibold text-[#12263F] mb-1">
+                    Extend by
+                  </label>
+                  <div className="flex items-center rounded-xl border border-[#D5DEEA] bg-white">
+                    <button type="button" onClick={() => setExtendBy((n) => Math.max(1, n - 1))} className="px-3.5 py-2 text-[#5B6B82] hover:text-[#1D5FAF] cursor-pointer" aria-label="Fewer">−</button>
+                    <span id="ext" className="w-24 text-center text-[14px] font-semibold tabular-nums">
+                      {extendBy} {extendBy === 1 ? r.plan.unit : `${r.plan.unit}s`}
+                    </span>
+                    <button type="button" onClick={() => setExtendBy((n) => Math.min(r.plan.maxPeriods, n + 1))} className="px-3.5 py-2 text-[#5B6B82] hover:text-[#1D5FAF] cursor-pointer" aria-label="More">+</button>
+                  </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setExtraDuration((d) => Math.min(12, d + 1))}
-                  className="px-4 py-2 hover:bg-[#EAF2FC] text-[#12263F] font-bold"
+                  disabled={busy !== null}
+                  onClick={() => act('extend', () => payExtension(r, extendBy, store.brandName, user), 'Rental extended')}
+                  className={`${btn} bg-[#1D5FAF] hover:bg-[#174E90] text-white`}
                 >
-                  +
+                  {busy === 'extend' && <Loader2 className="w-4 h-4 animate-spin" />} Pay {inr(extendCost)} + GST
                 </button>
               </div>
-            </div>
+            </section>
+          )}
 
-            <div className="p-4 bg-[#F6F9FD] rounded-2xl border border-[#DCE6F2] space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span>Rate per {rental.plan.type}</span>
-                <span className="font-bold text-[#12263F]">₹{rental.plan.price.toLocaleString('en-IN')}</span>
+          {/* Pickup */}
+          {r.actions.requestReturn && (
+            <section className={card}>
+              <h2 className={`${h2} flex items-center gap-2`}>
+                <Truck className="w-4 h-4 text-[#1D5FAF]" /> Request a pickup
+              </h2>
+              <p className="mt-1 text-[13px] text-[#5B6B82]">Done with the equipment? Choose a day and our team will collect it. Rent is charged till the end date you booked.</p>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <div>
+                  <label htmlFor="pickup" className="block text-[13px] font-semibold text-[#12263F] mb-1">
+                    Pickup date
+                  </label>
+                  <input
+                    id="pickup"
+                    type="date"
+                    min={minPickup}
+                    max={maxPickup}
+                    value={chosenPickup}
+                    onChange={(e) => setPickupDate(e.target.value)}
+                    className="rounded-xl border border-[#D5DEEA] px-3.5 py-2.5 text-[14px] text-[#12263F] focus:outline-none focus:border-[#1D5FAF]"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => act('pickup', () => requestRentalPickup(r.id, chosenPickup), 'Pickup requested — we will confirm the slot')}
+                  className={`${btn} border border-[#1D5FAF] text-[#1D5FAF] hover:bg-[#EAF2FC]`}
+                >
+                  {busy === 'pickup' && <Loader2 className="w-4 h-4 animate-spin" />} Request pickup
+                </button>
               </div>
-              <div className="flex justify-between">
-                <span>Deposit Status</span>
-                <span className="text-[#16A34A] font-bold">₹{rental.deposit.toLocaleString('en-IN')} Held in Escrow</span>
-              </div>
-              <div className="pt-2 border-t border-[#DCE6F2] flex justify-between items-baseline">
-                <span className="font-bold text-[#12263F]">Extension Payable Now</span>
-                <span className="font-black text-base text-[#12263F] font-extrabold">
-                  ₹{(rental.plan.price * extraDuration).toLocaleString('en-IN')}
+            </section>
+          )}
+
+          {/* Return / deposit */}
+          {(r.returnCondition || r.deductions.length > 0) && (
+            <section className={card}>
+              <h2 className={h2}>Return &amp; deposit</h2>
+              <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-[13px]">
+                <dt className="text-[#8A97A8]">Deposit</dt>
+                <dd className="text-[#12263F]">{inr(r.amounts.deposit)}</dd>
+                {r.deductions.map((d) => (
+                  <React.Fragment key={d.id}>
+                    <dt className="text-[#8A97A8]">{d.type === 'late_fee' ? 'Late fee' : d.type === 'damage' ? 'Damage' : 'Missing accessory'}</dt>
+                    <dd className="text-red-700">
+                      − {inr(d.amount)}
+                      {d.description && <span className="text-[#8A97A8]"> · {d.description}</span>}
+                    </dd>
+                  </React.Fragment>
+                ))}
+                <dt className="font-semibold text-[#12263F]">Refund</dt>
+                <dd className="font-semibold text-[#16A34A]">{inr(r.amounts.depositRefund ?? 0)}</dd>
+              </dl>
+              {r.returnNotes && <p className="mt-2 text-[13px] text-[#5B6B82]">Inspection: {r.returnNotes}</p>}
+            </section>
+          )}
+
+          {/* Timeline */}
+          <section className={card}>
+            <h2 className={h2}>Activity</h2>
+            <ol className="mt-3 border-l-2 border-[#E2E8F0] pl-4 space-y-3">
+              {[...r.timeline].reverse().map((t, i) => (
+                <li key={i} className="relative text-[13px]">
+                  <span className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-[#1D5FAF] border-2 border-white" />
+                  <p className="font-semibold text-[#12263F]">
+                    {t.label} <span className="font-normal text-[#8A97A8]">· {new Date(t.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span>
+                  </p>
+                  {t.note && <p className="text-[#5B6B82]">{t.note}</p>}
+                </li>
+              ))}
+            </ol>
+          </section>
+        </div>
+
+        {/* Side */}
+        <aside className="space-y-5">
+          <section className={card}>
+            <h2 className={h2}>Payment</h2>
+            <div className="mt-3 space-y-1.5 text-[13px]">
+              <div className="flex justify-between"><span className="text-[#5B6B82]">Rent</span><span>{inr(r.amounts.rent)}</span></div>
+              {r.amounts.delivery > 0 && <div className="flex justify-between"><span className="text-[#5B6B82]">Delivery &amp; pickup</span><span>{inr(r.amounts.delivery)}</span></div>}
+              {r.amounts.gst > 0 && <div className="flex justify-between"><span className="text-[#5B6B82]">GST</span><span>{inr(r.amounts.gst)}</span></div>}
+              {r.amounts.deposit > 0 && <div className="flex justify-between text-[#16A34A]"><span>Refundable deposit</span><span>{inr(r.amounts.deposit)}</span></div>}
+              <div className="flex justify-between font-semibold border-t border-[#E8EEF5] pt-2"><span>Total</span><span>{inr(r.amounts.total)}</span></div>
+              <div className="flex justify-between"><span className="text-[#5B6B82]">Paid</span><span className="text-[#16A34A] font-semibold">{inr(r.amounts.paid)}</span></div>
+              {r.amounts.balanceDue > 0 && r.status !== 'cancelled' && (
+                <div className="flex justify-between"><span className="text-[#5B6B82]">Balance due</span><span className="text-[#B45309] font-semibold">{inr(r.amounts.balanceDue)}</span></div>
+              )}
+              {r.amounts.refunded > 0 && <div className="flex justify-between"><span className="text-[#5B6B82]">Refunded</span><span>{inr(r.amounts.refunded)}</span></div>}
+            </div>
+            {r.payments.length > 0 && (
+              <ul className="mt-3 border-t border-[#E8EEF5] pt-3 space-y-1.5 text-[12px] text-[#5B6B82]">
+                {r.payments.map((p) => (
+                  <li key={p.id} className="flex justify-between gap-2">
+                    <span>
+                      {day(p.paidAt)} · {p.purpose} · {p.method}
+                    </span>
+                    <span className="text-[#12263F] font-semibold">{inr(p.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {r.refunds.filter((x) => x.status !== 'failed').length > 0 && (
+              <ul className="mt-3 border-t border-[#E8EEF5] pt-3 space-y-1.5 text-[12px] text-[#5B6B82]">
+                {r.refunds
+                  .filter((x) => x.status !== 'failed')
+                  .map((x) => (
+                    <li key={x.id} className="flex justify-between gap-2">
+                      <span>
+                        Refund · {x.method === 'gateway' ? 'original payment' : x.methodLabel} {x.status === 'processing' ? '(processing)' : ''}
+                        {x.reference && <span className="block font-mono">{x.reference}</span>}
+                      </span>
+                      <span className="text-[#16A34A] font-semibold">{inr(x.amount)}</span>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </section>
+
+          <section className={`${card} space-y-3 text-[13px]`}>
+            <h2 className={h2}>Delivery</h2>
+            <p className="text-[#5B6B82]">
+              {r.startDate && r.endDate ? (
+                <>
+                  Rental period <span className="font-semibold text-[#12263F]">{day(r.startDate)} → {day(r.endDate)}</span>
+                </>
+              ) : (
+                <>Requested from {day(r.requestedStartDate)} · starts on delivery</>
+              )}
+            </p>
+            {r.unit && <p className="text-[#5B6B82]">Unit serial <span className="font-mono text-[#12263F]">{r.unit.serialNumber}</span></p>}
+            {r.deliveryAddress && (
+              <p className="flex items-start gap-1.5 text-[#5B6B82]">
+                <MapPin className="w-4 h-4 shrink-0 text-[#1D5FAF]" />
+                <span>
+                  {r.deliveryAddress.organisation && <>{r.deliveryAddress.organisation}, </>}
+                  {r.deliveryAddress.name} · {r.deliveryAddress.phone}
+                  <br />
+                  {r.deliveryAddress.line1}
+                  {r.deliveryAddress.line2 ? `, ${r.deliveryAddress.line2}` : ''}, {r.deliveryAddress.city} – {r.deliveryAddress.pincode}
                 </span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              disabled={isExtending}
-              onClick={handleConfirmExtension}
-              className="w-full py-3.5 bg-[#1D5FAF] hover:bg-[#174E90] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <CreditCard className="w-4 h-4" />
-              <span>
-                {isExtending
-                  ? 'Authorizing Payment...'
-                  : `Pay ₹${(rental.plan.price * extraDuration).toLocaleString('en-IN')} via Razorpay`}
-              </span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* SCHEDULE RETURN MODAL */}
-      {isReturnOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 space-y-4 shadow-2xl relative border border-gray-200">
-            <button
-              onClick={() => setIsReturnOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-lg font-bold w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"
-            >
-              ✕
-            </button>
-
-            <div className="space-y-1">
-              <div className="text-xs font-bold text-[#1D5FAF] uppercase tracking-wider">
-                Logistics Pickup
-              </div>
-              <h3 className="text-lg font-black text-[#12263F]">
-                Schedule Equipment Return
-              </h3>
-              <p className="text-xs text-[#5B6B82]">
-                Our logistics partner will arrive to inspect and safely collect the device.
               </p>
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <div>
-                <label className="block text-xs font-bold text-[#12263F] mb-1">
-                  Pickup Date:
-                </label>
-                <input
-                  type="date"
-                  min={new Date().toISOString().split('T')[0]}
-                  value={pickupDate}
-                  onChange={(e) => setPickupDate(e.target.value)}
-                  className="w-full text-xs font-semibold px-3 py-2 border border-[#DCE6F2] rounded-xl bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[#12263F] mb-1">
-                  Time Slot:
-                </label>
-                <select
-                  value={pickupSlot}
-                  onChange={(e) => setPickupSlot(e.target.value)}
-                  className="w-full text-xs font-semibold px-3 py-2 border border-[#DCE6F2] rounded-xl bg-white"
-                >
-                  <option>10:00 AM - 01:00 PM</option>
-                  <option>02:00 PM - 05:00 PM</option>
-                  <option>05:00 PM - 08:00 PM</option>
-                </select>
-              </div>
-
-              <div className="p-3 bg-green-50 rounded-xl border border-green-200 text-xs text-green-800 space-y-1">
-                <div className="font-bold flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-[#16A34A]" />
-                  <span>₹{rental.deposit.toLocaleString('en-IN')} Refund</span>
+            )}
+            {[
+              ['Delivery', r.delivery],
+              ['Pickup', r.returnPickup],
+            ].map(([t, s]) =>
+              s && typeof s === 'object' ? (
+                <div key={t as string} className="rounded-lg border border-[#E8EEF5] px-3 py-2">
+                  <p className="font-semibold text-[#12263F]">
+                    {t as string} · {s.courier}
+                  </p>
+                  <p className="text-[12px] text-[#5B6B82]">
+                    {s.pickupDate && <>On {day(s.pickupDate)} · </>}
+                    {s.awb ? `AWB ${s.awb}` : ''}
+                    {s.deliveredAt ? ` · done ${day(s.deliveredAt)}` : ''}
+                  </p>
+                  {s.trackingUrl && (
+                    <a href={s.trackingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#1D5FAF] hover:underline">
+                      Track <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
                 </div>
-                <p className="text-[12px] leading-relaxed">
-                  Upon collection, our courier generates a digital inspection clearance. 100% of your security deposit is refunded to your payment account within {refundWindow}.
-                </p>
-              </div>
-            </div>
+              ) : null
+            )}
+          </section>
 
-            <button
-              type="button"
-              disabled={isScheduling}
-              onClick={handleConfirmReturn}
-              className="w-full py-3 bg-[#0B2545] hover:bg-[#13335E] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <Truck className="w-4 h-4" />
-              <span>
-                {isScheduling ? 'Scheduling...' : 'Confirm Return Pickup'}
-              </span>
-            </button>
-          </div>
-        </div>
-      )}
+          {r.actions.cancel && (
+            <section className={card}>
+              {cancelOpen ? (
+                <div className="space-y-3 text-[13px]">
+                  <p className="font-semibold text-[#12263F]">Cancel this booking?</p>
+                  {r.amounts.paid > 0 && <p className="text-[#5B6B82]">{inr(r.amounts.paid)} will be refunded to your original payment method.</p>}
+                  <select value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} className="w-full rounded-xl border border-[#D5DEEA] px-3 py-2.5 text-[14px]">
+                    {CANCEL_REASONS.map((x) => (
+                      <option key={x}>{x}</option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={async () => {
+                        if (await act('cancel', () => cancelMyRental(r.id, cancelReason), 'Booking cancelled')) setCancelOpen(false);
+                      }}
+                      className={`${btn} !py-2 bg-red-600 hover:bg-red-700 text-white`}
+                    >
+                      {busy === 'cancel' && <Loader2 className="w-4 h-4 animate-spin" />} Cancel booking
+                    </button>
+                    <button type="button" onClick={() => setCancelOpen(false)} className={`${btn} !py-2 border border-[#D5DEEA] text-[#12263F]`}>
+                      Keep it
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setCancelOpen(true)} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-red-600 hover:underline cursor-pointer">
+                  <XCircle className="w-4 h-4" /> Cancel this booking
+                </button>
+              )}
+            </section>
+          )}
+
+          <p className="text-[12px] text-[#8A97A8] px-1">
+            Need help? Call <a href={store.supportPhoneHref} className="font-semibold text-[#1D5FAF]">{store.supportPhone}</a>
+          </p>
+        </aside>
+      </div>
     </div>
   );
 }

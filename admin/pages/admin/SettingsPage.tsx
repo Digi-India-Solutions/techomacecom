@@ -9,8 +9,12 @@ import {
   Mail,
   MapPin,
   MessageCircle,
+  ArrowDown,
+  ArrowUp,
+  Plus,
   ReceiptIndianRupee,
   RefreshCw,
+  RotateCcw,
   Save,
   Search,
   Send,
@@ -53,11 +57,12 @@ import { useToast } from '@/components/admin/ToastProvider';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { FormField, inputClass, selectClass, textareaClass } from '@/components/admin/FormField';
 
-type TabKey = 'store' | 'shipping' | 'payments' | 'taxInvoice' | 'notifications' | 'rental';
+type TabKey = 'store' | 'shipping' | 'returns' | 'payments' | 'taxInvoice' | 'notifications' | 'rental';
 
 const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ className?: string }>; group?: SettingsGroup }[] = [
   { key: 'store', label: 'Store', icon: Store, group: 'store' },
   { key: 'shipping', label: 'Shipping', icon: Truck, group: 'shipping' },
+  { key: 'returns', label: 'Returns & Refunds', icon: RotateCcw, group: 'returns' },
   { key: 'payments', label: 'Payments', icon: CreditCard },
   { key: 'taxInvoice', label: 'Tax & Invoice', icon: ReceiptIndianRupee, group: 'tax' },
   { key: 'notifications', label: 'Notifications', icon: BellRing },
@@ -329,7 +334,7 @@ export function SettingsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#12263F]">Settings</h1>
           <p className="mt-0.5 text-sm text-[#5B6B82]">
-            Store details, delivery, GST invoices, customer notifications and rental rules. Changes appear on the website within a minute.
+            Store details, delivery, returns, GST invoices, customer notifications and rental rules. Changes appear on the website within a minute.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -383,6 +388,7 @@ export function SettingsPage() {
 
       {activeTab === 'store' && <StoreTab s={draft} set={set} errors={errors} canEdit={canEdit} setDraft={setDraft} setSaved={setSaved} />}
       {activeTab === 'shipping' && <ShippingTab s={draft} set={set} errors={errors} canEdit={canEdit} />}
+      {activeTab === 'returns' && <ReturnsTab s={draft} set={set} errors={errors} canEdit={canEdit} />}
       {activeTab === 'payments' && <PaymentsTab />}
       {activeTab === 'taxInvoice' && <TaxTab s={draft} set={set} errors={errors} canEdit={canEdit} setDraft={setDraft} setSaved={setSaved} />}
       {activeTab === 'notifications' && (
@@ -1185,18 +1191,132 @@ function NotificationsTab({
 function RentalTab({ s, set, errors, canEdit }: TabProps) {
   const r = s.rental;
   const d = !canEdit;
-  const num = (key: 'reminderDaysBeforeDue' | 'gracePeriodDays' | 'depositRefundDays', label: string, hint: string, min = 0) => (
+  const docTypes = s.options.kycDocumentTypes || [];
+  const num = (key: 'reminderDaysBeforeDue' | 'gracePeriodDays' | 'depositRefundDays' | 'minLeadDays', label: string, hint: string, min = 0) => (
     <FormField label={label} htmlFor={`rn-${key}`} error={errors[key]} hint={hint}>
-      <input id={`rn-${key}`} type="number" min={min} disabled={d} value={r[key] || ''} placeholder="0" onChange={(e) => set('rental', { [key]: Number(e.target.value) })} className={inputClass} />
+      <input id={`rn-${key}`} type="number" min={min} disabled={d} value={Number.isFinite(r[key]) ? r[key] : ''} placeholder="0" onChange={(e) => set('rental', { [key]: Number(e.target.value) })} className={inputClass} />
     </FormField>
   );
+  // Worked example for the advance: ₹10,000 booking
+  const example = 10000;
+  const advance = r.advancePaymentPercent >= 100 ? example : Math.ceil((example * (r.advancePaymentPercent || 0)) / 100);
 
   return (
     <div className="space-y-5">
       <section className={card}>
-        <h2 className={sectionTitle}>Reminders, late fees &amp; deposit</h2>
+        <h2 className={sectionTitle}>Booking payment</h2>
+        <p className={sectionHint}>
+          Applies to every rental product. The booking total is rent + delivery &amp; pickup + GST + refundable deposit; customers pay this share online at checkout.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="space-y-3">
+            <FormField label="Advance payment at booking" htmlFor="rn-advance" error={errors.advancePaymentPercent} hint="100% = full payment up front. Lower it to take a partial (advance) payment.">
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={10}
+                  max={100}
+                  step={5}
+                  disabled={d}
+                  value={r.advancePaymentPercent || 100}
+                  onChange={(e) => set('rental', { advancePaymentPercent: Number(e.target.value) })}
+                  className="flex-1 accent-[#1D5FAF]"
+                  aria-label="Advance payment percentage"
+                />
+                <div className="flex w-24">
+                  <input
+                    id="rn-advance"
+                    type="number"
+                    min={1}
+                    max={100}
+                    disabled={d}
+                    value={r.advancePaymentPercent || ''}
+                    onChange={(e) => set('rental', { advancePaymentPercent: Number(e.target.value) })}
+                    className={`${inputClass} !rounded-r-none tabular-nums`}
+                  />
+                  <span className="inline-flex items-center rounded-r-lg border border-l-0 border-[#DCE6F2] bg-[#F6F9FD] px-2.5 text-xs text-[#5B6B82]">%</span>
+                </div>
+              </div>
+            </FormField>
+            <p className="rounded-lg bg-[#F6F9FD] px-3 py-2 text-xs text-[#5B6B82]">
+              Example: on a ₹10,000 booking the customer pays <strong className="text-[#12263F]">₹{advance.toLocaleString('en-IN')}</strong> at checkout
+              {advance < example && (
+                <>
+                  {' '}
+                  and <strong className="text-[#12263F]">₹{(example - advance).toLocaleString('en-IN')}</strong> later
+                </>
+              )}
+              .
+            </p>
+          </div>
+          <fieldset disabled={d || r.advancePaymentPercent >= 100} className={r.advancePaymentPercent >= 100 ? 'opacity-50' : ''}>
+            <legend className="mb-2 text-xs font-semibold text-[#12263F]">When is the balance due?</legend>
+            {[
+              { v: 'before_dispatch', t: 'Before dispatch', h: 'Customer pays the rest online from My Rentals (or staff record it) before the equipment leaves.' },
+              { v: 'on_delivery', t: 'On delivery', h: 'Collected by the delivery team (cash / UPI) and recorded before marking delivered.' },
+            ].map((o) => (
+              <label key={o.v} className={`mb-2 flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 ${r.balanceDue === o.v ? 'border-[#1D5FAF] bg-[#EAF2FC]/50' : 'border-[#DCE6F2]'}`}>
+                <input type="radio" name="balanceDue" checked={r.balanceDue === o.v} onChange={() => set('rental', { balanceDue: o.v as 'before_dispatch' | 'on_delivery' })} className="mt-0.5 accent-[#1D5FAF]" />
+                <span>
+                  <span className="block text-xs font-semibold text-[#12263F]">{o.t}</span>
+                  <span className="block text-[11px] text-[#5B6B82]">{o.h}</span>
+                </span>
+              </label>
+            ))}
+            {r.advancePaymentPercent >= 100 && <p className="text-[11px] text-[#5B6B82]">Not used while customers pay 100% up front.</p>}
+          </fieldset>
+        </div>
+      </section>
+
+      <section className={card}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className={sectionTitle}>KYC documents</h2>
+            <p className={sectionHint}>Customers upload these at checkout; staff verify them before approving the booking. Files are stored privately.</p>
+          </div>
+          <Toggle checked={r.kycRequired} disabled={d} onChange={(v) => set('rental', { kycRequired: v })} label="KYC required for rentals" />
+        </div>
+        <div className={`mt-4 space-y-4 ${r.kycRequired ? '' : 'pointer-events-none opacity-50'}`}>
+          <div>
+            <p className="mb-2 text-xs font-semibold text-[#12263F]">Required documents</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {docTypes.map((t) => {
+                const checked = r.kycDocuments.includes(t.key);
+                return (
+                  <label key={t.key} className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 ${checked ? 'border-[#1D5FAF] bg-[#EAF2FC]/50' : 'border-[#DCE6F2]'}`}>
+                    <input
+                      type="checkbox"
+                      className={`${checkbox} mt-0.5`}
+                      disabled={d || !r.kycRequired}
+                      checked={checked}
+                      onChange={(e) =>
+                        set('rental', { kycDocuments: e.target.checked ? [...r.kycDocuments, t.key] : r.kycDocuments.filter((k) => k !== t.key) })
+                      }
+                    />
+                    <span>
+                      <span className="block text-xs font-semibold text-[#12263F]">{t.label}</span>
+                      <span className="block text-[11px] text-[#5B6B82]">{t.hint}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {errors.kycDocuments && <p className="mt-2 text-xs font-medium text-red-600">{errors.kycDocuments}</p>}
+          </div>
+          <FormField label="Instructions shown to customers" htmlFor="rn-kyc-ins" error={errors.kycInstructions}>
+            <textarea id="rn-kyc-ins" rows={2} disabled={d} value={r.kycInstructions} onChange={(e) => set('rental', { kycInstructions: e.target.value })} className={textareaClass} />
+          </FormField>
+        </div>
+        <p className="mt-3 text-[11px] text-[#5B6B82]">
+          A doctor&apos;s prescription is always asked for products marked “Prescription required” in their rental settings, even when KYC is off.
+        </p>
+      </section>
+
+      <section className={card}>
+        <h2 className={sectionTitle}>Dates, reminders, late fees &amp; deposit</h2>
         <p className={sectionHint}>Shown to customers on rental pages and checkout, and used by rental reminders.</p>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {num('minLeadDays', 'Earliest start (days from today)', '0 = same day, 1 = tomorrow')}
           {num('reminderDaysBeforeDue', 'Reminder before end date (days)', 'When the “rental due” message goes out', 1)}
           <FormField label="Late fee per day" htmlFor="rn-late" error={errors.lateFeePerDay} hint="Charged for each day past the end date">
             <Rupee id="rn-late" disabled={d} value={r.lateFeePerDay} onChange={(v) => set('rental', { lateFeePerDay: v })} />
@@ -1209,6 +1329,222 @@ function RentalTab({ s, set, errors, canEdit }: TabProps) {
       <p className="flex items-center gap-1.5 text-[11px] text-[#5B6B82]">
         <MapPin className="h-3.5 w-3.5" /> Rental delivery uses the same serviceable PIN codes as the Shipping tab.
       </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Returns & refunds
+// ---------------------------------------------------------------------------
+
+function ReasonList({
+  label,
+  hint,
+  values,
+  onChange,
+  disabled,
+  error,
+}: {
+  label: string;
+  hint: string;
+  values: string[];
+  onChange: (v: string[]) => void;
+  disabled: boolean;
+  error?: string;
+}) {
+  const move = (i: number, dir: -1 | 1) => {
+    const next = [...values];
+    [next[i], next[i + dir]] = [next[i + dir], next[i]];
+    onChange(next);
+  };
+  return (
+    <div className="space-y-2">
+      <div>
+        <p className="text-xs font-semibold text-[#12263F]">{label}</p>
+        <p className="text-[11px] text-[#5B6B82]">{hint}</p>
+      </div>
+      <ul className="space-y-1.5">
+        {values.map((v, i) => (
+          <li key={i} className="flex items-center gap-1.5">
+            <span className="w-5 shrink-0 text-right text-[11px] tabular-nums text-[#5B6B82]">{i + 1}.</span>
+            <input
+              value={v}
+              disabled={disabled}
+              maxLength={120}
+              onChange={(e) => onChange(values.map((x, j) => (j === i ? e.target.value : x)))}
+              className={inputClass}
+              aria-label={`${label} ${i + 1}`}
+            />
+            <button type="button" disabled={disabled || i === 0} onClick={() => move(i, -1)} className="rounded p-1.5 text-[#5B6B82] hover:bg-[#EAF2FC] disabled:opacity-30" aria-label="Move up">
+              <ArrowUp className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" disabled={disabled || i === values.length - 1} onClick={() => move(i, 1)} className="rounded p-1.5 text-[#5B6B82] hover:bg-[#EAF2FC] disabled:opacity-30" aria-label="Move down">
+              <ArrowDown className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              disabled={disabled || values.length <= 1}
+              onClick={() => onChange(values.filter((_, j) => j !== i))}
+              className="rounded p-1.5 text-[#5B6B82] hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+              aria-label="Remove"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="text-xs font-medium text-red-600">{error}</p>}
+      {!disabled && values.length < 20 && (
+        <button type="button" onClick={() => onChange([...values, ''])} className={btnSecondary}>
+          <Plus className="h-3.5 w-3.5" /> Add reason
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ReturnsTab({ s, set, errors, canEdit }: TabProps) {
+  const r = s.returns;
+  const d = !canEdit;
+  const [catQuery, setCatQuery] = useState('');
+  const categories = s.options.categories || [];
+  const selected = new Set(r.nonReturnableCategoryIds);
+  const visible = categories.filter((c) => c.path.toLowerCase().includes(catQuery.trim().toLowerCase()));
+  const fieldError = (prefix: string) => Object.entries(errors).find(([k]) => k === prefix || k.startsWith(`${prefix}.`))?.[1];
+
+  return (
+    <div className="space-y-5">
+      <section className={card}>
+        <h2 className={sectionTitle}>Return policy</h2>
+        <p className={sectionHint}>Controls the “Return or replace” button in My Orders, the returns policy page and checkout copy.</p>
+        <div className="mt-4 space-y-4">
+          <Toggle
+            checked={r.returnsEnabled}
+            disabled={d}
+            onChange={(v) => set('returns', { returnsEnabled: v })}
+            label="Customers can request returns online"
+            hint="When off, customers are asked to contact support instead."
+          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <FormField label="Return window (days after delivery)" htmlFor="rt-window" error={errors.returnWindowDays} hint="Most medical equipment stores use 7 days">
+              <input
+                id="rt-window"
+                type="number"
+                min={1}
+                max={90}
+                disabled={d || !r.returnsEnabled}
+                value={r.returnWindowDays || ''}
+                onChange={(e) => set('returns', { returnWindowDays: Number(e.target.value) })}
+                className={inputClass}
+              />
+            </FormField>
+            <FormField label="Refund reaches the customer within" htmlFor="rt-days" error={errors.refundProcessingDays} hint='Business days, e.g. "5-7" — shown to customers'>
+              <input id="rt-days" disabled={d} value={r.refundProcessingDays} onChange={(e) => set('returns', { refundProcessingDays: e.target.value })} className={inputClass} />
+            </FormField>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-[#DCE6F2] p-3">
+              <Toggle checked={r.refundEnabled} disabled={d || !r.returnsEnabled} onChange={(v) => set('returns', { refundEnabled: v })} label="Allow refunds" hint="Item is picked up and the money is returned" />
+            </div>
+            <div className="rounded-lg border border-[#DCE6F2] p-3">
+              <Toggle
+                checked={r.replacementEnabled}
+                disabled={d || !r.returnsEnabled}
+                onChange={(v) => set('returns', { replacementEnabled: v })}
+                label="Allow replacements"
+                hint="Item is picked up and the same product is sent again"
+              />
+            </div>
+          </div>
+          {errors.refundEnabled && <p className="text-xs font-medium text-red-600">{errors.refundEnabled}</p>}
+        </div>
+      </section>
+
+      <section className={card}>
+        <h2 className={sectionTitle}>Photos</h2>
+        <p className={sectionHint}>Photos of the product and packaging help staff approve damage and defect claims quickly.</p>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Toggle checked={r.photosRequired} disabled={d} onChange={(v) => set('returns', { photosRequired: v })} label="At least one photo is required" />
+          <FormField label="Maximum photos per request" htmlFor="rt-photos" error={errors.maxPhotos}>
+            <input id="rt-photos" type="number" min={1} max={10} disabled={d} value={r.maxPhotos || ''} onChange={(e) => set('returns', { maxPhotos: Number(e.target.value) })} className={inputClass} />
+          </FormField>
+        </div>
+      </section>
+
+      <section className={card}>
+        <h2 className={sectionTitle}>Reasons customers can choose</h2>
+        <p className={sectionHint}>Shown as options when a customer requests a return or cancels an order. Keep “Other” last.</p>
+        <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <ReasonList
+            label="Return / replacement reasons"
+            hint="My Orders → Return or replace"
+            values={r.returnReasons}
+            onChange={(v) => set('returns', { returnReasons: v })}
+            disabled={d}
+            error={fieldError('returnReasons')}
+          />
+          <ReasonList
+            label="Cancellation reasons"
+            hint="My Orders → Cancel order"
+            values={r.cancelReasons}
+            onChange={(v) => set('returns', { cancelReasons: v })}
+            disabled={d}
+            error={fieldError('cancelReasons')}
+          />
+        </div>
+      </section>
+
+      <section className={card}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className={sectionTitle}>Non-returnable categories</h2>
+            <p className={sectionHint}>
+              Products in these categories (and their sub-categories) cannot be returned online — e.g. opened sterile consumables.
+            </p>
+          </div>
+          <span className="rounded-md bg-[#EAF2FC] px-2 py-1 text-xs font-semibold text-[#1D5FAF]">{selected.size} selected</span>
+        </div>
+        {categories.length === 0 ? (
+          <p className="mt-4 text-xs text-[#5B6B82]">No categories yet.</p>
+        ) : (
+          <>
+            <div className="relative mt-4 max-w-sm">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5B6B82]" />
+              <input value={catQuery} onChange={(e) => setCatQuery(e.target.value)} placeholder="Search categories" className={`${inputClass} pl-8`} />
+            </div>
+            <div className="mt-3 grid max-h-72 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-[#DCE6F2] p-2 sm:grid-cols-2">
+              {visible.map((c) => (
+                <label key={c.id} className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs ${d ? '' : 'cursor-pointer hover:bg-[#F6F9FD]'}`}>
+                  <input
+                    type="checkbox"
+                    className={checkbox}
+                    disabled={d}
+                    checked={selected.has(c.id)}
+                    onChange={(e) =>
+                      set('returns', {
+                        nonReturnableCategoryIds: e.target.checked
+                          ? [...r.nonReturnableCategoryIds, c.id]
+                          : r.nonReturnableCategoryIds.filter((x) => x !== c.id),
+                      })
+                    }
+                  />
+                  <span className="text-[#12263F]">{c.path}</span>
+                  {!c.active && <span className="text-[10px] text-[#5B6B82]">(inactive)</span>}
+                </label>
+              ))}
+              {visible.length === 0 && <p className="p-2 text-xs text-[#5B6B82]">No category matches “{catQuery}”.</p>}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className={card}>
+        <h2 className={sectionTitle}>Return conditions</h2>
+        <p className={sectionHint}>Shown to customers in the return form and on the returns policy page.</p>
+        <FormField label="Conditions" htmlFor="rt-conditions" error={errors.conditions} className="mt-4">
+          <textarea id="rt-conditions" rows={4} disabled={d} value={r.conditions} onChange={(e) => set('returns', { conditions: e.target.value })} className={textareaClass} />
+        </FormField>
+      </section>
     </div>
   );
 }

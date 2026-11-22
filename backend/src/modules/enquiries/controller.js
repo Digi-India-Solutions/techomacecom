@@ -1,4 +1,5 @@
 import { ok, clientIp } from "../../lib/http.js";
+import { alertStaff } from "../../services/admin-alerts.service.js";
 import * as service from "./service.js";
 
 /**
@@ -12,6 +13,16 @@ export async function createSleepTest(req, res) {
   const { row, quiz } = await service.createSleepTestEnquiry(req.body, {
     customerId: req.customer?.id,
     ip: clientIp(req),
+  });
+  alertStaff({
+    type: "enquiry_new",
+    title: `New sleep-test enquiry ${service.enquiryCode(row.id, row.type)}`,
+    message: `${row.name}${row.city ? ` · ${row.city}` : ""}${quiz?.risk ? ` · ${quiz.risk} risk` : ""} — call back`,
+    severity: quiz?.risk === "high" ? "warning" : "info",
+    link: "/admin/enquiries",
+    entityType: "enquiry",
+    entityId: row.id,
+    permission: "enquiries.view",
   });
   return ok(
     res,
@@ -36,6 +47,15 @@ export async function createSeller(req, res) {
   const { row } = await service.createSellerRegistration(req.body, {
     customerId: req.customer?.id,
     ip: clientIp(req),
+  });
+  alertStaff({
+    type: "enquiry_new",
+    title: `New seller application: ${row.name}`,
+    message: `${row.city || ""} · ${row.mobile || row.email || ""}`,
+    link: "/admin/enquiries",
+    entityType: "enquiry",
+    entityId: row.id,
+    permission: "enquiries.view",
   });
   return ok(
     res,

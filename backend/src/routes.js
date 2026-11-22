@@ -12,13 +12,16 @@ import rentalUnitRoutes from "./modules/rental-units/routes.js";
 import bannerRoutes from "./modules/banners/routes.js";
 import { publicEnquiryRoutes, adminEnquiryRoutes } from "./modules/enquiries/routes.js";
 import { adminSettingsRoutes, publicSettingsRoutes } from "./modules/settings/routes.js";
-import { adminOrdersRoutes, adminReturnsRoutes, storefrontOrdersRoutes } from "./modules/orders/index.js";
+import { adminOrdersRoutes, storefrontOrdersRoutes } from "./modules/orders/index.js";
+import { adminReturnRoutes, customerReturnRoutes } from "./modules/returns/routes.js";
+import { adminRentalRoutes, storefrontRentalRoutes } from "./modules/rentals/routes.js";
 import couponRoutes from "./modules/coupons/routes.js";
 import dealRoutes from "./modules/deals/routes.js";
 import { publicPageRoutes, adminPageRoutes } from "./modules/pages/routes.js";
 import { publicFaqRoutes, adminFaqRoutes } from "./modules/faqs/routes.js";
 import { publicBlogRoutes, adminBlogRoutes } from "./modules/blog/routes.js";
 import adminCustomerRoutes from "./modules/customers/routes.js";
+import adminNotificationRoutes from "./modules/admin-notifications/routes.js";
 
 /**
  * All API routes live under /api/v1 (document §12).
@@ -30,7 +33,9 @@ const api = Router();
 // ---- Storefront ----
 api.use("/auth", customerAuthRoutes); // email + password sign-up / sign-in, forgot password, profile, signed-in devices
 api.use("/account", accountRoutes); // addresses, GST details, profile photo
-api.use("/orders", storefrontOrdersRoutes); // customer orders (create, list, detail)
+api.use("/orders", storefrontOrdersRoutes); // customer orders (create, list, detail, cancel, request a return)
+api.use("/returns", customerReturnRoutes); // customer's return / replacement requests, photo upload
+api.use("/rentals", storefrontRentalRoutes); // rental quote (public) · bookings, KYC, payments, extensions, pickup
 api.use("/banners", bannerRoutes); // public hero banners for storefront
 api.use("/enquiries", publicEnquiryRoutes); // sleep-test callback form (+ risk quiz answers)
 api.use(publicSettingsRoutes); // /settings/public (store details, fees, rules) · /pincodes/:pincode
@@ -47,6 +52,7 @@ admin.use("/auth", adminAuthRoutes); // login / refresh / reset are reachable wi
 admin.use(requireAdmin); // everything below needs a signed-in, active staff member
 admin.use(staffRoutes); // /permissions, /roles, /staff, /activity-logs
 admin.use("/uploads", uploadRoutes); // images → WebP on local disk
+admin.use("/notifications", adminNotificationRoutes); // bell: my alerts + live "needs attention" counts
 // Catalog used by the admin Products / Categories / Brands pages and the storefront:
 //   /categories, /brands, /products (+ /products/bulk, /:id/duplicate, /sku-check)
 admin.use(adminCatalogRoutes);
@@ -55,8 +61,9 @@ admin.use(adminCatalogRoutes);
 admin.use("/products-basic", productRoutes);
 admin.use("/inventory", inventoryRoutes); // stock, warehouses, movements
 admin.use("/rental-units", rentalUnitRoutes); // serialized rental equipment units
+admin.use("/rentals", adminRentalRoutes); // rental bookings: KYC, approval, dispatch, return, deposit refund
 admin.use("/orders", adminOrdersRoutes); // sales orders & fulfilment
-admin.use("/returns", adminReturnsRoutes); // RMA returns & refund processing
+admin.use("/returns", adminReturnRoutes); // RMA: approve, pickup, inspect, refund / replace
 admin.use("/customers", adminCustomerRoutes); // customer management
 admin.use("/banners", bannerRoutes); // hero banners & marketing management
 admin.use("/enquiries", adminEnquiryRoutes); // leads from public forms (enquiries.view)
