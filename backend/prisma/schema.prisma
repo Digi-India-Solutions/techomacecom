@@ -1488,3 +1488,19 @@ model ServiceablePincode {
   @@index([state])
   @@map("serviceable_pincodes")
 }
+
+// Rental delivery coverage managed from Settings → Rental (CSV import).
+// Empty table = rental available everywhere in India. Once rows exist, only listed PIN codes are serviceable.
+model RentalServiceablePincode {
+  pincode       String   @id @db.Char(6)
+  city          String?  @db.VarChar(80)
+  state         String?  @db.VarChar(80)
+  cod_available Boolean  @default(false)
+  delivery_days String?  @db.VarChar(30) // e.g. "2-4"
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([state])
+  @@map("rental_serviceable_pincodes")
+}

@@ -1,11 +1,11 @@
 import React from 'react';
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { getDealsOfTheDay, getProducts, getPageBanners } from '@/lib/api';
-import { MOCK_COUPONS } from '@/lib/mock/data';
+import { getDealsOfTheDay, getProducts, getPageBanners, getActiveCoupons } from '@/lib/api';
 import ProductCard from '@/components/product/ProductCard';
 import PageBannerSlider from '@/components/common/PageBannerSlider';
-import { Percent, Tag, Zap, Copy, Check, ArrowRight } from 'lucide-react';
+import OffersCouponGrid from '@/components/offers/OffersCouponGrid';
+import { Percent, Tag, Zap, ArrowRight } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Special Clinical Offers & Coupons | Buy Denmed India',
@@ -15,10 +15,11 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 export default async function OffersPage() {
-  const [deals, discounted, banners] = await Promise.all([
+  const [deals, discounted, banners, coupons] = await Promise.all([
     getDealsOfTheDay(),
     getProducts({ minDiscount: 20, limit: 16 }),
-    getPageBanners('offers', 'all')
+    getPageBanners('offers', 'all'),
+    getActiveCoupons(),
   ]);
 
   const defaultBanners = banners.length > 0 ? banners : [
@@ -50,33 +51,7 @@ export default async function OffersPage() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {MOCK_COUPONS.map((coupon) => (
-            <div
-              key={coupon.code}
-              className="bg-white p-5 rounded-2xl border-2 border-dashed border-[#DCE6F2] hover:border-[#1D5FAF] transition-colors flex flex-col justify-between space-y-3 shadow-xs"
-            >
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-base text-[#174E90] bg-[#EAF2FC] px-2.5 py-1 rounded-lg">
-                    {coupon.code}
-                  </span>
-                  <span className="text-[11px] text-[#5B6B82] font-medium">
-                    Valid till {coupon.expiresAt}
-                  </span>
-                </div>
-                <p className="text-xs text-[#5B6B82] mt-2 font-medium leading-relaxed">
-                  {coupon.description}
-                </p>
-              </div>
-
-              <div className="pt-2 border-t border-[#DCE6F2] flex items-center justify-between text-[12px] text-[#5B6B82] font-heading">
-                <span>Min Order: ₹{coupon.minOrderValue.toLocaleString('en-IN')}</span>
-                <span className="text-[#1D5FAF] font-semibold">1-Click Apply</span>
-              </div>
-            </div>
-          ))}
-        </div>
+        <OffersCouponGrid coupons={coupons} />
       </div>
 
       {/* 3. Limited Period Lightning Deals */}

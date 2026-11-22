@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Product, Variant } from '@/types';
 import { useCartStore, useWishlistStore, usePincodeStore, useToastStore } from '@/lib/store';
 import { checkPincodeServiceability } from '@/lib/api';
+import { useSiteSettings } from '@/lib/settings/store';
 import { Review } from '@/types';
 import EmiModal from '@/components/common/EmiModal';
 import ProductCard from '@/components/product/ProductCard';
@@ -22,6 +23,7 @@ import {
   Bed, 
   MapPin, 
   Check, 
+  X,
   Clock, 
   ChevronRight, 
   RotateCcw, 
@@ -61,11 +63,21 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
     product.rentalPlans && product.rentalPlans.length > 0 ? product.rentalPlans[0].tenureMonths : 1
   );
 
+  const settings = useSiteSettings();
+  const { codEnabled, codMaxOrderValue } = settings?.shipping || { codEnabled: true, codMaxOrderValue: 50000 };
+
   // Pincode local check state
   const [inputPincode, setInputPincode] = useState(storePin || '110001');
   const [checkingPin, setCheckingPin] = useState(false);
-  const [pinEstimate, setPinEstimate] = useState<string>(storeDelivery || '2-3 Business Days');
+  const [pinEstimate, setPinEstimate] = useState<string>(storeDelivery || '3-7 Business Days');
   const [pinCity, setPinCity] = useState<string>(storeCity || 'Delhi NCR');
+  const [pinCheckResult, setPinCheckResult] = useState<{
+    checked: boolean;
+    serviceable: boolean;
+    codAvailable: boolean;
+    city: string;
+    deliveryDays: string;
+  } | null>(null);
 
   const isFavorited = isInWishlist(product.id);
 
@@ -77,27 +89,87 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
     : product.discountPercentage;
   const savings = currentMrp - currentPrice;
 
+  // Auto-verify initial PIN against ecommerce serviceable list on mount/input
+  useEffect(() => {
+    const pin = (inputPincode || '').trim();
+    if (/^[1-9]\d{5}$/.test(pin)) {
+      let alive = true;
+      checkPincodeServiceability(pin)
+        .then((res) => {
+          if (alive) {
+            setPinCheckResult({
+              checked: true,
+              serviceable: res.serviceable,
+              codAvailable: res.codAvailable,
+              city: res.city,
+              deliveryDays: res.deliveryDays,
+            });
+            if (res.serviceable) {
+              setPinCity(res.city);
+              setPinEstimate(res.deliveryDays);
+            }
+          }
+        })
+        .catch(() => {
+          if (alive) {
+            setPinCheckResult({
+              checked: true,
+              serviceable: false,
+              codAvailable: false,
+              city: '',
+              deliveryDays: '',
+            });
+          }
+        });
+      return () => {
+        alive = false;
+      };
+    } else {
+      setPinCheckResult(null);
+    }
+  }, [inputPincode]);
+
   const handlePincodeCheck = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!/^\d{6}$/.test(inputPincode.trim())) {
+    const pin = inputPincode.trim();
+    if (!/^\d{6}$/.test(pin)) {
       addToast({ type: 'warning', title: 'Invalid PIN', message: 'Please enter a 6-digit Indian PIN code.' });
       return;
     }
     setCheckingPin(true);
     try {
-      const res = await checkPincodeServiceability(inputPincode.trim());
+      const res = await checkPincodeServiceability(pin);
+      setPinCheckResult({
+        checked: true,
+        serviceable: res.serviceable,
+        codAvailable: res.codAvailable,
+        city: res.city,
+        deliveryDays: res.deliveryDays,
+      });
       if (res.serviceable) {
         setPinEstimate(res.deliveryDays);
         setPinCity(res.city);
-        setPincode(inputPincode.trim(), res.city, res.state, res.deliveryDays);
+        setPincode(pin, res.city, res.state, res.deliveryDays);
+        const codAllowedForProduct = res.codAvailable && codEnabled && (!codMaxOrderValue || currentPrice <= codMaxOrderValue);
         addToast({
           type: 'success',
           title: 'Delivery Available',
-          message: `Estimated delivery to ${res.city}: ${res.deliveryDays}`
+          message: codAllowedForProduct
+            ? `Estimated delivery to ${res.city}: ${res.deliveryDays} • Cash on Delivery Available`
+            : `Estimated delivery to ${res.city}: ${res.deliveryDays} • Prepaid Only (COD Not Available)`,
         });
       } else {
-        addToast({ type: 'error', title: 'Not Serviceable', message: 'Delivery currently unavailable for this PIN.' });
+        addToast({ type: 'error', title: 'Not Serviceable', message: `Delivery currently unavailable for PIN ${pin}.` });
       }
+    } catch {
+      setPinCheckResult({
+        checked: true,
+        serviceable: false,
+        codAvailable: false,
+        city: '',
+        deliveryDays: '',
+      });
+      addToast({ type: 'error', title: 'Not Serviceable', message: `Delivery currently unavailable for PIN ${pin}.` });
     } finally {
       setCheckingPin(false);
     }
@@ -405,25 +477,64 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
                 autoComplete="postal-code"
                 maxLength={6}
                 value={inputPincode}
-                onChange={(e) => setInputPincode(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => {
+                  setInputPincode(e.target.value.replace(/\D/g, ''));
+                  setPinCheckResult(null);
+                }}
                 placeholder="6-Digit PIN"
                 className="w-36 text-xs px-3 py-2 border border-[#DCE6F2] rounded-lg focus:outline-none focus:border-[#1D5FAF] font-semibold tracking-wider font-body text-[#12263F]"
               />
               <button
                 type="submit"
-                disabled={checkingPin}
-                className="px-4 py-2 bg-[#0B2545] hover:bg-[#13335E] text-white text-xs font-semibold rounded-lg transition-colors font-heading cursor-pointer"
+                disabled={checkingPin || inputPincode.trim().length !== 6}
+                className="px-4 py-2 bg-[#0B2545] hover:bg-[#13335E] text-white text-xs font-semibold rounded-lg transition-colors font-heading cursor-pointer disabled:opacity-50"
               >
                 {checkingPin ? 'Checking...' : 'Check'}
               </button>
             </form>
 
-            <div className="text-xs text-[#5B6B82] flex items-center gap-1.5 font-body">
-              <Check className="w-3.5 h-3.5 text-[#16A34A]" />
-              <span>
-                Estimated Delivery to <strong className="text-[#12263F]">{pinCity}</strong> ({inputPincode}): <strong className="text-[#12263F]">{pinEstimate}</strong>
-              </span>
-            </div>
+            {pinCheckResult && (
+              <div className="space-y-1.5 pt-0.5 font-body">
+                <div className="text-xs text-[#5B6B82] flex items-center gap-1.5">
+                  {pinCheckResult.serviceable ? (
+                    <Check className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                  )}
+                  <span>
+                    {pinCheckResult.serviceable ? (
+                      <>
+                        Estimated Delivery to <strong className="text-[#12263F]">{pinCity}</strong> ({inputPincode}):{' '}
+                        <strong className="text-[#12263F]">{pinEstimate}</strong>
+                      </>
+                    ) : (
+                      <span className="text-red-600 font-semibold">
+                        We don&apos;t deliver to PIN {inputPincode} yet.
+                      </span>
+                    )}
+                  </span>
+                </div>
+
+                {pinCheckResult.serviceable && (
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    {pinCheckResult.codAvailable && codEnabled && (!codMaxOrderValue || currentPrice <= codMaxOrderValue) ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
+                        <Check className="w-3 h-3 text-emerald-600" /> Cash on Delivery Available
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 border border-amber-200">
+                        <AlertCircle className="w-3 h-3 text-amber-600" />
+                        {!pinCheckResult.codAvailable
+                          ? 'Cash on Delivery Not Available for this PIN (Prepaid Only)'
+                          : codMaxOrderValue && currentPrice > codMaxOrderValue
+                            ? `Prepaid Only (COD limit ₹${codMaxOrderValue.toLocaleString('en-IN')} exceeded)`
+                            : 'Cash on Delivery Disabled (Prepaid Only)'}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

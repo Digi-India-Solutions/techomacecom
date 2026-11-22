@@ -6,7 +6,8 @@ import * as v from "./validator.js";
 
 const router = Router();
 
-// Storefront / checkout coupon validation & calculation
+// Storefront / checkout public coupons & calculation
+router.get("/public", c.getPublicCoupons);
 router.post("/apply", validate({ body: v.applyCouponSchema }), c.applyCoupon);
 
 // Admin Coupon Management

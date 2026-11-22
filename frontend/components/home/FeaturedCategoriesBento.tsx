@@ -147,7 +147,7 @@ export const FeaturedCategoriesBento: React.FC<FeaturedCategoriesBentoProps> = (
   let items: BentoCardItem[] = [];
 
   if (categories && categories.length > 0) {
-    items = categories.slice(0, 6).map((cat, idx) => ({
+    items = categories.map((cat, idx) => ({
       id: cat.id || `bento-cat-${idx}`,
       name: cat.name,
       href: `/category/${cat.slug || cat.id}`,
@@ -167,11 +167,16 @@ export const FeaturedCategoriesBento: React.FC<FeaturedCategoriesBentoProps> = (
     items = FALLBACK_ITEMS;
   }
 
-  const isSixItems = items.length >= 6;
+  // Bento layout partitioning:
+  // - If <= 5 items: 4 on left (2x2), 1 tall on right
+  // - If 6 items: 4 on left (2x2), 2 stacked on right
+  // - If > 6 items: 4 on left (2x2), 1 tall on right, and all remaining items in a clean grid below
+  const isSixItems = items.length === 6;
   const leftItems = items.slice(0, 4);
   const rightItems = isSixItems ? items.slice(4, 6) : items.slice(4, 5);
+  const extraItems = items.length > 6 ? items.slice(5) : [];
 
-  const exploreAllHref = items[0]?.href || '/category/oxygen-concentrators';
+  const exploreAllHref = '/categories';
 
   return (
     <section className="my-10 sm:my-14">
@@ -196,7 +201,7 @@ export const FeaturedCategoriesBento: React.FC<FeaturedCategoriesBentoProps> = (
           </Link>
         </div>
 
-        {/* Bento Grid: 2x2 on left, 1 tall (if 5 items) or 2 stacked (if 6 items) on right */}
+        {/* Bento Grid: 2x2 on left, 1 tall (if 5 or >6 items) or 2 stacked (if 6 items) on right */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
           <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
             {leftItems.map((item) => (
@@ -234,6 +239,32 @@ export const FeaturedCategoriesBento: React.FC<FeaturedCategoriesBentoProps> = (
             )}
           </div>
         </div>
+
+        {/* Extra categories grid when more than 5 or 6 categories are selected */}
+        {extraItems.length > 0 && (
+          <div
+            className={`grid gap-4 sm:gap-5 mt-4 sm:mt-5 ${
+              extraItems.length === 1
+                ? 'grid-cols-1 max-w-md mx-auto'
+                : extraItems.length === 2
+                ? 'grid-cols-1 sm:grid-cols-2'
+                : extraItems.length === 3
+                ? 'grid-cols-1 sm:grid-cols-3'
+                : extraItems.length === 4
+                ? 'grid-cols-2 sm:grid-cols-4'
+                : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
+            }`}
+          >
+            {extraItems.map((item) => (
+              <BentoCard
+                key={item.id}
+                item={item}
+                className="min-h-[190px] sm:min-h-[210px] aspect-[16/10] sm:aspect-auto"
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 260px"
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

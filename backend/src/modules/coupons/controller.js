@@ -2,6 +2,11 @@ import { ok } from "../../lib/http.js";
 import { logActivity } from "../../services/activity.service.js";
 import * as service from "./service.js";
 
+export async function getPublicCoupons(req, res) {
+  const coupons = await service.getActivePublicCoupons();
+  return ok(res, coupons);
+}
+
 export async function listCoupons(req, res) {
   const coupons = await service.listCoupons();
   return ok(res, coupons);

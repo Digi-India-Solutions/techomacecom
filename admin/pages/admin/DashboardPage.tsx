@@ -16,16 +16,23 @@ import { DateRangePicker } from '@/components/admin/DateRangePicker';
 import { KpiGridSkeleton } from '@/components/admin/SkeletonLoader';
 import { StatusBadge } from '@/components/admin/StatusBadge';
 import {
+  OrdersByStateChart,
   OrdersStatusDonutChart,
   SalesTrendLineChart,
   TopSellingProductsChart,
 } from '@/components/admin/DashboardCharts';
 
 export function DashboardPage() {
-  const [dateRange, setDateRange] = useState<DateRangeValue>({
-    preset: '7d',
-    from: '2026-11-11',
-    to: '2026-11-17',
+  const [dateRange, setDateRange] = useState<DateRangeValue>(() => {
+    const now = new Date();
+    const to = now.toISOString().slice(0, 10);
+    const fromDate = new Date(now);
+    fromDate.setDate(now.getDate() - 6);
+    return {
+      preset: '7d',
+      from: fromDate.toISOString().slice(0, 10),
+      to,
+    };
   });
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -124,65 +131,72 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* Charts Row 2: Action Needed + Top 5 Products */}
+      {/* Charts Row 2: Action Needed + Top 5 Products + Orders by State */}
       {overview && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
           {/* Action Needed Panel */}
-          <div className="rounded-xl border border-[#DCE6F2] bg-white p-5">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div>
-                <h3 className="text-base font-semibold text-[#12263F]">Action Needed</h3>
-                <p className="text-xs text-[#5B6B82]">
-                  Priority operational queues requiring team review
-                </p>
+          <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-base font-semibold text-[#12263F]">Action Needed</h3>
+                  <p className="text-xs text-[#5B6B82]">
+                    Priority operational queues requiring team review
+                  </p>
+                </div>
+                <span className="rounded-md bg-[#F28C38]/15 px-2.5 py-1 text-xs font-semibold text-[#B85A0E] tabular-nums">
+                  {overview.actionNeeded.reduce((acc, i) => acc + i.count, 0)} items
+                </span>
               </div>
-              <span className="rounded-md bg-[#F28C38]/15 px-2.5 py-1 text-xs font-semibold text-[#B85A0E] tabular-nums">
-                {overview.actionNeeded.reduce((acc, i) => acc + i.count, 0)} items
-              </span>
-            </div>
 
-            <div className="divide-y divide-[#DCE6F2]">
-              {overview.actionNeeded.map((item) => (
-                <Link
-                  key={item.id}
-                  to={item.href}
-                  className="flex items-center justify-between gap-4 py-3 first:pt-1 last:pb-1 hover:bg-[#F6F9FD] -mx-2 px-2 rounded-lg transition-colors"
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div
-                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                        item.severity === 'urgent' || item.severity === 'warning'
-                          ? 'bg-[#F28C38]/15 text-[#B85A0E]'
-                          : 'bg-[#EAF2FC] text-[#1D5FAF]'
-                      }`}
-                    >
-                      <AlertCircle className="h-4 w-4" />
+              <div className="divide-y divide-[#DCE6F2]">
+                {overview.actionNeeded.map((item) => (
+                  <Link
+                    key={item.id}
+                    to={item.href}
+                    className="flex items-center justify-between gap-4 py-3 first:pt-1 last:pb-1 hover:bg-[#F6F9FD] -mx-2 px-2 rounded-lg transition-colors"
+                  >
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div
+                        className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                          item.severity === 'urgent' || item.severity === 'warning'
+                            ? 'bg-[#F28C38]/15 text-[#B85A0E]'
+                            : 'bg-[#EAF2FC] text-[#1D5FAF]'
+                        }`}
+                      >
+                        <AlertCircle className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[#12263F] truncate">
+                          {item.title}
+                        </p>
+                        <p className="text-xs text-[#5B6B82] truncate">{item.description}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[#12263F] truncate">
-                        {item.title}
-                      </p>
-                      <p className="text-xs text-[#5B6B82] truncate">{item.description}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-xs font-bold tabular-nums ${
+                          item.severity === 'urgent' || item.severity === 'warning'
+                            ? 'bg-[#F28C38] text-white'
+                            : 'bg-[#EAF2FC] text-[#1D5FAF]'
+                        }`}
+                      >
+                        {item.count}
+                      </span>
+                      <ArrowRight className="h-4 w-4 text-[#5B6B82]" />
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span
-                      className={`rounded-md px-2 py-0.5 text-xs font-bold tabular-nums ${
-                        item.severity === 'urgent' || item.severity === 'warning'
-                          ? 'bg-[#F28C38] text-white'
-                          : 'bg-[#EAF2FC] text-[#1D5FAF]'
-                      }`}
-                    >
-                      {item.count}
-                    </span>
-                    <ArrowRight className="h-4 w-4 text-[#5B6B82]" />
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
 
           <TopSellingProductsChart products={overview.topProducts} />
+
+          <OrdersByStateChart
+            orderStates={overview.ordersByState}
+            rentalStates={overview.rentalsByState}
+          />
         </div>
       )}
 

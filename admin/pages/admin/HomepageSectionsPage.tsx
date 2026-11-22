@@ -71,7 +71,17 @@ export function HomepageSectionsPage() {
   const openEditSection = (sec: HomepageSection) => {
     setEditingSection(sec);
     setEditTitle(sec.title);
-    setEditSelectedIds(sec.selectedIds);
+    if (sec.configurableType === 'categories') {
+      const validCategoryIds = new Set(flatCategories.map((c) => String(c.node.id)));
+      const cleaned = sec.selectedIds.filter((id) => validCategoryIds.has(String(id)));
+      setEditSelectedIds(cleaned.length > 0 ? cleaned : sec.selectedIds);
+    } else if (sec.configurableType === 'products') {
+      const validProductIds = new Set(products.map((p) => String(p.id)));
+      const cleaned = sec.selectedIds.filter((id) => validProductIds.has(String(id)));
+      setEditSelectedIds(cleaned.length > 0 ? cleaned : sec.selectedIds);
+    } else {
+      setEditSelectedIds(sec.selectedIds);
+    }
   };
 
   const saveEditDrawer = async () => {
@@ -291,7 +301,7 @@ export function HomepageSectionsPage() {
             {editingSection.configurableType === 'products' && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-[#12263F]">
-                  Select Featured Products ({editSelectedIds.length} selected)
+                  Select Featured Products ({products.filter((p) => editSelectedIds.includes(p.id)).length} selected)
                 </p>
                 <div className="max-h-72 overflow-y-auto rounded-lg border border-[#DCE6F2] divide-y divide-[#DCE6F2]">
                   {products.map((p) => {
@@ -325,7 +335,7 @@ export function HomepageSectionsPage() {
             {editingSection.configurableType === 'categories' && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-[#12263F]">
-                  Select Categories ({editSelectedIds.length} selected)
+                  Select Categories ({flatCategories.filter((c) => editSelectedIds.includes(c.node.id)).length} selected)
                 </p>
                 <div className="max-h-72 overflow-y-auto rounded-lg border border-[#DCE6F2] divide-y divide-[#DCE6F2]">
                   {flatCategories.map(({ node, path }) => {

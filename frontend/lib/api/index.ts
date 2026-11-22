@@ -65,7 +65,7 @@ async function fetchOrMock<T>(endpoint: string, mockFallback: () => T | Promise<
 
 // Catalog (categories, brands, products, search) comes from the live API — see ./catalog.ts
 export * from './catalog';
-import { checkPincode } from '@/lib/settings/pincode-api';
+import { checkPincode, checkRentalPincode } from '@/lib/settings/pincode-api';
 export * from './marketing';
 import {
   getHomepageConfig,
@@ -93,6 +93,24 @@ export async function checkPincodeServiceability(pincode: string): Promise<{
     state: r.state,
     deliveryDays: r.serviceable ? `${r.deliveryDays} business days` : r.message,
     codAvailable: r.codAvailable
+  };
+}
+
+/** Rental equipment delivery check against Settings → Rental (backend /rentals/pincodes/:pincode). */
+export async function checkRentalPincodeServiceability(pincode: string): Promise<{
+  serviceable: boolean;
+  city: string;
+  state: string;
+  deliveryDays: string;
+  codAvailable: boolean;
+}> {
+  const r = await checkRentalPincode(pincode);
+  return {
+    serviceable: r.serviceable,
+    city: r.city || r.pincode,
+    state: r.state,
+    deliveryDays: r.serviceable ? `${r.deliveryDays} business days` : r.message,
+    codAvailable: false
   };
 }
 

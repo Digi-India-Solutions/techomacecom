@@ -153,6 +153,49 @@ export async function listCoupons() {
   });
 }
 
+export async function getActivePublicCoupons() {
+  await seedInitialCouponsIfEmpty();
+  const now = new Date();
+  const coupons = await prisma.coupon.findMany({
+    where: {
+      deleted_at: null,
+      is_active: true,
+      OR: [{ ends_at: null }, { ends_at: { gte: now } }],
+    },
+    orderBy: [{ created_at: "desc" }, { id: "desc" }],
+  });
+
+  return coupons.map((c) => {
+    const minOrder = c.min_order_paise ? Number(c.min_order_paise) / 100 : 0;
+    const maxDisc = c.max_discount_paise ? Number(c.max_discount_paise) / 100 : undefined;
+    const val = Number(c.value);
+
+    let description = "";
+    if (c.type === "percent") {
+      description = `${val}% instant discount on orders above ₹${minOrder.toLocaleString("en-IN")}${maxDisc ? ` (Max discount ₹${maxDisc.toLocaleString("en-IN")})` : ""}`;
+    } else {
+      description = `Flat ₹${val.toLocaleString("en-IN")} discount on orders above ₹${minOrder.toLocaleString("en-IN")}`;
+    }
+
+    if (c.first_order_only) {
+      description = `First order only: ${description}`;
+    }
+
+    return {
+      id: c.id.toString(),
+      code: c.code,
+      description,
+      discountType: c.type === "percent" ? "percentage" : "fixed",
+      discountValue: val,
+      minOrderValue: minOrder,
+      maxDiscount: maxDisc,
+      expiresAt: formatDate(c.ends_at) || "2026-12-31",
+      firstOrderOnly: Boolean(c.first_order_only),
+      applicableTo: c.applies_to || "all",
+    };
+  });
+}
+
 export async function getCouponById(id) {
   let cId;
   try {

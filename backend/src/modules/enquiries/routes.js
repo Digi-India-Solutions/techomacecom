@@ -20,7 +20,7 @@ import * as v from "./validator.js";
  *     PATCH /:id          status / assignedTo / nextFollowUpDate   (enquiries.edit)
  *     POST /:id/notes     follow-up note                            (enquiries.edit)
  */
-export const publicEnquiryRoutes = Rouclter();
+export const publicEnquiryRoutes = Router();
 publicEnquiryRoutes.post("/", enquiryLimiter, optionalCustomer, validate({ body: v.sleepTestEnquirySchema }), c.createSleepTest);
 publicEnquiryRoutes.post("/contact", enquiryLimiter, optionalCustomer, validate({ body: v.contactEnquirySchema }), c.createContact);
 publicEnquiryRoutes.post("/bulk", enquiryLimiter, optionalCustomer, validate({ body: v.bulkEnquirySchema }), c.createBulk);

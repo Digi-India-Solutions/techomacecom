@@ -25,6 +25,7 @@ import type { CustomerRental, RentalKycDoc, RentalQuote } from '@/types';
 import { useRentalStore, useToastStore, useUserStore } from '@/lib/store';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { useSiteSettings } from '@/lib/settings/store';
+import { useRentalPincodeCheck } from '@/lib/settings/pincode';
 import CustomerAuthForm from '@/components/auth/CustomerAuthForm';
 import { AddressForm, blankAddress } from '@/components/account/AddressesTab';
 import { errorMessage } from '@/lib/api/backend';
@@ -94,6 +95,8 @@ export default function RentalCheckoutClient() {
   const addresses = user?.addresses || [];
   const chosenAddressId = addressId || addresses.find((a) => a.isDefault)?.id || addresses[0]?.id || '';
   const chosenAddress = addresses.find((a) => a.id === chosenAddressId);
+  const { result: pinCheck, loading: pinChecking } = useRentalPincodeCheck(chosenAddress?.pincode);
+  const isPincodeServiceable = pinCheck ? pinCheck.serviceable : true;
   const docsComplete = !needsDocs || (quote?.kyc.documents || []).every((d) => docs[d.key]);
 
   if (!hydrated) return <CheckoutSkeleton />;
@@ -302,8 +305,18 @@ export default function RentalCheckoutClient() {
                   <button type="button" onClick={() => setAddingAddress(true)} className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#1D5FAF] hover:underline cursor-pointer">
                     <Plus className="w-4 h-4" /> Add a new address
                   </button>
+                  {chosenAddress && pinCheck && !pinCheck.serviceable && (
+                    <p className="text-xs font-semibold text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200">
+                      Doorstep biomedical delivery &amp; setup is currently not available for PIN {chosenAddress.pincode}. Please select or add an address with a serviceable PIN code.
+                    </p>
+                  )}
+                  {chosenAddress && pinCheck && pinCheck.serviceable && (
+                    <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1 bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Serviceable for rental delivery ({pinCheck.deliveryDays || '1-2 days'})
+                    </p>
+                  )}
                   <div className="flex justify-end pt-2">
-                    <button type="button" disabled={!chosenAddressId} onClick={next} className="inline-flex items-center gap-2 rounded-xl bg-[#1D5FAF] hover:bg-[#174E90] px-6 py-3 text-sm font-semibold text-white disabled:opacity-50 cursor-pointer">
+                    <button type="button" disabled={!chosenAddressId || !isPincodeServiceable || pinChecking} onClick={next} className="inline-flex items-center gap-2 rounded-xl bg-[#1D5FAF] hover:bg-[#174E90] px-6 py-3 text-sm font-semibold text-white disabled:opacity-50 cursor-pointer">
                       Continue <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -458,7 +471,7 @@ export default function RentalCheckoutClient() {
                 )}
                 <button
                   type="button"
-                  disabled={!agree || paying || !chosenAddressId || !docsComplete || (!quote.inStock && !pendingRental)}
+                  disabled={!agree || paying || !chosenAddressId || !isPincodeServiceable || !docsComplete || (!quote.inStock && !pendingRental)}
                   onClick={placeBooking}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1D5FAF] hover:bg-[#174E90] px-7 py-3.5 text-sm font-bold text-white disabled:opacity-50 cursor-pointer"
                 >
