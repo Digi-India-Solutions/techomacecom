@@ -127,6 +127,8 @@ export const env = {
   uploads: {
     // Images are stored on this server's disk (no Cloudinary / S3) and served at /uploads/…
     dir: optional("UPLOADS_DIR", "uploads"), // relative to backend/ or absolute
+    // Private files (rental KYC documents). Never served statically — only through authenticated routes.
+    privateDir: optional("PRIVATE_UPLOADS_DIR", "private_uploads"),
     // Public origin that serves /uploads (this API in dev; api.buydenmed.com or a CDN in production)
     publicBaseUrl: trimSlash(optional("ASSET_BASE_URL") || apiUrl),
     maxFileMb: int("UPLOAD_MAX_FILE_MB", 10),
@@ -159,6 +161,9 @@ export const env = {
     resetExpiryMinutes: int("CUSTOMER_RESET_EXPIRY_MINUTES", 30),
     resetCooldownSeconds: int("CUSTOMER_RESET_COOLDOWN_SECONDS", 60),
   },
+
+  // Encrypts sensitive columns such as refund bank details (src/lib/crypto.js). Never change it once set.
+  dataEncryptionKey: optional("DATA_ENCRYPTION_KEY"),
 
   // Razorpay Payment Gateway
   razorpay: {

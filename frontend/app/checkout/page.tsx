@@ -856,7 +856,16 @@ export default function CheckoutPage() {
               <span>Buy Denmed Buyer Protection Guarantee</span>
             </div>
             <p>
-              Free transit insurance, 7-day hassle-free replacement for transit damage, and manufacturer certified warranty cards included.
+              Free transit insurance, manufacturer certified warranty cards
+              {settings.returns.returnsEnabled
+                ? `, and ${settings.returns.returnWindowDays}-day ${
+                    settings.returns.replacementEnabled && settings.returns.refundEnabled
+                      ? 'return or replacement'
+                      : settings.returns.replacementEnabled
+                        ? 'replacement'
+                        : 'returns'
+                  } if anything arrives damaged or faulty.`
+                : ' included.'}
             </p>
           </div>
         </div>

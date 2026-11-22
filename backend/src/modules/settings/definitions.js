@@ -67,10 +67,60 @@ export const DEFAULTS = {
     lateFeePerDayPaise: 25_000, // ₹250
     gracePeriodDays: 0,
     depositRefundDays: 2,
+    // Booking payment: % of the booking total paid online at checkout (100 = full payment)
+    advancePaymentPercent: 100,
+    balanceDue: "before_dispatch", // before_dispatch | on_delivery
+    minLeadDays: 1, // earliest start date = today + this many days
+    // KYC — documents customers upload before paying (prescription is also asked when a product requires it)
+    kycRequired: false,
+    kycDocuments: [], // keys of KYC_DOCUMENT_TYPES
+    kycInstructions: "Upload a clear photo or PDF of each document. All four corners must be visible and the text readable.",
+  },
+  // Returns, replacements and refunds (storefront "My orders" + admin Returns & Refunds)
+  returns: {
+    returnsEnabled: true,
+    returnWindowDays: 7, // counted from delivery
+    refundEnabled: true, // customer may ask for their money back
+    replacementEnabled: true, // customer may ask for the same item again
+    photosRequired: true,
+    maxPhotos: 5,
+    refundProcessingDays: "5-7", // business days for a refund to reach the customer
+    returnReasons: [
+      "Damaged during delivery",
+      "Defective or not working",
+      "Wrong item, model or variant delivered",
+      "Missing parts or accessories",
+      "Does not match the description",
+      "Other",
+    ],
+    cancelReasons: [
+      "Ordered by mistake",
+      "Found a better price elsewhere",
+      "Delivery is taking too long",
+      "Need to change the address or GST details",
+      "Want a different model",
+      "Other",
+    ],
+    nonReturnableCategoryIds: [], // whole category trees that cannot be returned (e.g. opened consumables)
+    conditions:
+      "Items must be unused, in the original packaging with all accessories, manuals and serial-number labels intact. Opened sterile or single-use consumables can be returned only if they are defective or damaged.",
   },
 };
 
-export const SETTING_GROUPS = Object.keys(DEFAULTS); // store · shipping · tax · rental (payments: not yet)
+export const SETTING_GROUPS = Object.keys(DEFAULTS);
+
+/** Documents an admin can ask for (rental_kyc_documents.doc_type CHECK). */
+export const KYC_DOCUMENT_TYPES = [
+  { key: "aadhaar", label: "Aadhaar card", hint: "Front and back on one page, or masked Aadhaar" },
+  { key: "pan", label: "PAN card", hint: "Individual or company PAN" },
+  { key: "driving_licence", label: "Driving licence", hint: "Front side with photo" },
+  { key: "passport", label: "Passport", hint: "Photo and address pages" },
+  { key: "voter_id", label: "Voter ID", hint: "Front and back" },
+  { key: "address_proof", label: "Address proof", hint: "Electricity bill, rent agreement or bank statement (last 3 months)" },
+  { key: "prescription", label: "Doctor's prescription", hint: "Signed prescription for the equipment" },
+  { key: "photo", label: "Recent photograph", hint: "Passport-size photo of the patient or renter" },
+];
+export const KYC_DOCUMENT_KEYS = KYC_DOCUMENT_TYPES.map((d) => d.key); // store · shipping · tax · rental · returns (payments: not yet)
 
 // Image settings that are uploaded (not typed). key → how the image is processed.
 export const IMAGE_SETTINGS = {
@@ -100,6 +150,14 @@ const phone = (label) =>
     .trim()
     .max(25)
     .refine((v) => v === "" || /^[+\d][\d\s\-()]{6,}$/.test(v), `${label}: use digits, spaces, + or -`);
+
+/** Editable dropdown options: 1–20 unique, non-empty lines. */
+const reasonList = (label) =>
+  z
+    .array(z.string().trim().min(3, `${label}: each reason needs at least 3 characters`).max(120, `${label}: at most 120 characters each`))
+    .min(1, `${label}: add at least one reason`)
+    .max(20, `${label}: at most 20 reasons`)
+    .transform((list) => [...new Set(list)]);
 
 export const SCHEMAS = {
   store: z.object({
@@ -189,8 +247,52 @@ export const SCHEMAS = {
       lateFeePerDay: rupees("Late fee per day", 1_00_000),
       gracePeriodDays: z.coerce.number().int().min(0).max(30),
       depositRefundDays: z.coerce.number().int().min(1).max(30),
+      advancePaymentPercent: z.coerce
+        .number({ error: "Advance payment must be a number" })
+        .int("Use a whole percentage")
+        .min(1, "At least 1%")
+        .max(100, "At most 100%"),
+      balanceDue: z.enum(["before_dispatch", "on_delivery"], { error: "Choose when the balance is due" }),
+      minLeadDays: z.coerce.number().int().min(0, "Cannot be negative").max(30, "At most 30 days"),
+      kycRequired: z.boolean(),
+      kycDocuments: z
+        .array(z.enum(KYC_DOCUMENT_KEYS, { error: "Unknown document type" }))
+        .max(KYC_DOCUMENT_KEYS.length)
+        .transform((list) => [...new Set(list)]),
+      kycInstructions: text(500, "KYC instructions"),
+    })
+    .superRefine((v, ctx) => {
+      if (v.kycRequired && v.kycDocuments.length === 0) {
+        ctx.addIssue({ code: "custom", path: ["kycDocuments"], message: "Choose at least one document, or switch KYC off" });
+      }
     })
     .transform(({ lateFeePerDay, ...rest }) => ({ ...rest, lateFeePerDayPaise: lateFeePerDay })),
+
+  returns: z
+    .object({
+      returnsEnabled: z.boolean(),
+      returnWindowDays: z.coerce.number().int("Use whole days").min(1, "At least 1 day").max(90, "At most 90 days"),
+      refundEnabled: z.boolean(),
+      replacementEnabled: z.boolean(),
+      photosRequired: z.boolean(),
+      maxPhotos: z.coerce.number().int().min(1, "At least 1 photo").max(10, "At most 10 photos"),
+      refundProcessingDays: z
+        .string()
+        .trim()
+        .regex(/^\d{1,2}(-\d{1,2})?$/, 'Use days like "5-7" or "7"'),
+      returnReasons: reasonList("Return reasons"),
+      cancelReasons: reasonList("Cancellation reasons"),
+      nonReturnableCategoryIds: z
+        .array(z.union([z.string(), z.number()]).transform(String).pipe(z.string().regex(/^[1-9]\d{0,18}$/, "Invalid category")))
+        .max(500)
+        .transform((ids) => [...new Set(ids)]),
+      conditions: text(1000, "Return conditions"),
+    })
+    .superRefine((v, ctx) => {
+      if (v.returnsEnabled && !v.refundEnabled && !v.replacementEnabled) {
+        ctx.addIssue({ code: "custom", path: ["refundEnabled"], message: "Allow refunds, replacements or both — or switch returns off" });
+      }
+    }),
 };
 
 /** Stored values → admin form values (paise → rupees). */

@@ -49,19 +49,21 @@ model AdminUser {
   created_at                DateTime  @default(now()) @db.Timestamptz(6)
   updated_at                DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
-  role               Role                   @relation(fields: [role_id], references: [id])
-  activity_logs      ActivityLog[]
-  notifications      AdminNotification[]
-  bulk_import_jobs   BulkImportJob[]
-  stock_movements    StockMovement[]
-  unit_service_logs  RentalUnitServiceLog[]
-  refunds            Refund[]
-  rental_charges     RentalCharge[]
-  assigned_enquiries Enquiry[]              @relation("EnquiryAssignee")
-  enquiry_notes      EnquiryNote[]
-  moderated_reviews  Review[]               @relation("ReviewModerator")
-  blog_posts         BlogPost[]
-  auth_sessions      AuthSession[]
+  role                 Role                   @relation(fields: [role_id], references: [id])
+  activity_logs        ActivityLog[]
+  notifications        AdminNotification[]
+  bulk_import_jobs     BulkImportJob[]
+  stock_movements      StockMovement[]
+  unit_service_logs    RentalUnitServiceLog[]
+  refunds              Refund[]
+  rental_charges       RentalCharge[]
+  assigned_enquiries   Enquiry[]              @relation("EnquiryAssignee")
+  enquiry_notes        EnquiryNote[]
+  moderated_reviews    Review[]               @relation("ReviewModerator")
+  blog_posts           BlogPost[]
+  auth_sessions        AuthSession[]
+  kyc_reviewed_rentals Rental[]               @relation("RentalKycReviewer")
+  kyc_reviewed_docs    RentalKycDocument[]    @relation("RentalKycDocReviewer")
 
   @@index([role_id])
   @@map("admin_users")
@@ -183,6 +185,9 @@ model AdminNotification {
   id            BigInt    @id @default(autoincrement())
   type          String    @db.VarChar(40)
   title         String    @db.VarChar(200)
+  message       String? // + added: one line of detail
+  severity      String    @default("info") @db.VarChar(10) // + added: info | warning | urgent
+  link          String?   @db.VarChar(300) // + added: admin page to open, e.g. /admin/orders/12
   entity_type   String?   @db.VarChar(40)
   entity_id     BigInt?
   admin_user_id BigInt? // NULL = all staff
@@ -193,6 +198,7 @@ model AdminNotification {
   admin_user AdminUser? @relation(fields: [admin_user_id], references: [id], onDelete: Cascade)
 
   @@index([admin_user_id, read_at])
+  @@index([admin_user_id, created_at])
   @@map("admin_notifications")
 }
 
@@ -274,6 +280,7 @@ model Customer {
   coupon_redemptions CouponRedemption[]
   orders             Order[]
   rentals            Rental[]
+  kyc_documents      RentalKycDocument[]
   enquiries          Enquiry[]
   reviews            Review[]
   auth_sessions      AuthSession[]
@@ -883,8 +890,11 @@ model Refund {
   gateway_refund_id String?   @unique @db.VarChar(60)
   amount_paise      BigInt
   reason            String // cancel | return | deposit_refund | goodwill
-  method            String    @default("gateway") // gateway | bank_transfer (COD)
+  method            String    @default("gateway") // gateway | bank_transfer | upi (manual transfers, e.g. COD)
   bank_details      Json? // encrypted, COD only
+  reference         String?   @db.VarChar(80) // + added: UTR / transfer reference for manual refunds
+  note              String? // + added: shown to the customer with the refund
+  failure_reason    String? // + added: gateway error when status = failed
   status            String    @default("processing") // processing | processed | failed
   admin_user_id     BigInt?
   processed_at      DateTime? @db.Timestamptz(6)
@@ -950,39 +960,68 @@ model ShipmentEvent {
   @@map("shipment_events")
 }
 
+/// Return / replacement request (RMA). Reverse pickup + replacement dispatch live in `shipments` (return_id).
 model Return {
-  id            BigInt   @id @default(autoincrement())
-  order_id      BigInt
-  return_number String   @unique @db.VarChar(20)
-  reason        String?
-  photos        String[] // URLs
-  status        String   @default("requested") // requested | approved | pickup_scheduled | received | refunded | rejected
-  admin_note    String?
-  created_at    DateTime @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  id                     BigInt    @id @default(autoincrement())
+  order_id               BigInt
+  return_number          String    @unique @db.VarChar(20)
+  type                   String    @default("refund") // + added: refund | replacement (what the customer asked for)
+  reason                 String?
+  customer_note          String? // + added
+  photos                 String[] // stored upload paths
+  status                 String    @default("requested") // requested | approved | pickup_scheduled | received | replacement_shipped | refunded | completed | rejected | cancelled
+  requested_amount_paise BigInt    @default(0) // + added: refund estimate when requested
+  refund_account         String? // + added: AES-256-GCM encrypted bank / UPI details (COD refunds)
+  rejection_reason       String? // + added: shown to the customer
+  admin_note             String? // internal, staff only
+  resolved_at            DateTime? @db.Timestamptz(6) // + added: refunded / completed / rejected / cancelled
+  created_at             DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
-  order     Order        @relation(fields: [order_id], references: [id])
-  items     ReturnItem[]
-  refunds   Refund[]
-  shipments Shipment[]
+  order          Order                 @relation(fields: [order_id], references: [id])
+  items          ReturnItem[]
+  refunds        Refund[]
+  shipments      Shipment[]
+  status_history ReturnStatusHistory[]
 
   @@index([order_id])
+  @@index([status])
   @@map("returns")
 }
 
 model ReturnItem {
-  id                 BigInt   @id @default(autoincrement())
-  return_id          BigInt
-  order_item_id      BigInt
-  quantity           Int
-  condition_received String? // resellable | damaged
-  created_at         DateTime @default(now()) @db.Timestamptz(6)
-  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  id                  BigInt   @id @default(autoincrement())
+  return_id           BigInt
+  order_item_id       BigInt
+  quantity            Int
+  refund_amount_paise BigInt   @default(0) // + added: eligible refund for this line when requested
+  condition_received  String? // resellable | damaged
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   return     Return    @relation(fields: [return_id], references: [id], onDelete: Cascade)
   order_item OrderItem @relation(fields: [order_item_id], references: [id])
 
+  @@index([order_item_id])
   @@map("return_items")
+}
+
+/// + added: return timeline shown to the customer and staff.
+model ReturnStatusHistory {
+  id          BigInt   @id @default(autoincrement())
+  return_id   BigInt
+  from_status String?
+  to_status   String
+  actor_type  String // system | customer | admin
+  actor_id    BigInt?
+  note        String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  return Return @relation(fields: [return_id], references: [id], onDelete: Cascade)
+
+  @@index([return_id])
+  @@map("return_status_history")
 }
 
 // =============================================================================
@@ -1038,10 +1077,29 @@ model Rental {
   deposit_refund_paise BigInt? // deposit − deductions
   deposit_refunded_at  DateTime? @db.Timestamptz(6)
   cancel_reason        String?
+  // + added: partial (advance) payment — snapshot of admin → Settings → Rental at booking
+  advance_percent      Int       @default(100) @db.SmallInt
+  advance_paise        BigInt    @default(0)
+  balance_due          String    @default("before_dispatch") // before_dispatch | on_delivery
+  // + added: KYC (client re-enabled 2026-11-21) — snapshot of the documents required at booking
+  kyc_required_docs    String[]  @default([])
+  kyc_status           String? // null = not required | pending | submitted | approved | rejected
+  kyc_note             String? // reason shown to the customer when documents are rejected
+  kyc_reviewed_by      BigInt?
+  kyc_reviewed_at      DateTime? @db.Timestamptz(6)
+  // + added: lifecycle timestamps and staff notes
+  return_requested_on  DateTime? @db.Date // customer's preferred pickup date
+  dispatched_at        DateTime? @db.Timestamptz(6)
+  delivered_at         DateTime? @db.Timestamptz(6)
+  returned_at          DateTime? @db.Timestamptz(6)
+  cancelled_at         DateTime? @db.Timestamptz(6)
+  notes_internal       String? // JSON array of staff notes
   created_at           DateTime  @default(now()) @db.Timestamptz(6)
   updated_at           DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
   customer       Customer              @relation(fields: [customer_id], references: [id])
+  kyc_reviewer   AdminUser?            @relation("RentalKycReviewer", fields: [kyc_reviewed_by], references: [id], onDelete: SetNull)
+  kyc_documents  RentalKycDocument[]
   product        Product               @relation(fields: [product_id], references: [id])
   plan           RentalPlan            @relation(fields: [rental_plan_id], references: [id])
   unit           RentalUnit?           @relation("RentalAssignedUnit", fields: [rental_unit_id], references: [id], onDelete: SetNull)
@@ -1058,6 +1116,33 @@ model Rental {
   @@index([status])
   @@index([rental_unit_id])
   @@map("rentals")
+}
+
+/// + added: identity / address / prescription documents for a rental (files are private, never under /uploads).
+/// Uploaded before the booking exists (rental_id null), attached when the booking is created.
+model RentalKycDocument {
+  id            BigInt    @id @default(autoincrement())
+  customer_id   BigInt
+  rental_id     BigInt?
+  doc_type      String    @db.VarChar(40) // aadhaar | pan | driving_licence | passport | voter_id | address_proof | prescription | photo
+  file_path     String // relative to the private uploads folder
+  file_name     String    @db.VarChar(200)
+  mime_type     String    @db.VarChar(60)
+  size_bytes    Int
+  status        String    @default("uploaded") // uploaded | approved | rejected
+  reject_reason String?
+  reviewed_by   BigInt?
+  reviewed_at   DateTime? @db.Timestamptz(6)
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  customer Customer   @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  rental   Rental?    @relation(fields: [rental_id], references: [id], onDelete: Cascade)
+  reviewer AdminUser? @relation("RentalKycDocReviewer", fields: [reviewed_by], references: [id], onDelete: SetNull)
+
+  @@index([rental_id])
+  @@index([customer_id])
+  @@map("rental_kyc_documents")
 }
 
 model RentalExtension {

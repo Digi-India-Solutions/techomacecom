@@ -26,7 +26,6 @@ const STATUS_TABS: { key: 'all' | OrderStatus; label: string }[] = [
   { key: 'shipped', label: 'Shipped' },
   { key: 'delivered', label: 'Delivered' },
   { key: 'cancelled', label: 'Cancelled' },
-  { key: 'returned', label: 'Returned' },
 ];
 
 export function OrdersPage() {
@@ -69,6 +68,12 @@ export function OrdersPage() {
       ]);
       setOrders(filtered);
       setAllOrders(all);
+    } catch (err) {
+      showToast({
+        title: 'Could not load orders',
+        description: err instanceof Error ? err.message : 'Please try again',
+        variant: 'error',
+      });
     } finally {
       setLoading(false);
     }
@@ -216,14 +221,18 @@ export function OrdersPage() {
       key: 'pack',
       label: 'Mark Packed',
       onClick: async (rows) => {
-        await bulkMarkOrdersPacked(
-          rows.map((r) => r.id),
-          user?.name || 'Admin'
-        );
-        showToast({
-          title: `Marked eligible orders as Packed`,
-          variant: 'success',
-        });
+        try {
+          await bulkMarkOrdersPacked(
+            rows.map((r) => r.id),
+            user?.name || 'Admin'
+          );
+          showToast({
+            title: `Marked eligible orders as Packed`,
+            variant: 'success',
+          });
+        } catch (err) {
+          showToast({ title: 'Could not update orders', description: err instanceof Error ? err.message : undefined, variant: 'error' });
+        }
         load();
       },
     },

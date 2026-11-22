@@ -1,5 +1,4 @@
 import type {
-  AdminNotification,
   DashboardOverview,
   DateRangeValue,
   GlobalSearchResult,
@@ -7,70 +6,12 @@ import type {
 } from '@/types/admin';
 import { formatINR, mockDelay } from './client';
 import {
-  INITIAL_NOTIFICATIONS,
   INITIAL_RECENT_ENQUIRIES,
   INITIAL_RECENT_ORDERS,
 } from './mockData';
 import { getProductsStore } from './legacyProductStore';
 import { getStockItemsStore } from './inventory';
 import { getRentalUnitsStore } from './rentalUnits';
-
-let notificationsStore: AdminNotification[] = [
-  {
-    id: 'notif-ord-new',
-    title: 'New Order: ORD-2026-8839 (₹42,500)',
-    message: 'Nitin Kapoor placed a COD order for MedixPulse 5L Oxygen Concentrator.',
-    severity: 'info',
-    href: '/admin/orders/ord-3',
-    read: false,
-    createdAt: '2026-11-17T08:40:00Z',
-  },
-  {
-    id: 'notif-rnt-new',
-    title: 'New Rental Booking: RNT-2026-429',
-    message: 'Sunita Deshmukh booked Karma ErgoLite Wheelchair (Monthly plan).',
-    severity: 'info',
-    href: '/admin/rentals/rnt-1',
-    read: false,
-    createdAt: '2026-11-17T08:25:00Z',
-  },
-  {
-    id: 'notif-enq',
-    title: 'New B2B Enquiry: ENQ-9042',
-    message: 'SmileCraft Dental requested bulk quote for 4 chairs & 2 autoclaves.',
-    severity: 'info',
-    href: '/admin/enquiries',
-    read: false,
-    createdAt: '2026-11-17T07:50:00Z',
-  },
-  {
-    id: 'notif-rev',
-    title: '2 Product Reviews Pending Moderation',
-    message: 'Verified buyer reviews on MedixPulse 5L & DentaLux 5000.',
-    severity: 'info',
-    href: '/admin/reviews?status=pending',
-    read: false,
-    createdAt: '2026-11-17T07:40:00Z',
-  },
-  {
-    id: 'notif-overdue',
-    title: 'Overdue Rental: RNT-2026-398 (Dr. Kavita Rao)',
-    message: 'Paramount ICU Bed was due 14 Nov 2026 — send reminder.',
-    severity: 'urgent',
-    href: '/admin/rentals/rnt-3',
-    read: false,
-    createdAt: '2026-11-17T07:30:00Z',
-  },
-  {
-    id: 'notif-lowstk',
-    title: '4 SKUs Below Low-Stock Threshold',
-    message: 'Med-Vitals 7000 and AuraFlow 18B require restocking.',
-    severity: 'warning',
-    href: '/admin/inventory?filter=low_stock',
-    read: true,
-    createdAt: '2026-11-16T18:20:00Z',
-  },
-];
 
 const TREND_BY_PRESET: Record<string, SalesTrendPoint[]> = {
   today: [
@@ -337,21 +278,4 @@ export async function globalSearchAdmin(query: string): Promise<GlobalSearchResu
   return results.slice(0, 10);
 }
 
-export async function getNotifications(): Promise<AdminNotification[]> {
-  await mockDelay(80);
-  return [...notificationsStore];
-}
-
-export async function markNotificationRead(id: string): Promise<AdminNotification[]> {
-  await mockDelay(60);
-  notificationsStore = notificationsStore.map((n) =>
-    n.id === id ? { ...n, read: true } : n
-  );
-  return [...notificationsStore];
-}
-
-export async function markAllNotificationsRead(): Promise<AdminNotification[]> {
-  await mockDelay(60);
-  notificationsStore = notificationsStore.map((n) => ({ ...n, read: true }));
-  return [...notificationsStore];
-}
+// Notifications moved to ./notifications.ts (live API).

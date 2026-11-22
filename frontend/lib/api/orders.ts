@@ -8,7 +8,7 @@
  */
 
 import { apiFetch, apiPost } from './backend';
-import type { Order, Address } from '@/types';
+import type { Order, Address, OrderReturnRequest } from '@/types';
 
 export interface CreateOrderPayload {
   items: {
@@ -88,36 +88,53 @@ export interface CancelOrderPayload {
   note?: string;
 }
 
-/** Cancel an active customer order before dispatch. */
+/** Cancel an order before it is dispatched. Prepaid orders are refunded automatically. */
 export function cancelCustomerOrder(orderId: string, payload: CancelOrderPayload): Promise<Order> {
   return apiPost<Order>(`/orders/${encodeURIComponent(orderId)}/cancel`, payload);
 }
 
+// ---------------------------------------------------------------------------
+// Returns & replacements — backend modules/returns
+// ---------------------------------------------------------------------------
+
+export type RefundAccountInput =
+  | { mode: 'bank'; accountHolder: string; accountNumber: string; ifsc: string; bankName?: string }
+  | { mode: 'upi'; upiId: string; accountHolder?: string };
+
 export interface ReturnOrderPayload {
+  type: 'refund' | 'replacement';
   reason: string;
-  customerNote?: string;
-  photos?: string[];
-  itemIds?: string[];
-  bankDetails?: {
-    accountHolder: string;
-    accountNumber: string;
-    ifsc: string;
-    bankName?: string;
-  };
+  customerNote: string;
+  /** Stored paths from uploadReturnPhotos() */
+  photos: string[];
+  items: { orderItemId: string; quantity: number }[];
+  /** Cash on delivery refunds only */
+  refundAccount?: RefundAccountInput;
 }
 
 export interface ReturnOrderResult {
-  returnRequest: {
-    id: string;
-    returnNumber: string;
-    status: string;
-    reason: string;
-    createdAt: string;
-  };
+  returnRequest: OrderReturnRequest;
   order: Order;
 }
 
-/** Request return / replacement for a delivered order within 7 days. */
+/** Upload photos for a return request (converted to WebP by the API). */
+export function uploadReturnPhotos(files: File[]): Promise<{ path: string; url: string }[]> {
+  const form = new FormData();
+  files.forEach((f) => form.append('files', f));
+  return apiFetch<{ path: string; url: string }[]>('/returns/photos', { method: 'POST', body: form });
+}
+
+/** Request a return (refund) or a replacement for delivered items. */
 export function requestOrderReturn(orderId: string, payload: ReturnOrderPayload): Promise<ReturnOrderResult> {
   return apiPost<ReturnOrderResult>(`/orders/${encodeURIComponent(orderId)}/returns`, payload);
+}
+
+/** Withdraw a request that has not been picked up yet. */
+export function cancelReturnRequest(returnId: string): Promise<OrderReturnRequest> {
+  return apiPost<OrderReturnRequest>(`/returns/${encodeURIComponent(returnId)}/cancel`);
+}
+
+/** Every return / replacement request of the signed-in customer, newest first. */
+export function fetchMyReturns(): Promise<OrderReturnRequest[]> {
+  return apiFetch<OrderReturnRequest[]>('/returns');
 }

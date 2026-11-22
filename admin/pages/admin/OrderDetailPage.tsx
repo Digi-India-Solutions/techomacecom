@@ -2,25 +2,31 @@ import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  Banknote,
   BellRing,
   CheckCircle2,
   ExternalLink,
   FileText,
+  Loader2,
   PackageCheck,
   Printer,
+  RefreshCw,
+  RotateCcw,
   Truck,
   X,
   XCircle,
 } from 'lucide-react';
-import type { AdminSettings, Order } from '@/types/admin';
+import type { AdminSettings, Order, RefundMode } from '@/types/admin';
 import {
   addOrderInternalNote,
   createOrderShipment,
   getOrderById,
+  issueOrderRefund,
+  syncOrderRefund,
   updateOrderStatus,
 } from '@/lib/api/admin/orders';
 import { getAdminSettings } from '@/lib/api/admin/settings';
-import { formatDateTime, formatINR } from '@/lib/api/admin/client';
+import { AdminApiError, formatDateTime, formatINR } from '@/lib/api/admin/client';
 import { useAuth } from '@/components/admin/AuthContext';
 import { useToast } from '@/components/admin/ToastProvider';
 import { StatusBadge } from '@/components/admin/StatusBadge';
@@ -29,11 +35,24 @@ import { FormField, inputClass, selectClass, textareaClass } from '@/components/
 
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const { showToast } = useToast();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Refund modal
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundForm, setRefundForm] = useState<{ amount: number; mode: RefundMode; reference: string; note: string; reason: 'goodwill' | 'cancel' | 'return' }>({
+    amount: 0,
+    mode: 'gateway',
+    reference: '',
+    note: '',
+    reason: 'goodwill',
+  });
+  const [refundErrors, setRefundErrors] = useState<Record<string, string>>({});
   const [noteInput, setNoteInput] = useState('');
 
   // Shiprocket modal
@@ -63,63 +82,143 @@ export function OrderDetailPage() {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
+    setLoadError('');
     getOrderById(id)
-      .then((data) => {
-        if (data) setOrder(data);
-      })
+      .then(setOrder)
+      .catch((err) => setLoadError(err instanceof Error ? err.message : 'Could not load the order'))
       .finally(() => setLoading(false));
   }, [id]);
+
+  const fail = (title: string, err: unknown) =>
+    showToast({ title, description: err instanceof Error ? err.message : 'Please try again', variant: 'error' });
 
   const handleStatusChange = async (
     nextStatus: Order['orderStatus'],
     note?: string
   ) => {
-    if (!order) return;
-    const updated = await updateOrderStatus({
-      id: order.id,
-      status: nextStatus,
-      actor: user?.name || 'Admin',
-      note,
-    });
-    setOrder(updated);
-    showToast({
-      title: `Order marked ${nextStatus}`,
-      description:
-        nextStatus === 'cancelled' && updated.paymentStatus === 'refunded'
-          ? 'Automatic Razorpay refund initiated for prepaid amount.'
-          : undefined,
-      variant: nextStatus === 'cancelled' ? 'warning' : 'success',
-    });
+    if (!order) return false;
+    setBusy(true);
+    try {
+      const updated = await updateOrderStatus({
+        id: order.id,
+        status: nextStatus,
+        actor: user?.name || 'Admin',
+        note,
+      });
+      setOrder(updated);
+      const cancelRefund = nextStatus === 'cancelled' ? [...updated.refunds].reverse().find((r) => r.reason === 'cancel') : undefined;
+      showToast({
+        title: `Order marked ${nextStatus}`,
+        description:
+          nextStatus !== 'cancelled'
+            ? undefined
+            : cancelRefund?.status === 'failed'
+              ? `Automatic refund failed: ${cancelRefund.failureReason || 'see Refunds'}. Issue it manually from Returns & refunds.`
+              : cancelRefund
+                ? `Refund of ${formatINR(cancelRefund.amount)} initiated to the original payment method.`
+                : updated.refundSummary.balance > 0
+                  ? `${formatINR(updated.refundSummary.balance)} was paid — issue the refund from Returns & refunds.`
+                  : undefined,
+        variant: nextStatus === 'cancelled' ? 'warning' : 'success',
+      });
+      return true;
+    } catch (err) {
+      fail('Could not update the order', err);
+      return false;
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleCreateShipment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!order) return;
-    const updated = await createOrderShipment({
-      id: order.id,
-      courier,
-      weightKg,
-      lengthCm,
-      widthCm,
-      heightCm,
-      actor: user?.name || 'Admin',
-    });
-    setOrder(updated);
-    setShipModalOpen(false);
-    showToast({
-      title: 'Shipment created via Shiprocket',
-      description: `AWB: ${updated.shipment?.awb}`,
-      variant: 'success',
-    });
+    setBusy(true);
+    try {
+      const updated = await createOrderShipment({
+        id: order.id,
+        courier,
+        weightKg,
+        lengthCm,
+        widthCm,
+        heightCm,
+        actor: user?.name || 'Admin',
+      });
+      setOrder(updated);
+      setShipModalOpen(false);
+      showToast({
+        title: 'Shipment created via Shiprocket',
+        description: `AWB: ${updated.shipment?.awb}`,
+        variant: 'success',
+      });
+    } catch (err) {
+      fail('Could not create the shipment', err);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!order || !noteInput.trim()) return;
-    const updated = await addOrderInternalNote(order.id, noteInput.trim());
-    setOrder(updated);
-    setNoteInput('');
-    showToast({ title: 'Internal note added', variant: 'info' });
+    try {
+      const updated = await addOrderInternalNote(order.id, noteInput.trim());
+      setOrder(updated);
+      setNoteInput('');
+      showToast({ title: 'Internal note added', variant: 'info' });
+    } catch (err) {
+      fail('Could not add the note', err);
+    }
+  };
+
+  const openRefund = () => {
+    if (!order) return;
+    setRefundErrors({});
+    setRefundForm({
+      amount: order.refundSummary.balance,
+      mode: order.refundSummary.gatewayAvailable && order.paymentMethod !== 'COD' ? 'gateway' : 'bank_transfer',
+      reference: '',
+      note: '',
+      reason: order.orderStatus === 'cancelled' ? 'cancel' : 'goodwill',
+    });
+    setRefundOpen(true);
+  };
+
+  const handleRefund = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    setBusy(true);
+    setRefundErrors({});
+    try {
+      const updated = await issueOrderRefund(order.id, {
+        amount: refundForm.amount,
+        mode: refundForm.mode,
+        reason: refundForm.reason,
+        reference: refundForm.reference.trim() || undefined,
+        note: refundForm.note.trim() || undefined,
+      });
+      setOrder(updated);
+      setRefundOpen(false);
+      showToast({ title: `Refund of ${formatINR(refundForm.amount)} issued`, description: 'The customer has been notified.', variant: 'success' });
+    } catch (err) {
+      if (err instanceof AdminApiError && err.fields) setRefundErrors(err.fields);
+      fail('Refund failed', err);
+      getOrderById(order.id).then(setOrder).catch(() => undefined); // a failed gateway attempt is still recorded
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSyncRefund = async (refundId: string) => {
+    if (!order) return;
+    try {
+      const updated = await syncOrderRefund(order.id, refundId);
+      setOrder(updated);
+      const r = updated.refunds.find((x) => x.id === refundId);
+      showToast({ title: `Refund is ${r?.status || 'up to date'}`, variant: 'info' });
+    } catch (err) {
+      fail('Could not refresh the refund', err);
+    }
   };
 
   if (loading) {
@@ -133,7 +232,8 @@ export function OrderDetailPage() {
   if (!order) {
     return (
       <div className="rounded-xl border border-[#DCE6F2] bg-white p-8 space-y-3">
-        <p className="text-base font-semibold text-[#12263F]">Order not found</p>
+        <p className="text-base font-semibold text-[#12263F]">{loadError ? 'Could not load this order' : 'Order not found'}</p>
+        {loadError && <p className="text-sm text-[#5B6B82]">{loadError}</p>}
         <Link to="/admin/orders" className="text-xs font-semibold text-[#1D5FAF] hover:underline">
           Back to Orders
         </Link>
@@ -289,7 +389,7 @@ export function OrderDetailPage() {
             Resend Notification
           </button>
 
-          {order.orderStatus !== 'cancelled' && order.orderStatus !== 'delivered' && (
+          {!['cancelled', 'delivered', 'returned'].includes(order.orderStatus) && (
             <button
               type="button"
               onClick={() => setCancelModalOpen(true)}
@@ -522,6 +622,97 @@ export function OrderDetailPage() {
             )}
           </div>
 
+          {/* Returns & refunds */}
+          <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-3 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-base font-semibold text-[#12263F]">Returns &amp; Refunds</h2>
+              {can('returns.edit') && order.refundSummary.balance > 0 && (
+                <button
+                  type="button"
+                  onClick={openRefund}
+                  className="inline-flex items-center gap-1 rounded-lg border border-[#DCE6F2] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#1D5FAF] hover:bg-[#EAF2FC]"
+                >
+                  <Banknote className="h-3.5 w-3.5" /> Issue refund
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {[
+                ['Paid', order.refundSummary.paid, 'text-[#12263F]'],
+                ['Refunded', order.refundSummary.refunded, 'text-emerald-700'],
+                ['Refundable', order.refundSummary.balance, 'text-[#1D5FAF]'],
+              ].map(([label, value, tone]) => (
+                <div key={label as string} className="rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] px-2 py-2">
+                  <p className={`text-sm font-bold tabular-nums ${tone}`}>{formatINR(value as number)}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-[#5B6B82]">{label as string}</p>
+                </div>
+              ))}
+            </div>
+            {order.orderStatus === 'cancelled' && order.refundSummary.balance > 0 && (
+              <p className="rounded-lg border border-[#F28C38]/35 bg-[#F28C38]/10 p-2.5 text-[#B85A0E]">
+                This order is cancelled but {formatINR(order.refundSummary.balance)} has not been refunded yet.
+              </p>
+            )}
+
+            {order.returns.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[#5B6B82]">Return requests</p>
+                {order.returns.map((r) => (
+                  <Link
+                    key={r.id}
+                    to={`/admin/returns?id=${r.id}`}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-[#DCE6F2] px-3 py-2 hover:bg-[#EAF2FC]"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <RotateCcw className="h-3.5 w-3.5 text-[#1D5FAF]" />
+                      <span className="font-mono font-semibold text-[#12263F]">{r.returnNumber}</span>
+                      <span className="text-[#5B6B82]">
+                        {r.type === 'replacement' ? 'Replacement' : 'Refund'} · {r.itemCount} item{r.itemCount === 1 ? '' : 's'}
+                      </span>
+                    </span>
+                    <StatusBadge status={r.status} label={r.statusLabel} />
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {order.refunds.length > 0 ? (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[#5B6B82]">Refund history</p>
+                {order.refunds.map((r) => (
+                  <div key={r.id} className="rounded-lg border border-[#DCE6F2] px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold tabular-nums text-[#12263F]">
+                        {formatINR(r.amount)} <span className="font-normal text-[#5B6B82]">· {r.methodLabel}</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <StatusBadge status={r.status} />
+                        {r.status === 'processing' && r.method === 'gateway' && can('returns.edit') && (
+                          <button
+                            type="button"
+                            onClick={() => handleSyncRefund(r.id)}
+                            title="Check status with Razorpay"
+                            className="rounded p-1 text-[#5B6B82] hover:bg-[#EAF2FC] hover:text-[#1D5FAF]"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-[#5B6B82]">
+                      {r.reason === 'cancel' ? 'Cancellation' : r.reason === 'return' ? 'Return' : 'Goodwill'} ·{' '}
+                      <span className="font-mono">{r.reference || r.gatewayRefundId || `#${r.id}`}</span> · {r.processedBy} ·{' '}
+                      {formatDateTime(r.processedAt || r.createdAt)}
+                    </p>
+                    {r.failureReason && <p className="mt-0.5 text-[11px] text-red-700">{r.failureReason}</p>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              order.returns.length === 0 && <p className="text-[#5B6B82]">No returns or refunds on this order.</p>
+            )}
+          </div>
+
           {/* Internal Notes */}
           <div className="rounded-xl border border-[#DCE6F2] bg-white p-5 space-y-3">
             <h2 className="text-base font-semibold text-[#12263F]">Internal Notes</h2>
@@ -654,9 +845,12 @@ export function OrderDetailPage() {
               </button>
             </div>
             <div className="p-5 space-y-4">
-              {order.paymentStatus === 'paid' && (
+              {order.refundSummary.balance > 0 && (
                 <div className="rounded-lg border border-[#F28C38]/40 bg-[#F28C38]/10 p-3 text-xs text-[#12263F]">
-                  This order is prepaid ({formatINR(order.total)}). Cancelling will automatically trigger a full refund via {order.paymentMethod}.
+                  {formatINR(order.refundSummary.balance)} has been paid on this order.{' '}
+                  {order.refundSummary.gatewayAvailable
+                    ? 'Cancelling refunds it automatically to the original payment method via Razorpay.'
+                    : 'There is no Razorpay payment to refund automatically — after cancelling, record the bank / UPI refund from Returns & Refunds.'}
                 </div>
               )}
               <FormField label="Cancellation Reason" required>
@@ -677,18 +871,109 @@ export function OrderDetailPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={!cancelReason.trim()}
+                  disabled={!cancelReason.trim() || busy}
                   onClick={async () => {
-                    await handleStatusChange('cancelled', cancelReason.trim());
-                    setCancelModalOpen(false);
+                    if (await handleStatusChange('cancelled', cancelReason.trim())) setCancelModalOpen(false);
                   }}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
                 >
+                  {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Confirm Cancellation
                 </button>
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Issue refund modal */}
+      {refundOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B2545]/45 p-4">
+          <form onSubmit={handleRefund} className="w-full max-w-md rounded-xl border border-[#DCE6F2] bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#DCE6F2] px-5 py-4">
+              <div>
+                <h3 className="text-base font-semibold text-[#12263F]">Issue refund</h3>
+                <p className="text-xs text-[#5B6B82]">
+                  Up to {formatINR(order.refundSummary.balance)} · {order.paymentMethod}
+                </p>
+              </div>
+              <button type="button" onClick={() => setRefundOpen(false)} className="rounded-lg p-1 text-[#5B6B82] hover:bg-[#EAF2FC]">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              <p className="rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] p-2.5 text-xs text-[#5B6B82]">
+                For items the customer is sending back, use the return request instead — it tracks pickup and inspection.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Amount (₹)" required error={refundErrors.amount}>
+                  <input
+                    type="number"
+                    min={1}
+                    step="0.01"
+                    max={order.refundSummary.balance}
+                    value={refundForm.amount || ''}
+                    onChange={(e) => setRefundForm((f) => ({ ...f, amount: Number(e.target.value) }))}
+                    className={`${inputClass} tabular-nums`}
+                  />
+                </FormField>
+                <FormField label="Reason" required>
+                  <select
+                    value={refundForm.reason}
+                    onChange={(e) => setRefundForm((f) => ({ ...f, reason: e.target.value as typeof f.reason }))}
+                    className={selectClass}
+                  >
+                    <option value="goodwill">Goodwill / price adjustment</option>
+                    <option value="cancel">Cancellation</option>
+                    <option value="return">Return (no RMA)</option>
+                  </select>
+                </FormField>
+              </div>
+              <FormField label="Refund to" required error={refundErrors.mode}>
+                <select
+                  value={refundForm.mode}
+                  onChange={(e) => setRefundForm((f) => ({ ...f, mode: e.target.value as RefundMode }))}
+                  className={selectClass}
+                >
+                  {order.refundSummary.gatewayAvailable && order.paymentMethod !== 'COD' && (
+                    <option value="gateway">Original payment method (Razorpay)</option>
+                  )}
+                  <option value="bank_transfer">Bank transfer (NEFT / IMPS) — already sent</option>
+                  <option value="upi">UPI — already sent</option>
+                </select>
+              </FormField>
+              {refundForm.mode !== 'gateway' && (
+                <FormField label={refundForm.mode === 'upi' ? 'UPI transaction id' : 'UTR / bank reference'} required error={refundErrors.reference}>
+                  <input
+                    value={refundForm.reference}
+                    onChange={(e) => setRefundForm((f) => ({ ...f, reference: e.target.value }))}
+                    className={`${inputClass} font-mono`}
+                  />
+                </FormField>
+              )}
+              <FormField label="Note to the customer">
+                <input value={refundForm.note} onChange={(e) => setRefundForm((f) => ({ ...f, note: e.target.value }))} placeholder="Optional" className={inputClass} />
+              </FormField>
+              <div className="flex justify-end gap-2.5 pt-1">
+                <button type="button" onClick={() => setRefundOpen(false)} className="rounded-lg border border-[#DCE6F2] px-4 py-2 text-xs font-semibold text-[#12263F]">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    busy ||
+                    !(refundForm.amount >= 1) ||
+                    refundForm.amount > order.refundSummary.balance ||
+                    (refundForm.mode !== 'gateway' && !refundForm.reference.trim())
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Banknote className="h-3.5 w-3.5" />}
+                  Refund {formatINR(refundForm.amount || 0)}
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
       )}
 

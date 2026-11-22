@@ -12,7 +12,7 @@ import { apiFieldErrors, btnPrimary, btnSecondary, EmptyState, Field, inputClass
 const MAX_ADDRESSES = 20; // backend/src/modules/account/validator.js
 const TYPES: Address['type'][] = ['Clinic', 'Hospital', 'Office', 'Home'];
 
-const blankAddress = (name = '', phone = '', first = false): AddressInput => ({
+export const blankAddress = (name = '', phone = '', first = false): AddressInput => ({
   type: 'Clinic',
   name,
   clinicHospitalName: '',
@@ -51,7 +51,7 @@ function validate(a: AddressInput): Record<string, string> {
   return e;
 }
 
-function AddressForm({
+export function AddressForm({
   initial,
   isEdit,
   onCancel,

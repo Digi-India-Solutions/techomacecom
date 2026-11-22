@@ -13,7 +13,7 @@ import { adminDelete, adminFetch, adminGet, adminPost, adminPut, getApiBaseUrl, 
 
 /**
  * Settings — backend/src/modules/settings (/api/v1/admin/settings/*).
- * Store, Shipping, Tax & Invoice and Rental are saved one tab at a time; the storefront
+ * Store, Shipping, Returns, Tax & Invoice and Rental are saved one tab at a time; the storefront
  * reads the public part from /api/v1/settings/public.
  */
 
@@ -48,7 +48,8 @@ export const getAdminSettings = async (): Promise<AdminSettings> => {
             footerTerms: pubRes.data.tax.invoiceFooterTerms || '',
             signatoryPath: '',
           },
-          rental: pubRes.data.rental,
+          rental: { ...pubRes.data.rental, kycDocuments: (pubRes.data.rental?.kycDocuments || []).map((d: { key: string }) => d.key) },
+          returns: { ...pubRes.data.returns, nonReturnableCategoryIds: [] },
           images: {
             logo: pubRes.data.store.logoUrl,
             footerLogo: pubRes.data.store.footerLogoUrl,

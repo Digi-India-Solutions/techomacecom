@@ -1,392 +1,319 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CalendarClock,
-  Eye,
-  MessageSquare,
-  Send,
+  ClipboardCheck,
+  FileCheck2,
+  IndianRupee,
+  PackageCheck,
+  Plus,
+  RefreshCw,
+  Search,
+  Truck,
+  Wallet,
 } from 'lucide-react';
-import type { RentalBooking, RentalStatus } from '@/types/admin';
-import {
-  getAllRentalsForCounts,
-  listRentals,
-  sendOverdueReminder,
-} from '@/lib/api/admin/rentals';
+import type { AdminRental, RentalsSummary } from '@/types/admin';
+import { listRentals, type RentalListFilter } from '@/lib/api/admin/rentals';
 import { formatINR, formatShortDate } from '@/lib/api/admin/client';
-import { useAuth } from '@/components/admin/AuthContext';
-import { useToast } from '@/components/admin/ToastProvider';
-import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
 import { StatusBadge } from '@/components/admin/StatusBadge';
+import { useAuth } from '@/components/admin/AuthContext';
 import { SafeImage } from '@/components/admin/SafeImage';
+import { EmptyState } from '@/components/admin/EmptyState';
+import { inputClass } from '@/components/admin/FormField';
 
-const RENTAL_STATUS_TABS: { key: 'all' | RentalStatus; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'pending_approval', label: 'Pending Approval' },
-  { key: 'approved', label: 'Approved' },
-  { key: 'dispatched', label: 'Dispatched' },
-  { key: 'active', label: 'Active' },
-  { key: 'extension_requested', label: 'Extension Requested' },
-  { key: 'return_scheduled', label: 'Return Scheduled' },
-  { key: 'overdue', label: 'Overdue' },
-  { key: 'returned', label: 'Returned' },
-  { key: 'deposit_refunded', label: 'Deposit Refunded' },
-  { key: 'cancelled', label: 'Cancelled' },
+const card = 'rounded-xl border border-[#DCE6F2] bg-white';
+
+const TABS: { key: RentalListFilter; label: string; countKeys?: string[] }[] = [
+  { key: 'all', label: 'All', countKeys: ['all'] },
+  { key: 'pending_approval', label: 'Under review', countKeys: ['pending_approval'] },
+  { key: 'approved', label: 'To dispatch', countKeys: ['approved'] },
+  { key: 'dispatched', label: 'Dispatched', countKeys: ['dispatched'] },
+  { key: 'active', label: 'Active', countKeys: ['active', 'extension_requested'] },
+  { key: 'overdue', label: 'Overdue', countKeys: ['overdue'] },
+  { key: 'return_scheduled', label: 'Pickup', countKeys: ['return_scheduled'] },
+  { key: 'returned', label: 'Deposit to refund', countKeys: ['returned'] },
+  { key: 'deposit_refunded', label: 'Completed', countKeys: ['deposit_refunded'] },
+  { key: 'pending_payment', label: 'Awaiting payment', countKeys: ['pending_payment'] },
+  { key: 'cancelled', label: 'Cancelled', countKeys: ['cancelled'] },
 ];
 
-const REFERENCE_TODAY = new Date('2026-11-17T00:00:00');
+const KYC_TONE: Record<string, string> = {
+  pending: 'bg-slate-100 text-slate-600 border-slate-200',
+  submitted: 'bg-[#F28C38]/12 text-[#B85A0E] border-[#F28C38]/35',
+  approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  rejected: 'bg-red-50 text-red-700 border-red-200',
+};
 
-function getDaysRemaining(endDate: string): number {
-  const end = new Date(`${endDate}T00:00:00`);
-  if (Number.isNaN(end.getTime())) return 0;
-  return Math.ceil((end.getTime() - REFERENCE_TODAY.getTime()) / (1000 * 60 * 60 * 24));
+function periodCell(r: AdminRental) {
+  if (r.startDate && r.endDate) {
+    return (
+      <>
+        <p className="text-xs text-[#12263F] tabular-nums">
+          {formatShortDate(r.startDate)} → {formatShortDate(r.endDate)}
+        </p>
+        {r.status === 'overdue' ? (
+          <p className="text-[11px] font-semibold text-red-600">{r.overdueDays} day(s) overdue</p>
+        ) : r.daysLeft != null ? (
+          <p className={`text-[11px] ${r.daysLeft <= 3 ? 'font-semibold text-[#B85A0E]' : 'text-[#5B6B82]'}`}>{r.daysLeft} day(s) left</p>
+        ) : null}
+      </>
+    );
+  }
+  return (
+    <p className="text-xs text-[#5B6B82]">
+      Wants from {r.requestedStartDate ? formatShortDate(r.requestedStartDate) : '—'}
+    </p>
+  );
 }
 
 export function RentalsPage() {
-  const [searchParams] = useSearchParams();
-  const initialFilter = searchParams.get('filter');
-  const initialStatusParam = searchParams.get('status');
-
-  const mappedStatus: 'all' | RentalStatus = RENTAL_STATUS_TABS.find((t) => t.key === initialStatusParam)?.key ?? 'all';
-
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { showToast } = useToast();
-
-  const [rentals, setRentals] = useState<RentalBooking[]>([]);
-  const [allRentals, setAllRentals] = useState<RentalBooking[]>([]);
+  const { can } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const [status, setStatus] = useState<RentalListFilter>((params.get('status') as RentalListFilter) || 'all');
+  const [due, setDue] = useState<'7d' | 'kyc' | undefined>(
+    params.get('filter') === 'due_7d' ? '7d' : params.get('filter') === 'kyc' ? 'kyc' : undefined
+  );
+  const [query, setQuery] = useState(params.get('search') || '');
+  const [debounced, setDebounced] = useState(query);
+  const [items, setItems] = useState<AdminRental[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [summary, setSummary] = useState<RentalsSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState(searchParams.get('search') || '');
-  const [statusTab, setStatusTab] = useState<'all' | RentalStatus>(mappedStatus);
-  const [dueIn7Days, setDueIn7Days] = useState(initialFilter === 'due_7d');
-  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
-  const load = async () => {
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const load = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const [filtered, all] = await Promise.all([
-        listRentals({
-          search,
-          status: statusTab,
-          dueIn7Days,
-        }),
-        getAllRentalsForCounts(),
-      ]);
-      setRentals(filtered);
-      setAllRentals(all);
+      const res = await listRentals({ status: due ? 'all' : status, due, q: debounced });
+      setItems(res.items);
+      setCounts(res.counts);
+      setSummary(res.summary);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load rentals');
     } finally {
       setLoading(false);
     }
-  };
+  }, [status, due, debounced]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusTab, dueIn7Days]);
+  }, [load]);
 
-  const countsByStatus = useMemo(() => {
-    const map: Record<string, number> = { all: allRentals.length };
-    RENTAL_STATUS_TABS.forEach((tab) => {
-      if (tab.key !== 'all') {
-        map[tab.key] = allRentals.filter((r) => r.status === tab.key).length;
-      }
-    });
-    return map;
-  }, [allRentals]);
-
-  const overdueCount = countsByStatus.overdue ?? 0;
-
-  const handleSendReminder = async (
-    e: React.MouseEvent,
-    rental: RentalBooking,
-    channel: 'WhatsApp' | 'SMS'
-  ) => {
-    e.stopPropagation();
-    setSendingId(rental.id);
-    try {
-      await sendOverdueReminder(rental.id, channel, user?.name || 'Admin');
-      showToast({
-        title: `${channel} reminder sent`,
-        description: `Dispatched overdue alert to ${rental.customerName} (${rental.customerPhone}).`,
-        variant: 'success',
-      });
-      load();
-    } finally {
-      setSendingId(null);
-    }
+  const pickTab = (key: RentalListFilter) => {
+    setStatus(key);
+    setDue(undefined);
+    const next = new URLSearchParams(params);
+    next.delete('filter');
+    if (key === 'all') next.delete('status');
+    else next.set('status', key);
+    setParams(next, { replace: true });
   };
 
-  const columns: DataTableColumn<RentalBooking>[] = useMemo(
-    () => [
-      {
-        key: 'rentalNumber',
-        header: 'Rental ID',
-        sortable: true,
-        sortValue: (r) => r.rentalNumber,
-        csvValue: (r) => r.rentalNumber,
-        render: (r) => (
-          <div>
-            <Link
-              to={`/admin/rentals/${r.id}`}
-              className="font-mono text-xs font-semibold text-[#1D5FAF] hover:underline whitespace-nowrap"
-            >
-              {r.rentalNumber}
-            </Link>
-            <div className="mt-1">
-              <StatusBadge status={r.status} />
-            </div>
-          </div>
-        ),
-      },
-      {
-        key: 'customer',
-        header: 'Customer',
-        sortable: true,
-        sortValue: (r) => r.customerName,
-        csvValue: (r) => r.customerName,
-        render: (r) => (
-          <div className="min-w-[160px]">
-            <p className="text-sm font-semibold text-[#12263F]">{r.customerName}</p>
-            <p className="text-xs text-[#5B6B82]">
-              {r.deliveryAddress.city} · {r.customerPhone}
-            </p>
-          </div>
-        ),
-      },
-      {
-        key: 'product',
-        header: 'Product & Plan',
-        sortable: true,
-        sortValue: (r) => r.productName,
-        csvValue: (r) => `${r.productName} (${r.planType})`,
-        render: (r) => (
-          <div className="flex items-center gap-2.5 min-w-[220px] max-w-[280px]">
-            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-[#DCE6F2] bg-[#F6F9FD]">
-              <SafeImage src={r.productImage} alt={r.productName} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-[#12263F] truncate">{r.productName}</p>
-              <p className="text-[11px] text-[#5B6B82] capitalize">
-                {r.planType} plan · {formatINR(r.planRate)}
-              </p>
-            </div>
-          </div>
-        ),
-      },
-      {
-        key: 'dates',
-        header: 'Dates & Remaining',
-        sortable: true,
-        sortValue: (r) => r.endDate,
-        csvValue: (r) => `${r.startDate} to ${r.endDate}`,
-        render: (r) => {
-          const days = getDaysRemaining(r.endDate);
-          const isTerminal =
-            r.status === 'returned' ||
-            r.status === 'deposit_refunded' ||
-            r.status === 'cancelled';
-          const isOverdue = !isTerminal && (r.status === 'overdue' || days < 0);
+  const pickQueue = (q: '7d' | 'kyc') => {
+    const nextDue = due === q ? undefined : q;
+    setDue(nextDue);
+    setStatus('all');
+    const next = new URLSearchParams(params);
+    next.delete('status');
+    if (nextDue) next.set('filter', nextDue === '7d' ? 'due_7d' : 'kyc');
+    else next.delete('filter');
+    setParams(next, { replace: true });
+  };
 
-          return (
-            <div className="whitespace-nowrap">
-              <p className="text-xs text-[#12263F] tabular-nums">
-                {formatShortDate(r.startDate)} → {formatShortDate(r.endDate)}
-              </p>
-              {!isTerminal && (
-                <p
-                  className={`mt-0.5 text-[11px] font-semibold tabular-nums ${
-                    isOverdue
-                      ? 'text-red-600'
-                      : days <= 7
-                        ? 'text-[#B85A0E]'
-                        : 'text-[#5B6B82]'
-                  }`}
-                >
-                  {isOverdue
-                    ? `${Math.abs(days)}d overdue`
-                    : days === 0
-                      ? 'Due today'
-                      : `${days}d remaining`}
-                </p>
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        key: 'unit',
-        header: 'Assigned Unit Serial',
-        sortable: true,
-        sortValue: (r) => r.assignedUnitSerial || '',
-        csvValue: (r) => r.assignedUnitSerial || 'Unassigned',
-        render: (r) =>
-          r.assignedUnitSerial ? (
-            <div className="whitespace-nowrap">
-              <span className="font-mono text-xs font-semibold text-[#12263F]">
-                {r.assignedUnitSerial}
-              </span>
-              <p className="text-[11px] text-[#5B6B82]">{r.assignedUnitCode}</p>
-            </div>
-          ) : (
-            <span className="rounded bg-[#F28C38]/12 px-2 py-0.5 text-[11px] font-medium text-[#B85A0E] whitespace-nowrap">
-              Not assigned
-            </span>
-          ),
-      },
-      {
-        key: 'deposit',
-        header: 'Deposit & Paid',
-        align: 'right',
-        sortable: true,
-        sortValue: (r) => r.amountPaid,
-        csvValue: (r) => r.amountPaid,
-        render: (r) => (
-          <div className="text-right whitespace-nowrap">
-            <p className="text-sm font-bold text-[#12263F] tabular-nums">
-              {formatINR(r.amountPaid)}
-            </p>
-            <div className="mt-0.5 flex items-center justify-end gap-1.5 text-[11px] text-[#5B6B82] tabular-nums">
-              <span>Dep: {formatINR(r.depositAmount)}</span>
-              <StatusBadge status={r.depositStatus} />
-            </div>
-          </div>
-        ),
-      },
-      {
-        key: 'actions',
-        header: 'Actions',
-        align: 'right',
-        render: (r) => (
-          <div
-            className="flex items-center justify-end gap-1.5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {r.status === 'overdue' && (
-              <>
-                <button
-                  type="button"
-                  disabled={sendingId === r.id}
-                  onClick={(e) => handleSendReminder(e, r, 'WhatsApp')}
-                  className="inline-flex items-center gap-1 rounded-lg bg-[#F28C38] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#d97724] disabled:opacity-60 whitespace-nowrap"
-                  title="Send WhatsApp overdue reminder"
-                >
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  WhatsApp
-                </button>
-                <button
-                  type="button"
-                  disabled={sendingId === r.id}
-                  onClick={(e) => handleSendReminder(e, r, 'SMS')}
-                  className="inline-flex items-center gap-1 rounded-lg border border-[#F28C38]/40 bg-[#F28C38]/10 px-2.5 py-1.5 text-xs font-semibold text-[#B85A0E] hover:bg-[#F28C38]/20 disabled:opacity-60 whitespace-nowrap"
-                  title="Send SMS overdue reminder"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  SMS
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              onClick={() => navigate(`/admin/rentals/${r.id}`)}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#DCE6F2] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#1D5FAF] hover:bg-[#EAF2FC] whitespace-nowrap"
-            >
-              <Eye className="h-3.5 w-3.5" />
-              Manage
-            </button>
-          </div>
-        ),
-      },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [navigate, sendingId]
-  );
+  const kpis = [
+    { label: 'Awaiting approval', value: summary?.awaitingApproval ?? 0, icon: ClipboardCheck, tone: 'text-[#B85A0E] bg-[#F28C38]/12', onClick: () => pickTab('pending_approval') },
+    { label: 'KYC to verify', value: summary?.kycToReview ?? 0, icon: FileCheck2, tone: 'text-violet-700 bg-violet-50', onClick: () => pickQueue('kyc') },
+    { label: 'To dispatch', value: summary?.toDispatch ?? 0, icon: Truck, tone: 'text-[#1D5FAF] bg-[#EAF2FC]', onClick: () => pickTab('approved') },
+    { label: 'Due in 7 days', value: summary?.dueIn7Days ?? 0, icon: CalendarClock, tone: 'text-sky-700 bg-sky-50', onClick: () => pickQueue('7d') },
+    { label: 'Overdue', value: summary?.overdue ?? 0, icon: AlertTriangle, tone: 'text-red-700 bg-red-50', onClick: () => pickTab('overdue') },
+    { label: 'Deposits to refund', value: summary?.depositsToRefund ?? 0, icon: Wallet, tone: 'text-emerald-700 bg-emerald-50', onClick: () => pickTab('returned') },
+  ];
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#12263F] tracking-tight">Rentals</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[#12263F]">Rentals</h1>
           <p className="mt-0.5 text-sm text-[#5B6B82]">
-            Approve bookings, assign serial units, approve extensions, inspect returns, and refund deposits.
+            Verify KYC, confirm bookings, assign serial-numbered units, track deliveries, extensions and returns, and refund deposits.
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
+          {summary && summary.depositsHeld > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-[#DCE6F2] bg-white px-3 py-2 text-xs text-[#5B6B82]">
+              <IndianRupee className="h-3.5 w-3.5" /> Deposits held <strong className="text-[#12263F]">{formatINR(summary.depositsHeld)}</strong>
+            </span>
+          )}
           <button
             type="button"
-            onClick={() => setDueIn7Days((v) => !v)}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
-              dueIn7Days
-                ? 'border-[#1D5FAF] bg-[#EAF2FC] text-[#1D5FAF]'
-                : 'border-[#DCE6F2] bg-white text-[#12263F] hover:bg-[#EAF2FC]'
-            }`}
+            onClick={load}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE6F2] bg-white px-3 py-2 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC] disabled:opacity-50"
           >
-            <CalendarClock className="h-3.5 w-3.5" />
-            Due within 7 Days
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
-
-          {overdueCount > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setDueIn7Days(false);
-                setStatusTab(statusTab === 'overdue' ? 'all' : 'overdue');
-              }}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
-                statusTab === 'overdue'
-                  ? 'border-[#F28C38] bg-[#F28C38] text-white'
-                  : 'border-[#F28C38]/40 bg-[#F28C38]/10 text-[#B85A0E] hover:bg-[#F28C38]/20'
-              }`}
+          {can('rentals.create') && (
+            <Link
+              to="/admin/rentals/new"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
             >
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Overdue Rentals ({overdueCount})
-            </button>
+              <Plus className="h-3.5 w-3.5" /> New rental
+            </Link>
           )}
         </div>
       </div>
 
-      {/* Status Tabs with Counts */}
-      <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-[#DCE6F2] bg-white p-1.5">
-        {RENTAL_STATUS_TABS.map((tab) => {
-          const active = statusTab === tab.key;
-          const count = countsByStatus[tab.key] ?? 0;
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {kpis.map((k) => {
+          const Icon = k.icon;
           return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setStatusTab(tab.key)}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                active
-                  ? 'bg-[#1D5FAF] text-white'
-                  : 'text-[#5B6B82] hover:bg-[#EAF2FC] hover:text-[#12263F]'
-              }`}
-            >
-              <span>{tab.label}</span>
-              <span
-                className={`rounded px-1.5 py-0.5 text-[10px] tabular-nums ${
-                  active ? 'bg-white/20 text-white' : 'bg-[#F6F9FD] text-[#5B6B82]'
-                }`}
-              >
-                {count}
+            <button key={k.label} type="button" onClick={k.onClick} className={`${card} flex items-center gap-3 p-3.5 text-left transition-shadow hover:shadow-md`}>
+              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${k.tone}`}>
+                <Icon className="h-4.5 w-4.5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-lg font-bold tabular-nums text-[#12263F]">{k.value}</span>
+                <span className="block truncate text-[11px] text-[#5B6B82]">{k.label}</span>
               </span>
             </button>
           );
         })}
       </div>
 
-      <DataTable
-        data={rentals}
-        columns={columns}
-        getRowId={(r) => r.id}
-        loading={loading}
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search rental #, customer, product, or unit serial..."
-        exportFilename="buydenmed-rentals.csv"
-        onRowClick={(r) => navigate(`/admin/rentals/${r.id}`)}
-        emptyTitle="No rental bookings match"
-        emptyDescription="Switch tabs or clear active due-date filters to see all rental bookings."
-      />
+      <div className={`${card} space-y-3 p-3`}>
+        <div className="flex gap-1 overflow-x-auto">
+          {TABS.map((t) => {
+            const n = (t.countKeys || []).reduce((s, k) => s + (counts[k] || 0), 0);
+            const active = !due && status === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => pickTab(t.key)}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  active ? 'bg-[#1D5FAF] text-white' : 'text-[#5B6B82] hover:bg-[#EAF2FC] hover:text-[#12263F]'
+                }`}
+              >
+                {t.label}
+                <span className={`rounded px-1.5 text-[10px] tabular-nums ${active ? 'bg-white/20' : 'bg-[#F6F9FD]'}`}>{n}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5B6B82]" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rental #, customer, phone, product, serial…" className={`${inputClass} pl-8`} />
+          </div>
+          {due && (
+            <button type="button" onClick={() => pickQueue(due)} className="self-start rounded-lg bg-[#EAF2FC] px-3 py-1.5 text-xs font-semibold text-[#1D5FAF]">
+              {due === '7d' ? 'Due in 7 days' : 'KYC to verify'} ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className={`${card} overflow-hidden`}>
+        {loading && items.length === 0 ? (
+          <div className="space-y-2 p-4">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-14 animate-pulse rounded-lg bg-slate-100" />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center gap-2 p-10 text-center">
+            <AlertTriangle className="h-8 w-8 text-[#F28C38]" />
+            <p className="text-sm font-semibold text-[#12263F]">Could not load rentals</p>
+            <p className="text-xs text-[#5B6B82]">{error}</p>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="p-4">
+            <EmptyState
+              icon={PackageCheck}
+              title={debounced || status !== 'all' || due ? 'No rentals match these filters' : 'No rental bookings yet'}
+              description="Bookings made from the website's Rent pages appear here once the customer starts checkout."
+            />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-[#DCE6F2] bg-[#F6F9FD] text-xs font-semibold text-[#5B6B82]">
+                  <th className="px-4 py-3">Rental</th>
+                  <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Equipment &amp; plan</th>
+                  <th className="px-4 py-3">Period</th>
+                  <th className="px-4 py-3 text-right">Amount</th>
+                  <th className="px-4 py-3">KYC</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#DCE6F2]">
+                {items.map((r) => (
+                  <tr key={r.id} className="cursor-pointer hover:bg-[#F6F9FD]" onClick={() => navigate(`/admin/rentals/${r.id}`)}>
+                    <td className="px-4 py-3 align-top">
+                      <Link to={`/admin/rentals/${r.id}`} onClick={(e) => e.stopPropagation()} className="font-mono text-xs font-semibold text-[#1D5FAF] hover:underline">
+                        {r.rentalNumber}
+                      </Link>
+                      <p className="text-[11px] text-[#5B6B82]">{formatShortDate(r.createdAt)}</p>
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <p className="text-xs font-semibold text-[#12263F]">{r.customer.name}</p>
+                      <p className="text-[11px] text-[#5B6B82]">
+                        {r.customer.phone || r.customer.email}
+                        {r.deliveryAddress?.city ? ` · ${r.deliveryAddress.city}` : ''}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md border border-[#DCE6F2]">
+                          <SafeImage src={r.product.image} alt={r.product.name} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="max-w-[220px] truncate text-xs font-medium text-[#12263F]">{r.product.name}</p>
+                          <p className="text-[11px] text-[#5B6B82]">
+                            {r.plan.durationLabel} · {formatINR(r.plan.rate)}/{r.plan.unit}
+                            {r.unit ? ` · ${r.unit.unitCode}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 align-top">{periodCell(r)}</td>
+                    <td className="px-4 py-3 text-right align-top tabular-nums">
+                      <p className="text-xs font-semibold text-[#12263F]">{formatINR(r.amounts.total)}</p>
+                      {r.amounts.balanceDue > 0 && r.status !== 'cancelled' ? (
+                        <p className="text-[11px] font-semibold text-[#B85A0E]">Due {formatINR(r.amounts.balanceDue)}</p>
+                      ) : (
+                        <p className="text-[11px] text-emerald-700">Paid {formatINR(r.amounts.paid)}</p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      {r.kyc.required ? (
+                        <span className={`inline-block rounded-md border px-2 py-0.5 text-[11px] font-semibold ${KYC_TONE[r.kyc.status || 'pending']}`}>
+                          {r.kyc.statusLabel}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-[#5B6B82]">Not needed</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <StatusBadge status={r.status} label={r.statusLabel} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

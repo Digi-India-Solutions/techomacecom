@@ -50,8 +50,10 @@ export function CustomerDetailPage() {
     setLoading(true);
     Promise.all([
       getCustomerById(id),
-      listOrders(),
-      listRentals(),
+      listOrders().catch(() => []), // the profile still loads if orders cannot be read
+      listRentals()
+        .then((res) => res.items)
+        .catch(() => [] as RentalBooking[]),
       listEnquiries(),
       listReviews('all'),
     ])
@@ -64,11 +66,7 @@ export function CustomerDetailPage() {
               (o) => o.customerId === cust.id || o.customerName === cust.name
             )
           );
-          setRentals(
-            allRentals.filter(
-              (r) => r.customerId === cust.id || r.customerName === cust.name
-            )
-          );
+          setRentals(allRentals.filter((r) => r.customer.id === cust.id));
           setEnquiries(
             allEnquiries.filter(
               (e) =>
@@ -263,16 +261,18 @@ export function CustomerDetailPage() {
                       <span className="font-mono text-xs font-semibold text-[#1D5FAF]">
                         {r.rentalNumber}
                       </span>
-                      <p className="text-xs font-medium text-[#12263F]">{r.productName}</p>
+                      <p className="text-xs font-medium text-[#12263F]">{r.product.name}</p>
                       <p className="text-[11px] text-[#5B6B82]">
-                        {formatShortDate(r.startDate)} → {formatShortDate(r.endDate)}
+                        {r.startDate && r.endDate
+                          ? `${formatShortDate(r.startDate)} → ${formatShortDate(r.endDate)}`
+                          : `${r.plan.durationLabel} · starts on delivery`}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-bold text-[#12263F] tabular-nums">
-                        {formatINR(r.amountPaid)}
+                        {formatINR(r.amounts.paid)}
                       </span>
-                      <StatusBadge status={r.status} />
+                      <StatusBadge status={r.status} label={r.statusLabel} />
                     </div>
                   </Link>
                 ))}

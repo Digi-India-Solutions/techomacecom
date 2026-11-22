@@ -23,6 +23,7 @@ import { OrdersPage } from '@/pages/admin/OrdersPage';
 import { OrderDetailPage } from '@/pages/admin/OrderDetailPage';
 import { ReturnsPage } from '@/pages/admin/ReturnsPage';
 import { RentalsPage } from '@/pages/admin/RentalsPage';
+import { NewRentalPage } from '@/pages/admin/NewRentalPage';
 import { RentalDetailPage } from '@/pages/admin/RentalDetailPage';
 import { EnquiriesPage } from '@/pages/admin/EnquiriesPage';
 import { ReviewsPage } from '@/pages/admin/ReviewsPage';
@@ -190,6 +191,14 @@ export default function App() {
                 element={
                   <PermissionGate permission="rentals.view">
                     <RentalsPage />
+                  </PermissionGate>
+                }
+              />
+              <Route
+                path="rentals/new"
+                element={
+                  <PermissionGate permission="rentals.create">
+                    <NewRentalPage />
                   </PermissionGate>
                 }
               />
