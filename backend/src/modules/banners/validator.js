@@ -29,6 +29,8 @@ export const reorderHeroBannersSchema = z.union([
   z.array(orderedItemSchema),
 ]);
 
+export const reorderPageBannersSchema = reorderHeroBannersSchema;
+
 // Page Banners
 export const pageBannerSchema = z.object({
   pageType: z.string().min(1, "Page type is required"),

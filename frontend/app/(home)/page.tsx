@@ -28,7 +28,7 @@ import WhyBuyDenmed from '@/components/home/WhyBuyDenmed';
 import TestimonialsSection from '@/components/home/TestimonialsSection';
 import BlogPreviewSection from '@/components/home/BlogPreviewSection';
 import NewsletterSection from '@/components/home/NewsletterSection';
-import PromoBannerGrid from '@/components/home/PromoBannerGrid';
+import PromoBannerGrid, { PROMO_BANNERS } from '@/components/home/PromoBannerGrid';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -46,7 +46,9 @@ export default async function HomePage() {
     rentalProducts,
     blogPosts,
     hotSellingBanners,
-    featuredReviews
+    featuredReviews,
+    promo1Banners,
+    promo2Banners
   ] = await Promise.all([
     getHomepageConfig(),
     getHeroBanners(),
@@ -60,18 +62,51 @@ export default async function HomePage() {
     getBlogPosts(),
     getPageBanners('hot_selling').catch(() => []),
     // Admin → Reviews → "Feature on home page" (approved reviews only)
-    getFeaturedReviews(12)
+    getFeaturedReviews(12),
+    getPageBanners('promo_banner_1').catch(() => getPageBanners('promo_1').catch(() => getPageBanners('featured_categories').catch(() => []))),
+    getPageBanners('promo_banner_2').catch(() => getPageBanners('promo_2').catch(() => getPageBanners('promo_banners').catch(() => [])))
   ]);
 
-  const dynamicPromoBanners = hotSellingBanners && hotSellingBanners.length >= 3
-    ? hotSellingBanners.slice(0, 3).map((b) => ({
-        id: b.id,
-        href: b.link || '/',
-        creative: b.imageDesktop,
-        title: b.title,
-        tagline: b.tagline,
-      }))
-    : undefined;
+  const activePromo1Banners = promo1Banners && promo1Banners.length > 0
+    ? promo1Banners.map((b, idx) => {
+        const image = b.imageDesktop || b.desktopImageUrl || b.imageUrl || '';
+        return {
+          id: String(b.id || `promo1-${idx}`),
+          href: b.linkUrl || b.link || '/',
+          title: b.title || '',
+          brand: b.title?.includes('-') ? b.title.split('-')[0].trim() : '',
+          tagline: b.tagline || '',
+          creative: image,
+          image: image,
+        };
+      })
+    : [];
+
+  const activePromo2Banners = promo2Banners && promo2Banners.length > 0
+    ? promo2Banners.map((b, idx) => {
+        const def = PROMO_BANNERS[idx] || {};
+        const image = b.imageDesktop || b.desktopImageUrl || b.imageUrl || def.creative || def.image;
+
+        return {
+          ...def,
+          id: String(b.id || `promo2-${idx}`),
+          href: b.linkUrl || b.link || def.href || '/',
+          title: b.title ? (b.title.includes('-') ? b.title.split('-').slice(1).join('-').trim() : b.title) : (def.title || ''),
+          brand: b.title?.includes('-') ? b.title.split('-')[0].trim() : (def.brand || ''),
+          tagline: b.tagline || def.tagline || '',
+          creative: image,
+          image: image,
+        };
+      })
+    : (hotSellingBanners && hotSellingBanners.length >= 3
+      ? hotSellingBanners.map((b) => ({
+          id: String(b.id),
+          href: b.linkUrl || b.link || '/',
+          creative: b.imageDesktop || b.desktopImageUrl,
+          title: b.title,
+          tagline: b.tagline,
+        }))
+      : PROMO_BANNERS);
 
   const catalogProducts = catalogProductsRes?.products || [];
 
@@ -268,6 +303,29 @@ export default async function HomePage() {
             key="featured_categories"
             title={getSectionTitle('featured_categories', 'Clinical & Homecare Essentials')}
             categories={curatedCats}
+            showButton={true}
+          />
+        );
+      }
+      case 'promo_banner_1':
+      case 'promo_1': {
+        if (!activePromo1Banners || activePromo1Banners.length === 0) return null;
+        return (
+          <PromoBannerGrid
+            key={key}
+            title={getSectionTitle('promo_banner_1', '')}
+            banners={activePromo1Banners}
+          />
+        );
+      }
+      case 'promo_banner_2':
+      case 'promo_banners':
+      case 'promo_2': {
+        return (
+          <PromoBannerGrid
+            key={key}
+            title={getSectionTitle('promo_banner_2', '')}
+            banners={activePromo2Banners}
           />
         );
       }
@@ -291,6 +349,7 @@ export default async function HomePage() {
       }
       case 'hot_selling': {
         const curatedHotSelling = resolveCuratedProducts('hot_selling', bestSellers);
+        const hasSeparatePromo2 = sectionList.some((s) => s.key === 'promo_banner_2' || s.key === 'promo_banners' || s.key === 'promo_2');
         return (
           <React.Fragment key="hot_selling">
             <ProductRowSlider
@@ -299,7 +358,7 @@ export default async function HomePage() {
               viewAllLink="/best-sellers"
               products={curatedHotSelling}
             />
-            <PromoBannerGrid banners={dynamicPromoBanners} />
+            {!hasSeparatePromo2 && <PromoBannerGrid banners={activePromo2Banners} />}
           </React.Fragment>
         );
       }

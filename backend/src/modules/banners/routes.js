@@ -48,6 +48,12 @@ router.post(
   c.createPageBanner
 );
 router.put(
+  "/page/reorder",
+  requirePermission("marketing.edit"),
+  validate({ body: v.reorderPageBannersSchema }),
+  c.reorderPageBanners
+);
+router.put(
   "/page/:id",
   requirePermission("marketing.edit"),
   validate({ body: v.updatePageBannerSchema }),

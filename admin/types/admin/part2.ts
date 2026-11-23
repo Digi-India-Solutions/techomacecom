@@ -529,7 +529,15 @@ export type PageBannerType =
   | 'Offers'
   | 'Hot Selling'
   | 'Deal of the Day'
-  | 'Brands';
+  | 'Brands'
+  | 'Promo Banner 1'
+  | 'Promo Banner 2'
+  | 'Promo Banners 1'
+  | 'Promo Banners 2'
+  | 'Promo 1'
+  | 'Promo 2'
+  | 'Featured Categories'
+  | 'Promo Banners';
 
 export interface PageBanner {
   id: string;

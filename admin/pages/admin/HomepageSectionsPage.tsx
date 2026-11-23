@@ -298,6 +298,45 @@ export function HomepageSectionsPage() {
               />
             </FormField>
 
+            {editingSection.key === 'featured_categories' && (
+              <div className="rounded-lg border border-[#B6D4F8] bg-[#EAF2FC]/60 p-3 text-xs text-[#5B6B82] space-y-1">
+                <p className="font-semibold text-[#12263F]">🏷️ Featured Categories Showcase</p>
+                <p>
+                  Select categories below to showcase as curated category cards on the homepage. Customers can click to explore these departments.
+                </p>
+              </div>
+            )}
+
+            {(editingSection.key === 'promo_banner_1' || editingSection.key === 'promo_1') && (
+              <div className="rounded-lg border border-[#B6D4F8] bg-[#EAF2FC]/60 p-3 text-xs text-[#5B6B82] space-y-1">
+                <p className="font-semibold text-[#12263F]">🖼️ Promo Banner 1 Creatives &amp; Links</p>
+                <p>
+                  Banner images and click navigation URLs are managed under{' '}
+                  <a
+                    href="/admin/banners/pages"
+                    className="font-semibold text-[#1D5FAF] hover:underline"
+                  >
+                    Marketing ➔ Page Banners ➔ Promo Banner 1
+                  </a>.
+                </p>
+              </div>
+            )}
+
+            {(editingSection.key === 'promo_banner_2' || editingSection.key === 'promo_banners') && (
+              <div className="rounded-lg border border-[#B6D4F8] bg-[#EAF2FC]/60 p-3 text-xs text-[#5B6B82] space-y-1">
+                <p className="font-semibold text-[#12263F]">🖼️ Promo Banner 2 Creatives &amp; Links</p>
+                <p>
+                  Promotional offer cards, images, and click navigation URLs are managed under{' '}
+                  <a
+                    href="/admin/banners/pages"
+                    className="font-semibold text-[#1D5FAF] hover:underline"
+                  >
+                    Marketing ➔ Page Banners ➔ Promo Banner 2
+                  </a>.
+                </p>
+              </div>
+            )}
+
             {editingSection.configurableType === 'products' && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-[#12263F]">

@@ -8,6 +8,7 @@ import { Heart, Plus, Minus, CreditCard, Bed, ChevronRight } from 'lucide-react'
 import { useCartStore, useWishlistStore, useToastStore } from '@/lib/store';
 import { getProductImageUrl } from '@/lib/utils';
 import SkeletonImage from '@/components/common/SkeletonImage';
+import { useHydrated } from '@/hooks/use-hydrated';
 
 interface ProductCardProps {
   product: Product;
@@ -20,14 +21,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   className = '',
   showSimilarStrip = true
 }) => {
+  const hydrated = useHydrated();
   const { items, addItem, updateQuantity } = useCartStore();
   const { toggleWishlist, isInWishlist } = useWishlistStore();
   const { addToast } = useToastStore();
 
-  const isFavorited = isInWishlist(product.id);
+  const isFavorited = hydrated ? isInWishlist(product.id) : false;
 
   // Check if this product is in the cart
-  const cartItem = items.find((i) => i.productId === product.id && !i.isRental);
+  const cartItem = hydrated ? items.find((i) => i.productId === product.id && !i.isRental) : undefined;
   const cartQty = cartItem ? cartItem.quantity : 0;
 
   const handleAddToCart = (e: React.MouseEvent) => {
@@ -116,6 +118,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Top-Right: Wishlist Button */}
           <button
             type="button"
+            suppressHydrationWarning
             onClick={handleToggleWishlist}
             className={`absolute top-2 right-2 w-7 h-7 rounded-full bg-white/95 hover:bg-white shadow-xs flex items-center justify-center transition-all hover:scale-110 z-10 cursor-pointer border border-[#DCE6F2] ${
               isFavorited ? 'text-[#DC2626]' : 'text-[#5B6B82] hover:text-[#DC2626]'
@@ -167,6 +170,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               {cartQty === 0 ? (
                 <button
                   type="button"
+                  suppressHydrationWarning
                   onClick={handleAddToCart}
                   className="bg-white hover:bg-[#EAF2FC] text-[#12263F] hover:text-[#174E90] border border-[#DCE6F2] hover:border-[#1D5FAF] px-3 py-1.5 rounded-lg shadow-xs text-xs font-bold uppercase tracking-wide transition-all flex items-center gap-1 cursor-pointer font-heading active:scale-95"
                   title="Add to Cart"
@@ -178,6 +182,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 <div className="flex items-center bg-white border border-[#1D5FAF] rounded-lg shadow-xs overflow-hidden">
                   <button
                     type="button"
+                    suppressHydrationWarning
                     onClick={handleDecrement}
                     className="w-7 h-7 flex items-center justify-center text-[#12263F] hover:bg-[#EAF2FC] transition-colors cursor-pointer"
                     aria-label="Decrease quantity"
@@ -189,6 +194,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   </span>
                   <button
                     type="button"
+                    suppressHydrationWarning
                     onClick={handleIncrement}
                     className="w-7 h-7 flex items-center justify-center text-[#12263F] hover:bg-[#EAF2FC] transition-colors cursor-pointer"
                     aria-label="Increase quantity"

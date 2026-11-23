@@ -244,6 +244,14 @@ export const PAGE_TYPE_TO_PLACEMENT = {
   "Hot Selling": "hot_selling",
   "Deal of the Day": "deal_of_day",
   "Brands": "brands_page",
+  "Featured Categories": "featured_categories",
+  "Promo Banner 1": "promo_banner_1",
+  "Promo Banner 2": "promo_banners",
+  "Promo Banners 1": "promo_banner_1",
+  "Promo Banners 2": "promo_banners",
+  "Promo 1": "promo_banner_1",
+  "Promo 2": "promo_banners",
+  "Promo Banners": "promo_banners",
 };
 
 export const PLACEMENT_TO_PAGE_TYPE = {
@@ -255,6 +263,12 @@ export const PLACEMENT_TO_PAGE_TYPE = {
   "hot_selling": "Hot Selling",
   "deal_of_day": "Deal of the Day",
   "brands_page": "Brands",
+  "featured_categories": "Promo Banner 1",
+  "promo_banner_1": "Promo Banner 1",
+  "promo_banners": "Promo Banner 2",
+  "promo_banner_2": "Promo Banner 2",
+  "promo_1": "Promo Banner 1",
+  "promo_2": "Promo Banner 2",
 };
 
 export function normalizePageTypeToPlacement(pageType) {
@@ -278,6 +292,26 @@ export function normalizePageTypeToPlacement(pageType) {
     deal_of_day: 'deal_of_day',
     deals: 'deal_of_day',
     deal: 'deal_of_day',
+    promo_banner_1: 'promo_banner_1',
+    promobanner1: 'promo_banner_1',
+    promo_banners_1: 'promo_banner_1',
+    promobanners1: 'promo_banner_1',
+    promo_1: 'promo_banner_1',
+    promo1: 'promo_banner_1',
+    promo_banner_2: 'promo_banners',
+    promobanner2: 'promo_banners',
+    promo_banners_2: 'promo_banners',
+    promobanners2: 'promo_banners',
+    promo_2: 'promo_banners',
+    promo2: 'promo_banners',
+    featured_categories: 'featured_categories',
+    featuredcategories: 'featured_categories',
+    featured: 'featured_categories',
+    promo_banners: 'promo_banners',
+    promobanners: 'promo_banners',
+    promo: 'promo_banners',
+    promos: 'promo_banners',
+    promotions: 'promo_banners',
   };
   return map[s] || PAGE_TYPE_TO_PLACEMENT[pageType] || s;
 }
@@ -369,7 +403,11 @@ export async function listPageBanners(filters = {}) {
 
   if (filters.pageType && filters.pageType !== "all") {
     const mapped = PAGE_TYPE_TO_PLACEMENT[filters.pageType] || filters.pageType;
-    where.placement = mapped;
+    if (mapped === 'promo_banner_1' || mapped === 'promo_1') {
+      where.placement = { in: ['promo_banner_1', 'featured_categories'] };
+    } else {
+      where.placement = mapped;
+    }
   }
 
   const banners = await prisma.banner.findMany({
@@ -500,6 +538,31 @@ export async function updatePageBanner(id, payload, adminUser) {
   return await listPageBanners();
 }
 
+export async function reorderPageBanners(ordered, adminUser) {
+  if (!Array.isArray(ordered)) {
+    throw ApiError.badRequest("Ordered array is required");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    for (let i = 0; i < ordered.length; i++) {
+      const item = ordered[i];
+      let bId;
+      try {
+        bId = BigInt(item.id);
+      } catch {
+        continue;
+      }
+      const newOrder = item.sortOrder !== undefined ? Number(item.sortOrder) : i + 1;
+      await tx.banner.update({
+        where: { id: bId },
+        data: { sort_order: newOrder },
+      });
+    }
+  });
+
+  return await listPageBanners();
+}
+
 export async function deletePageBanner(id, adminUser) {
   let bId;
   try {
@@ -544,8 +607,13 @@ export async function listPublicPageBanners(arg1, arg2, arg3) {
   const now = new Date();
   const placement = normalizePageTypeToPlacement(pageType);
 
+  let placementCondition = placement || { not: "hero" };
+  if (placement === 'promo_banner_1' || placement === 'promo_1') {
+    placementCondition = { in: ['promo_banner_1', 'featured_categories'] };
+  }
+
   const where = {
-    placement: placement || { not: "hero" },
+    placement: placementCondition,
     is_active: true,
     deleted_at: null,
     OR: [{ starts_at: null }, { starts_at: { lte: now } }],
@@ -639,17 +707,19 @@ export const DEFAULT_HOMEPAGE_SECTIONS = [
   { key: 'hero', defaultName: 'Hero', title: 'Featured Clinical Solutions', visible: true, sortOrder: 1, configurableType: 'none', selectedIds: [] },
   { key: 'trust_strip', defaultName: 'Trust Strip', title: 'Why Clinics & Families Trust Buy Denmed', visible: true, sortOrder: 2, configurableType: 'none', selectedIds: [] },
   { key: 'top_categories', defaultName: 'Top Categories', title: 'Shop by Medical Department', visible: true, sortOrder: 3, configurableType: 'categories', selectedIds: ['cat-respiratory', 'cat-dental', 'cat-patient-monitoring', 'cat-hospital-mobility'] },
-  { key: 'featured_categories', defaultName: 'Featured Categories', title: 'Clinical & Homecare Essentials', visible: true, sortOrder: 4, configurableType: 'categories', selectedIds: ['cat-oxygen-therapy', 'cat-operatory'] },
-  { key: 'deal_of_the_day', defaultName: 'Deal of the Day', title: 'Deal of the Day', visible: true, sortOrder: 5, configurableType: 'products', selectedIds: ['prod-dental-chair'] },
-  { key: 'hot_selling', defaultName: 'Hot Selling', title: 'Hot Selling Medical Devices', visible: true, sortOrder: 6, configurableType: 'products', selectedIds: ['prod-oxy-5l', 'prod-patient-monitor', 'prod-wheelchair'] },
-  { key: 'rental_section', defaultName: 'Rental Section', title: 'Medical Equipment on Rent', visible: true, sortOrder: 7, configurableType: 'products', selectedIds: ['prod-oxy-5l', 'prod-icu-bed', 'prod-patient-monitor'] },
-  { key: 'shop_by_brand', defaultName: 'Shop by Brand', title: 'Authorized Global Brands', visible: true, sortOrder: 8, configurableType: 'none', selectedIds: [] },
-  { key: 'shop_by_need', defaultName: 'Shop by Care Setting', visible: true, sortOrder: 9, configurableType: 'none', selectedIds: [] },
-  { key: 'sleep_test_banner', defaultName: 'Sleep Test Banner', title: 'Book a Home Sleep Apnea Study', visible: true, sortOrder: 10, configurableType: 'none', selectedIds: [] },
-  { key: 'new_arrivals', defaultName: 'New Arrivals', title: 'New Arrivals', visible: true, sortOrder: 11, configurableType: 'products', selectedIds: ['prod-patient-monitor', 'prod-autoclave'] },
-  { key: 'why_buy_denmed', defaultName: 'Why Buy Denmed', title: 'Biomedical Service & Warranty Guarantee', visible: true, sortOrder: 12, configurableType: 'none', selectedIds: [] },
-  { key: 'testimonials', defaultName: 'Testimonials', title: 'Trusted by 4,200+ Doctors & Caregivers', visible: true, sortOrder: 13, configurableType: 'none', selectedIds: [] },
-  { key: 'blog', defaultName: 'Blog', title: 'Clinical Buyer Guides', visible: true, sortOrder: 14, configurableType: 'none', selectedIds: [] },
+  { key: 'deal_of_the_day', defaultName: 'Deal of the Day', title: 'Deal of the Day', visible: true, sortOrder: 4, configurableType: 'products', selectedIds: ['prod-dental-chair'] },
+  { key: 'featured_categories', defaultName: 'Featured Categories', title: 'Clinical & Homecare Essentials', visible: true, sortOrder: 5, configurableType: 'categories', selectedIds: ['cat-oxygen-therapy', 'cat-operatory'] },
+  { key: 'promo_banner_1', defaultName: 'Promo Banner 1', title: 'Special Deals & Offers', visible: true, sortOrder: 6, configurableType: 'none', selectedIds: [] },
+  { key: 'hot_selling', defaultName: 'Hot Selling', title: 'Hot Selling Medical Devices', visible: true, sortOrder: 7, configurableType: 'products', selectedIds: ['prod-oxy-5l', 'prod-patient-monitor', 'prod-wheelchair'] },
+  { key: 'promo_banner_2', defaultName: 'Promo Banner 2', title: 'Featured Promotional Offers', visible: true, sortOrder: 8, configurableType: 'none', selectedIds: [] },
+  { key: 'rental_section', defaultName: 'Rental Section', title: 'Medical Equipment on Rent', visible: true, sortOrder: 9, configurableType: 'products', selectedIds: ['prod-oxy-5l', 'prod-icu-bed', 'prod-patient-monitor'] },
+  { key: 'shop_by_brand', defaultName: 'Shop by Brand', title: 'Authorized Global Brands', visible: true, sortOrder: 10, configurableType: 'none', selectedIds: [] },
+  { key: 'shop_by_need', defaultName: 'Shop by Care Setting', visible: true, sortOrder: 11, configurableType: 'none', selectedIds: [] },
+  { key: 'sleep_test_banner', defaultName: 'Sleep Test Banner', title: 'Book a Home Sleep Apnea Study', visible: true, sortOrder: 12, configurableType: 'none', selectedIds: [] },
+  { key: 'new_arrivals', defaultName: 'New Arrivals', title: 'New Arrivals', visible: true, sortOrder: 13, configurableType: 'products', selectedIds: ['prod-patient-monitor', 'prod-autoclave'] },
+  { key: 'why_buy_denmed', defaultName: 'Why Buy Denmed', title: 'Biomedical Service & Warranty Guarantee', visible: true, sortOrder: 14, configurableType: 'none', selectedIds: [] },
+  { key: 'testimonials', defaultName: 'Testimonials', title: 'Trusted by 4,200+ Doctors & Caregivers', visible: true, sortOrder: 15, configurableType: 'none', selectedIds: [] },
+  { key: 'blog', defaultName: 'Blog', title: 'Clinical Buyer Guides', visible: true, sortOrder: 16, configurableType: 'none', selectedIds: [] },
 ];
 
 export const DEFAULT_ANNOUNCEMENT_STRIP =
@@ -663,10 +733,19 @@ export function formatHomepageSection(s) {
   const cfg = s.config || {};
   const meta = DEFAULT_META_MAP[s.key] || { defaultName: s.key, configurableType: 'none' };
 
+  let defaultName = cfg.defaultName || meta.defaultName || s.key;
+  if (s.key === 'featured_categories') {
+    defaultName = 'Featured Categories';
+  } else if (s.key === 'promo_banner_1' || s.key === 'promo_1') {
+    defaultName = 'Promo Banner 1';
+  } else if (s.key === 'promo_banner_2' || s.key === 'promo_banners' || s.key === 'promo_2') {
+    defaultName = 'Promo Banner 2';
+  }
+
   return {
     id: s.id.toString(),
     key: s.key,
-    defaultName: cfg.defaultName || meta.defaultName || s.key,
+    defaultName,
     title: s.title || "",
     visible: Boolean(s.is_visible),
     sortOrder: s.sort_order || 1,
@@ -678,7 +757,7 @@ export function formatHomepageSection(s) {
 export async function seedInitialHomepageSectionsIfEmpty() {
   const count = await prisma.homepageSection.count();
   if (count === 0) {
-    console.log("Seeding initial 14 homepage sections into database...");
+    console.log("Seeding initial 16 homepage sections into database...");
     for (const s of DEFAULT_HOMEPAGE_SECTIONS) {
       await prisma.homepageSection.create({
         data: {
@@ -721,9 +800,84 @@ export async function seedInitialHomepageSectionsIfEmpty() {
 export async function getHomepageConfig() {
   await seedInitialHomepageSectionsIfEmpty();
 
-  const sectionsFromDb = await prisma.homepageSection.findMany({
+  let sectionsFromDb = await prisma.homepageSection.findMany({
     orderBy: { sort_order: "asc" },
   });
+
+  // 1. Ensure featured_categories is restored to 'Featured Categories'
+  const fc = sectionsFromDb.find((s) => s.key === 'featured_categories');
+  if (fc && (!fc.config || fc.config.defaultName !== 'Featured Categories' || fc.config.configurableType !== 'categories')) {
+    await prisma.homepageSection.update({
+      where: { id: fc.id },
+      data: {
+        config: {
+          ...(fc.config || {}),
+          defaultName: 'Featured Categories',
+          configurableType: 'categories',
+        },
+      },
+    });
+  }
+
+  // 2. Ensure promo_banner_1 exists in database
+  const hasPromo1 = sectionsFromDb.some((s) => s.key === 'promo_banner_1' || s.key === 'promo_1');
+  if (!hasPromo1) {
+    const fcOrder = fc ? fc.sort_order : 5;
+    const newSortOrder = fcOrder + 1;
+
+    await prisma.homepageSection.updateMany({
+      where: { sort_order: { gte: newSortOrder } },
+      data: { sort_order: { increment: 1 } },
+    });
+
+    await prisma.homepageSection.create({
+      data: {
+        key: 'promo_banner_1',
+        title: 'Special Deals & Offers',
+        is_visible: true,
+        sort_order: newSortOrder,
+        config: {
+          defaultName: 'Promo Banner 1',
+          configurableType: 'none',
+          selectedIds: [],
+        },
+      },
+    });
+
+    sectionsFromDb = await prisma.homepageSection.findMany({
+      orderBy: { sort_order: "asc" },
+    });
+  }
+
+  // 3. Ensure promo_banner_2 exists in the database
+  const hasPromo2 = sectionsFromDb.some((s) => s.key === 'promo_banner_2' || s.key === 'promo_banners');
+  if (!hasPromo2) {
+    const hotSelling = sectionsFromDb.find((s) => s.key === 'hot_selling');
+    const newSortOrder = hotSelling ? hotSelling.sort_order + 1 : 8;
+
+    await prisma.homepageSection.updateMany({
+      where: { sort_order: { gte: newSortOrder } },
+      data: { sort_order: { increment: 1 } },
+    });
+
+    await prisma.homepageSection.create({
+      data: {
+        key: 'promo_banner_2',
+        title: 'Featured Promotional Offers',
+        is_visible: true,
+        sort_order: newSortOrder,
+        config: {
+          defaultName: 'Promo Banner 2',
+          configurableType: 'none',
+          selectedIds: [],
+        },
+      },
+    });
+
+    sectionsFromDb = await prisma.homepageSection.findMany({
+      orderBy: { sort_order: "asc" },
+    });
+  }
 
   const setting = await prisma.setting.findUnique({
     where: {
@@ -787,6 +941,15 @@ export async function saveHomepageConfig(payload, adminUser) {
           configurableType: s.configurableType || meta.configurableType || "none",
           selectedIds: Array.isArray(s.selectedIds) ? s.selectedIds : [],
         };
+
+        if (s.key === 'featured_categories') {
+          config.defaultName = 'Featured Categories';
+          config.configurableType = 'categories';
+        } else if (s.key === 'promo_banner_1' || s.key === 'promo_1') {
+          config.defaultName = 'Promo Banner 1';
+        } else if (s.key === 'promo_banner_2' || s.key === 'promo_banners' || s.key === 'promo_2') {
+          config.defaultName = 'Promo Banner 2';
+        }
 
         await tx.homepageSection.upsert({
           where: { key: s.key },
