@@ -564,7 +564,7 @@ export function PageBannersPage() {
             />
           </FormField>
 
-          <FormField label="Desktop Banner Image" required>
+          <FormField label="Desktop Image (1920×190 recommended)" required>
             <div className="space-y-2">
               <div className="aspect-[16/5] w-full overflow-hidden rounded-lg border border-[#DCE6F2] bg-[#F6F9FD]">
                 <SafeImage src={form.desktopImageUrl} alt="Desktop preview" />
@@ -583,7 +583,7 @@ export function PageBannersPage() {
             </div>
           </FormField>
 
-          <FormField label="Mobile Banner Image" required>
+          <FormField label="Mobile Image (750×240 recommended)" required>
             <div className="space-y-2">
               <div className="aspect-[4/3] w-44 overflow-hidden rounded-lg border border-[#DCE6F2] bg-[#F6F9FD]">
                 <SafeImage src={form.mobileImageUrl} alt="Mobile preview" />
