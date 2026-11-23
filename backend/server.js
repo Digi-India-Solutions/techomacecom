@@ -81,7 +81,7 @@ app.use(
   })
 );
 
-// API — document §12: everything under /api/v1
+// API — document §12: everything under /api/v1 (v1.0.1)
 app.use("/api/v1", apiRoutes);
 
 app.use(notFoundHandler);

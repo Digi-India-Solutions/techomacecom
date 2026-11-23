@@ -182,3 +182,67 @@ h1, h2, h3, h4, h5, h6, .font-heading, button, nav {
 @media (prefers-reduced-motion: reduce) {
   .skeleton::after { animation: none; }
 }
+
+/* Rich text HTML formatting for product description & CMS content */
+.rich-description {
+  color: #5B6B82;
+  line-height: 1.65;
+}
+.rich-description p {
+  margin-bottom: 0.75rem;
+}
+.rich-description p:last-child {
+  margin-bottom: 0;
+}
+.rich-description ol {
+  list-style-type: decimal !important;
+  margin: 0.75rem 0 !important;
+  padding-left: 1.5rem !important;
+}
+.rich-description ul {
+  list-style-type: disc !important;
+  margin: 0.75rem 0 !important;
+  padding-left: 1.5rem !important;
+}
+.rich-description li {
+  margin: 0.35rem 0 !important;
+  padding-left: 0.25rem;
+  display: list-item !important;
+}
+.rich-description strong,
+.rich-description b {
+  font-weight: 700;
+  color: #12263F;
+}
+.rich-description em,
+.rich-description i {
+  font-style: italic;
+}
+.rich-description h1,
+.rich-description h2,
+.rich-description h3,
+.rich-description h4 {
+  font-weight: 700;
+  color: #12263F;
+  margin: 1rem 0 0.5rem;
+}
+.rich-description a {
+  color: #1D5FAF;
+  text-decoration: underline;
+}
+.rich-description table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+.rich-description th,
+.rich-description td {
+  border: 1px solid #DCE6F2;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.rich-description th {
+  background-color: #F6F9FD;
+  font-weight: 600;
+  color: #12263F;
+}

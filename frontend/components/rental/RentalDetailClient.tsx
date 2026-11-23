@@ -287,9 +287,16 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
               <h1 className="text-xl sm:text-2xl font-black text-[#12263F] leading-snug">
                 {product.name}
               </h1>
-              <p className="text-xs text-[#5B6B82] leading-relaxed">
-                {product.description}
-              </p>
+              {/<[a-z][\s\S]*>/i.test(product.description || '') ? (
+                <div
+                  className="text-xs text-[#5B6B82] leading-relaxed rich-description"
+                  dangerouslySetInnerHTML={{ __html: product.description || '' }}
+                />
+              ) : (
+                <p className="text-xs text-[#5B6B82] leading-relaxed whitespace-pre-line">
+                  {product.description}
+                </p>
+              )}
             </div>
 
             {/* Key Clinical Features */}

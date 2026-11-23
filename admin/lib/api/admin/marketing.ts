@@ -71,17 +71,19 @@ let homepageSectionsStore: HomepageSection[] = [
   { id: 'hs-1', key: 'hero', defaultName: 'Hero', title: 'Featured Clinical Solutions', visible: true, sortOrder: 1, configurableType: 'none', selectedIds: [] },
   { id: 'hs-2', key: 'trust_strip', defaultName: 'Trust Strip', title: 'Why Clinics & Families Trust Buy Denmed', visible: true, sortOrder: 2, configurableType: 'none', selectedIds: [] },
   { id: 'hs-3', key: 'top_categories', defaultName: 'Top Categories', title: 'Shop by Medical Department', visible: true, sortOrder: 3, configurableType: 'categories', selectedIds: ['cat-respiratory', 'cat-dental', 'cat-patient-monitoring', 'cat-hospital-mobility'] },
-  { id: 'hs-4', key: 'featured_categories', defaultName: 'Featured Categories', title: 'Clinical & Homecare Essentials', visible: true, sortOrder: 4, configurableType: 'categories', selectedIds: ['cat-oxygen-therapy', 'cat-operatory'] },
-  { id: 'hs-5', key: 'deal_of_the_day', defaultName: 'Deal of the Day', title: 'Deal of the Day', visible: true, sortOrder: 5, configurableType: 'products', selectedIds: ['prod-dental-chair'] },
-  { id: 'hs-6', key: 'hot_selling', defaultName: 'Hot Selling', title: 'Hot Selling Medical Devices', visible: true, sortOrder: 6, configurableType: 'products', selectedIds: ['prod-oxy-5l', 'prod-patient-monitor', 'prod-wheelchair'] },
-  { id: 'hs-7', key: 'rental_section', defaultName: 'Rental Section', title: 'Medical Equipment on Rent', visible: true, sortOrder: 7, configurableType: 'products', selectedIds: ['prod-oxy-5l', 'prod-icu-bed', 'prod-patient-monitor'] },
-  { id: 'hs-8', key: 'shop_by_brand', defaultName: 'Shop by Brand', title: 'Authorized Global Brands', visible: true, sortOrder: 8, configurableType: 'none', selectedIds: [] },
-  { id: 'hs-9', key: 'shop_by_need', defaultName: 'Shop by Need', title: 'Shop by Care Setting', visible: true, sortOrder: 9, configurableType: 'none', selectedIds: [] },
-  { id: 'hs-10', key: 'sleep_test_banner', defaultName: 'Sleep Test Banner', title: 'Book a Home Sleep Apnea Study', visible: true, sortOrder: 10, configurableType: 'none', selectedIds: [] },
-  { id: 'hs-11', key: 'new_arrivals', defaultName: 'New Arrivals', title: 'New Arrivals', visible: true, sortOrder: 11, configurableType: 'products', selectedIds: ['prod-patient-monitor', 'prod-autoclave'] },
-  { id: 'hs-12', key: 'why_buy_denmed', defaultName: 'Why Buy Denmed', title: 'Biomedical Service & Warranty Guarantee', visible: true, sortOrder: 12, configurableType: 'none', selectedIds: [] },
-  { id: 'hs-13', key: 'testimonials', defaultName: 'Testimonials', title: 'Trusted by 4,200+ Doctors & Caregivers', visible: true, sortOrder: 13, configurableType: 'none', selectedIds: [] },
-  { id: 'hs-14', key: 'blog', defaultName: 'Blog', title: 'Clinical Buyer Guides', visible: true, sortOrder: 14, configurableType: 'none', selectedIds: [] },
+  { id: 'hs-4', key: 'deal_of_the_day', defaultName: 'Deal of the Day', title: 'Deal of the Day', visible: true, sortOrder: 4, configurableType: 'products', selectedIds: ['prod-dental-chair'] },
+  { id: 'hs-5', key: 'featured_categories', defaultName: 'Featured Categories', title: 'Clinical & Homecare Essentials', visible: true, sortOrder: 5, configurableType: 'categories', selectedIds: ['cat-oxygen-therapy', 'cat-operatory'] },
+  { id: 'hs-6', key: 'promo_banner_1', defaultName: 'Promo Banner 1', title: 'Special Deals & Offers', visible: true, sortOrder: 6, configurableType: 'none', selectedIds: [] },
+  { id: 'hs-7', key: 'hot_selling', defaultName: 'Hot Selling', title: 'Hot Selling Medical Devices', visible: true, sortOrder: 7, configurableType: 'products', selectedIds: ['prod-oxy-5l', 'prod-patient-monitor', 'prod-wheelchair'] },
+  { id: 'hs-8', key: 'promo_banner_2', defaultName: 'Promo Banner 2', title: 'Featured Promotional Offers', visible: true, sortOrder: 8, configurableType: 'none', selectedIds: [] },
+  { id: 'hs-9', key: 'rental_section', defaultName: 'Rental Section', title: 'Medical Equipment on Rent', visible: true, sortOrder: 9, configurableType: 'products', selectedIds: ['prod-oxy-5l', 'prod-icu-bed', 'prod-patient-monitor'] },
+  { id: 'hs-10', key: 'shop_by_brand', defaultName: 'Shop by Brand', title: 'Authorized Global Brands', visible: true, sortOrder: 10, configurableType: 'none', selectedIds: [] },
+  { id: 'hs-11', key: 'shop_by_need', defaultName: 'Shop by Care Setting', title: '', visible: true, sortOrder: 11, configurableType: 'none', selectedIds: [] },
+  { id: 'hs-12', key: 'sleep_test_banner', defaultName: 'Sleep Test Banner', title: 'Book a Home Sleep Apnea Study', visible: true, sortOrder: 12, configurableType: 'none', selectedIds: [] },
+  { id: 'hs-13', key: 'new_arrivals', defaultName: 'New Arrivals', title: 'New Arrivals', visible: true, sortOrder: 13, configurableType: 'products', selectedIds: ['prod-patient-monitor', 'prod-autoclave'] },
+  { id: 'hs-14', key: 'why_buy_denmed', defaultName: 'Why Buy Denmed', title: 'Biomedical Service & Warranty Guarantee', visible: true, sortOrder: 14, configurableType: 'none', selectedIds: [] },
+  { id: 'hs-15', key: 'testimonials', defaultName: 'Testimonials', title: 'Trusted by 4,200+ Doctors & Caregivers', visible: true, sortOrder: 15, configurableType: 'none', selectedIds: [] },
+  { id: 'hs-16', key: 'blog', defaultName: 'Blog', title: 'Clinical Buyer Guides', visible: true, sortOrder: 16, configurableType: 'none', selectedIds: [] },
 ];
 
 let couponsStore: Coupon[] = [
@@ -232,7 +234,7 @@ export async function listPageBanners(pageType?: string): Promise<PageBanner[]> 
 }
 
 export async function savePageBanner(
-  banner: Omit<PageBanner, 'id' | 'sortOrder'> & { id?: string }
+  banner: Omit<PageBanner, 'id' | 'sortOrder'> & { id?: string; sortOrder?: number }
 ): Promise<PageBanner[]> {
   try {
     let data: PageBanner[];
@@ -252,6 +254,25 @@ export async function savePageBanner(
     } else {
       pageBannersStore.push({ ...banner, id: `pb-${Date.now()}`, sortOrder: pageBannersStore.length + 1 });
     }
+  }
+  return listPageBanners();
+}
+
+export async function reorderPageBanners(ordered: PageBanner[]): Promise<PageBanner[]> {
+  try {
+    const data = await adminPut<PageBanner[]>('/admin/banners/page/reorder', {
+      ordered: ordered.map((b, i) => ({ id: b.id, sortOrder: b.sortOrder !== undefined ? b.sortOrder : i + 1 })),
+    });
+    if (Array.isArray(data)) {
+      pageBannersStore = data;
+      return data;
+    }
+  } catch (err) {
+    console.warn('Falling back to local reorder for page banners:', err);
+    pageBannersStore = pageBannersStore.map((b) => {
+      const match = ordered.find((o) => o.id === b.id);
+      return match ? { ...b, sortOrder: match.sortOrder } : b;
+    });
   }
   return listPageBanners();
 }

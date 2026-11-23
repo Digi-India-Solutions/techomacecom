@@ -154,6 +154,24 @@ export async function updatePageBanner(req, res) {
   return ok(res, banners);
 }
 
+export async function reorderPageBanners(req, res) {
+  const orderedList = req.body.ordered || req.body;
+  const banners = await service.reorderPageBanners(orderedList, req.admin);
+
+  try {
+    await logActivity(req, {
+      module: "marketing",
+      action: "update",
+      entityType: "page_banner",
+      summary: "Reordered page banners sequence",
+    });
+  } catch (err) {
+    console.warn("Could not log page banner reorder:", err);
+  }
+
+  return ok(res, banners);
+}
+
 export async function deletePageBanner(req, res) {
   const banners = await service.deletePageBanner(req.params.id, req.admin);
 

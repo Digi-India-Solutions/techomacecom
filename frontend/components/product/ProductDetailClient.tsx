@@ -13,6 +13,7 @@ import EmiModal from '@/components/common/EmiModal';
 import ProductCard from '@/components/product/ProductCard';
 import ProductGallery from '@/components/product/ProductGallery';
 import ProductReviewsSection from '@/components/product/ProductReviewsSection';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { 
   Heart, 
   ShoppingBag, 
@@ -79,7 +80,8 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
     deliveryDays: string;
   } | null>(null);
 
-  const isFavorited = isInWishlist(product.id);
+  const hydrated = useHydrated();
+  const isFavorited = hydrated ? isInWishlist(product.id) : false;
 
   // Dynamic price depending on variant selection
   const currentPrice = selectedVariant ? selectedVariant.price : product.price;
@@ -579,9 +581,16 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
             <div className="space-y-6">
               <div>
                 <h3 className="font-bold text-base text-[#12263F] mb-2 font-heading">Description</h3>
-                <p className="text-xs sm:text-sm text-[#5B6B82] leading-relaxed font-body">
-                  {product.description}
-                </p>
+                {/<[a-z][\s\S]*>/i.test(product.description || '') ? (
+                  <div
+                    className="text-xs sm:text-sm text-[#5B6B82] leading-relaxed font-body rich-description"
+                    dangerouslySetInnerHTML={{ __html: product.description || '' }}
+                  />
+                ) : (
+                  <p className="text-xs sm:text-sm text-[#5B6B82] leading-relaxed font-body whitespace-pre-line">
+                    {product.description}
+                  </p>
+                )}
               </div>
 
               <div>

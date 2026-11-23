@@ -175,29 +175,215 @@ const BannerCard: React.FC<{ banner: PromoBanner; tall?: boolean }> = ({ banner,
 };
 
 interface PromoBannerGridProps {
+  title?: string;
   banners?: PromoBanner[];
 }
 
-export const PromoBannerGrid: React.FC<PromoBannerGridProps> = ({ banners = PROMO_BANNERS }) => {
-  if (banners.length < 3) return null;
-  const [topLeft, bottomLeft, tall] = banners;
+export const PromoBannerGrid: React.FC<PromoBannerGridProps> = ({ title, banners = PROMO_BANNERS }) => {
+  if (!banners || banners.length === 0) return null;
+
+  const header = title ? (
+    <div className="mb-4 sm:mb-6">
+      <h2 className="text-xl sm:text-2xl font-heading font-bold text-[#12263F]">{title}</h2>
+    </div>
+  ) : null;
+
+  // Single banner
+  if (banners.length === 1) {
+    return (
+      <section className="my-8 sm:my-12">
+        <div className="max-w-[1320px] mx-auto px-4 sm:px-6">
+          {header}
+          <div className="h-[200px] sm:h-[250px]">
+            <BannerCard banner={banners[0]} />
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Two banners side-by-side
+  if (banners.length === 2) {
+    return (
+      <section className="my-8 sm:my-12">
+        <div className="max-w-[1320px] mx-auto px-4 sm:px-6">
+          {header}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+            <div className="h-[200px] sm:h-[230px]">
+              <BannerCard banner={banners[0]} />
+            </div>
+            <div className="h-[200px] sm:h-[230px]">
+              <BannerCard banner={banners[1]} />
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Three banners: 2 stacked on left, 1 tall on right
+  if (banners.length === 3) {
+    const [topLeft, bottomLeft, tall] = banners;
+    return (
+      <section className="my-8 sm:my-12">
+        <div className="max-w-[1320px] mx-auto px-4 sm:px-6">
+          {header}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
+            <div className="grid grid-rows-2 gap-4 sm:gap-5">
+              <div className="h-[200px] sm:h-[230px]">
+                <BannerCard banner={topLeft} />
+              </div>
+              <div className="h-[200px] sm:h-[230px]">
+                <BannerCard banner={bottomLeft} />
+              </div>
+            </div>
+            <div className="h-[420px] sm:h-[480px] lg:h-auto">
+              <BannerCard banner={tall} tall />
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Four banners: 2x2 grid
+  if (banners.length === 4) {
+    const [b1, b2, b3, b4] = banners;
+    return (
+      <section className="my-8 sm:my-12">
+        <div className="max-w-[1320px] mx-auto px-4 sm:px-6">
+          {header}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+            <div className="h-[200px] sm:h-[230px]">
+              <BannerCard banner={b1} />
+            </div>
+            <div className="h-[200px] sm:h-[230px]">
+              <BannerCard banner={b2} />
+            </div>
+            <div className="h-[200px] sm:h-[230px]">
+              <BannerCard banner={b3} />
+            </div>
+            <div className="h-[200px] sm:h-[230px]">
+              <BannerCard banner={b4} />
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Five or more banners: Pattern of "4 chote (2x2 grid) + 5-va bada (tall card)", repeating every 5 banners
+  const fullGroups: PromoBanner[][] = [];
+  let idx = 0;
+  while (idx + 5 <= banners.length) {
+    fullGroups.push(banners.slice(idx, idx + 5));
+    idx += 5;
+  }
+  const remainder = banners.slice(idx);
 
   return (
     <section className="my-8 sm:my-12">
-      <div className="max-w-[1320px] mx-auto px-4 sm:px-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
-          <div className="grid grid-rows-2 gap-4 sm:gap-5">
+      <div className="max-w-[1320px] mx-auto px-4 sm:px-6 space-y-4 sm:space-y-6">
+        {header}
+
+        {fullGroups.map((group, groupIndex) => {
+          const [b1, b2, b3, b4, b5] = group;
+          const isAlt = groupIndex % 2 === 1;
+
+          const smallCards = (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 h-full">
+              <div className="h-[200px] sm:h-[220px]">
+                <BannerCard banner={b1} />
+              </div>
+              <div className="h-[200px] sm:h-[220px]">
+                <BannerCard banner={b2} />
+              </div>
+              <div className="h-[200px] sm:h-[220px]">
+                <BannerCard banner={b3} />
+              </div>
+              <div className="h-[200px] sm:h-[220px]">
+                <BannerCard banner={b4} />
+              </div>
+            </div>
+          );
+
+          const bigCard = (
+            <div className="h-[320px] sm:h-[380px] lg:h-full min-h-[420px] sm:min-h-[460px]">
+              <BannerCard banner={b5} tall />
+            </div>
+          );
+
+          return (
+            <div
+              key={`group-${groupIndex}`}
+              className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-stretch"
+            >
+              {isAlt ? (
+                <>
+                  <div className="lg:col-span-5 h-full order-1 lg:order-1">
+                    {bigCard}
+                  </div>
+                  <div className="lg:col-span-7 h-full order-2 lg:order-2">
+                    {smallCards}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="lg:col-span-7 h-full order-1 lg:order-1">
+                    {smallCards}
+                  </div>
+                  <div className="lg:col-span-5 h-full order-2 lg:order-2">
+                    {bigCard}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Remainder banners if count is not an exact multiple of 5 */}
+        {remainder.length === 1 && (
+          <div className="h-[200px] sm:h-[250px]">
+            <BannerCard banner={remainder[0]} />
+          </div>
+        )}
+
+        {remainder.length === 2 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
             <div className="h-[200px] sm:h-[230px]">
-              <BannerCard banner={topLeft} />
+              <BannerCard banner={remainder[0]} />
             </div>
             <div className="h-[200px] sm:h-[230px]">
-              <BannerCard banner={bottomLeft} />
+              <BannerCard banner={remainder[1]} />
             </div>
           </div>
-          <div className="h-[420px] sm:h-[480px] lg:h-auto">
-            <BannerCard banner={tall} tall />
+        )}
+
+        {remainder.length === 3 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
+            <div className="grid grid-rows-2 gap-4 sm:gap-5">
+              <div className="h-[200px] sm:h-[230px]">
+                <BannerCard banner={remainder[0]} />
+              </div>
+              <div className="h-[200px] sm:h-[230px]">
+                <BannerCard banner={remainder[1]} />
+              </div>
+            </div>
+            <div className="h-[420px] sm:h-[480px] lg:h-auto">
+              <BannerCard banner={remainder[2]} tall />
+            </div>
           </div>
-        </div>
+        )}
+
+        {remainder.length === 4 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+            {remainder.map((b) => (
+              <div key={b.id} className="h-[200px] sm:h-[230px]">
+                <BannerCard banner={b} />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

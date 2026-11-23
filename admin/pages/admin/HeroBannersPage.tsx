@@ -55,39 +55,51 @@ export function HeroBannersPage() {
   const handleDesktopFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Instant local preview
+    const localPreview = URL.createObjectURL(file);
+    setForm((f) => ({ ...f, desktopImageUrl: localPreview }));
     setUploadingDesktop(true);
+
     try {
       const uploaded = await uploadImages([file], 'banners');
-      if (uploaded[0]?.url) {
-        setForm((f) => ({ ...f, desktopImageUrl: uploaded[0].url }));
-        showToast({ title: 'Desktop banner uploaded as WebP', variant: 'success' });
-        return;
+      const url = Array.isArray(uploaded) ? uploaded[0]?.url : (uploaded as any)?.url;
+      if (url) {
+        setForm((f) => ({ ...f, desktopImageUrl: url }));
+        showToast({ title: 'Desktop banner uploaded successfully (WebP)', variant: 'success' });
       }
     } catch (err) {
       console.warn('Backend upload failed, using local preview:', err);
+      showToast({ title: 'Backend upload failed, showing local preview', variant: 'error' });
     } finally {
       setUploadingDesktop(false);
+      e.target.value = '';
     }
-    setForm((f) => ({ ...f, desktopImageUrl: URL.createObjectURL(file) }));
   };
 
   const handleMobileFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Instant local preview
+    const localPreview = URL.createObjectURL(file);
+    setForm((f) => ({ ...f, mobileImageUrl: localPreview }));
     setUploadingMobile(true);
+
     try {
       const uploaded = await uploadImages([file], 'banners');
-      if (uploaded[0]?.url) {
-        setForm((f) => ({ ...f, mobileImageUrl: uploaded[0].url }));
-        showToast({ title: 'Mobile banner uploaded as WebP', variant: 'success' });
-        return;
+      const url = Array.isArray(uploaded) ? uploaded[0]?.url : (uploaded as any)?.url;
+      if (url) {
+        setForm((f) => ({ ...f, mobileImageUrl: url }));
+        showToast({ title: 'Mobile banner uploaded successfully (WebP)', variant: 'success' });
       }
     } catch (err) {
       console.warn('Backend upload failed, using local preview:', err);
+      showToast({ title: 'Backend upload failed, showing local preview', variant: 'error' });
     } finally {
       setUploadingMobile(false);
+      e.target.value = '';
     }
-    setForm((f) => ({ ...f, mobileImageUrl: URL.createObjectURL(file) }));
   };
 
   const load = async () => {

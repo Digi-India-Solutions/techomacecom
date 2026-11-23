@@ -362,6 +362,7 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
             {onToggleWishlist && (
               <button
                 type="button"
+                suppressHydrationWarning
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleWishlist();

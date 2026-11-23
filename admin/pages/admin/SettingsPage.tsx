@@ -5,6 +5,7 @@ import {
   CreditCard,
   Download,
   Eye,
+  FileSpreadsheet,
   Loader2,
   Mail,
   MapPin,
@@ -724,6 +725,49 @@ function PincodePanel({
     }
   };
 
+  const downloadSampleFormat = () => {
+    let csvContent = '';
+    let fileName = '';
+
+    if (isRental) {
+      csvContent =
+        'pincode,city,state,active,delivery_days\r\n' +
+        '110001,Connaught Place,Delhi,yes,1-2\r\n' +
+        '110020,Okhla,Delhi,yes,1-2\r\n' +
+        '474010,Gwalior,Madhya Pradesh,yes,2-3\r\n' +
+        '504273,Kumuram Bheem Asifabad,Telangana,yes,2-3\r\n' +
+        '400001,Mumbai,Maharashtra,yes,2-3\r\n' +
+        '560001,Bengaluru,Karnataka,yes,2-3\r\n';
+      fileName = 'rental_pincodes_sample_format.csv';
+    } else {
+      csvContent =
+        'pincode,city,state,cod,delivery_days\r\n' +
+        '110001,Connaught Place,Delhi,yes,3-5\r\n' +
+        '110020,Okhla,Delhi,yes,3-5\r\n' +
+        '474010,Gwalior,Madhya Pradesh,yes,3-5\r\n' +
+        '504273,Kumuram Bheem Asifabad,Telangana,no,4-7\r\n' +
+        '400001,Mumbai,Maharashtra,yes,3-5\r\n' +
+        '560001,Bengaluru,Karnataka,no,4-7\r\n';
+      fileName = 'serviceable_pincodes_sample_format.csv';
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showToast({
+      title: 'Sample CSV Downloaded',
+      description: `Format template "${fileName}" downloaded successfully.`,
+      variant: 'success',
+    });
+  };
+
   return (
     <section className={card}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -755,6 +799,16 @@ function PincodePanel({
               <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onFile} />
             </>
           )}
+
+          <button
+            type="button"
+            onClick={downloadSampleFormat}
+            className={`${btnSecondary} text-[#1D5FAF] hover:bg-[#EAF2FC] cursor-pointer`}
+            title="Download sample CSV format template"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" /> Download Format
+          </button>
+
           {!!summary?.total && (
             <button
               type="button"
@@ -774,8 +828,9 @@ function PincodePanel({
                 }
               }}
               className={btnSecondary}
+              title="Download currently active PIN codes list"
             >
-              <Download className="h-3.5 w-3.5" /> Download
+              <Download className="h-3.5 w-3.5" /> Download ({summary.total})
             </button>
           )}
           {canEdit && !!summary?.total && (
@@ -786,21 +841,34 @@ function PincodePanel({
         </div>
       </div>
 
-      <p className="mt-3 rounded-lg bg-[#F6F9FD] px-3 py-2 font-mono text-[11px] text-[#5B6B82]">
-        {isRental ? (
-          <>
-            pincode,city,state,active,delivery_days
-            <br />
-            110020,New Delhi,Delhi,yes,1-2
-          </>
-        ) : (
-          <>
-            pincode,city,state,cod,delivery_days
-            <br />
-            110020,New Delhi,Delhi,yes,1-2
-          </>
-        )}
-      </p>
+      <div className="mt-3 rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] p-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="font-mono text-[11px] text-[#5B6B82] leading-relaxed">
+          <div className="font-sans font-semibold text-xs text-[#12263F] mb-1">
+            CSV File Column Format:
+          </div>
+          {isRental ? (
+            <>
+              <span className="font-bold text-[#1D5FAF]">pincode,city,state,active,delivery_days</span>
+              <br />
+              <span>110020,New Delhi,Delhi,yes,1-2</span>
+            </>
+          ) : (
+            <>
+              <span className="font-bold text-[#1D5FAF]">pincode,city,state,cod,delivery_days</span>
+              <br />
+              <span>110020,New Delhi,Delhi,yes,1-2</span>
+            </>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={downloadSampleFormat}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#DCE6F2] bg-white px-3 py-1.5 text-xs font-semibold text-[#1D5FAF] hover:bg-[#EAF2FC] hover:border-[#1D5FAF] shadow-2xs transition-colors cursor-pointer"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Download Sample Sheet (.csv)
+        </button>
+      </div>
 
       {importErrors.length > 0 && (
         <div className="mt-3 rounded-lg border border-[#F28C38]/35 bg-[#F28C38]/10 px-3 py-2 text-[11px] text-[#B85A0E]">
