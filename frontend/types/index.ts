@@ -549,6 +549,8 @@ export interface PageBanner {
   id: string;
   imageDesktop?: string;
   imageMobile?: string;
+  desktopImageUrl?: string;
+  mobileImageUrl?: string;
   imageUrl?: string;
   link?: string;
   linkUrl?: string;
