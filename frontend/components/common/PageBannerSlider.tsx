@@ -79,7 +79,7 @@ export const PageBannerSlider: React.FC<PageBannerSliderProps> = ({ banners, cla
         )}
 
         {/* Left Headline & Tagline */}
-        {hasText && (
+        {/* {hasText && (
           <div className="max-w-xl z-10 space-y-1 sm:space-y-2 pointer-events-none">
             {banner.tagline && (
               <span className="inline-block text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#174E90] bg-[#EAF2FC]/90 backdrop-blur-xs border border-[#1D5FAF]/20 px-2.5 py-0.5 rounded-full font-heading shadow-xs">
@@ -110,7 +110,7 @@ export const PageBannerSlider: React.FC<PageBannerSliderProps> = ({ banners, cla
               </div>
             )}
           </div>
-        )}
+        )} */}
 
         {/* Prev / Next buttons on hover if multiple banners */}
         {banners.length > 1 && (

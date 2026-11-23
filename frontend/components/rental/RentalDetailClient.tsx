@@ -7,9 +7,11 @@ import { useRouter } from 'next/navigation';
 import { Product, RentalPlanType, RentalQuote } from '@/types';
 import { fetchRentalQuote } from '@/lib/api/rentals';
 import { errorMessage } from '@/lib/api/backend';
-import { useRentalStore, useToastStore, usePincodeStore } from '@/lib/store';
+import { useRentalStore, useToastStore, usePincodeStore, useWishlistStore } from '@/lib/store';
+import ProductGallery from '@/components/product/ProductGallery';
+import { useHydrated } from '@/hooks/use-hydrated';
 import { checkRentalPincodeServiceability as checkPincodeServiceability } from '@/lib/api';
-import { getProductImageUrl } from '@/lib/utils';
+import { getProductImageUrl, getProductImages } from '@/lib/utils';
 import { 
   Bed, 
   ShieldCheck, 
@@ -40,10 +42,19 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
   const router = useRouter();
   const { setDraft } = useRentalStore();
   const { addToast } = useToastStore();
+  const { toggleWishlist, isInWishlist } = useWishlistStore();
+  const hydrated = useHydrated();
+  const isFavorited = hydrated ? isInWishlist(product.id) : false;
+  const handleShare = () => {
+    if (typeof window !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(window.location.href);
+      addToast({ type: 'info', title: 'Link Copied', message: 'Rental product link copied to clipboard.' });
+    }
+  };
   const { pincode: storedPin, city: storedCity, deliveryDays: storedEstimate, setPincode } = usePincodeStore();
 
   // Image gallery state
-  const [activeImage, setActiveImage] = useState(getProductImageUrl(product.images?.[0] || product.thumbnail));
+  const [activeImage] = useState(getProductImageUrl(product.images?.[0] || product.thumbnail));
 
   // Available plans from product
   const plans = useMemo(() => {
@@ -230,60 +241,18 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
       </nav>
 
       {/* Main Grid: Gallery & Rental Configuration */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,11fr)_minmax(0,13fr)] gap-6 xl:gap-8 items-start">
         {/* Left Column: Gallery & Specifications (7 cols) */}
-        <div className="lg:col-span-7 space-y-6">
-          {/* Main Photo Gallery */}
-          <div className="bg-white rounded-3xl p-6 border border-[#DCE6F2] shadow-xs space-y-4">
-            <div className="relative w-full aspect-4/3 rounded-2xl bg-white overflow-hidden flex items-center justify-center p-4">
-              <div className="absolute top-3 left-3 z-10 flex flex-col gap-1 items-start">
-                <span className="bg-[#1D5FAF] text-white text-xs font-bold px-3 py-1 rounded-md shadow-xs flex items-center gap-1.5">
-                  <Bed className="w-3.5 h-3.5" />
-                  <span>Available on Rent</span>
-                </span>
-                <span className="bg-[#0B2545] text-white text-[11px] font-semibold px-2 py-0.5 rounded">
-                  SKU: {product.sku}
-                </span>
-              </div>
-
-              <div className="relative w-full h-full">
-                <Image
-                  src={activeImage}
-                  alt={product.name}
-                  fill
-                  priority
-                  className="object-contain"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-            </div>
-
-            {/* Thumbnail Row */}
-            {product.images.length > 1 && (
-              <div className="flex items-center gap-3 overflow-x-auto pb-1">
-                {product.images.map((img, i) => {
-                  const imgUrl = typeof img === 'string' ? img : img.url;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => setActiveImage(imgUrl)}
-                      className={`relative w-20 h-20 rounded-xl overflow-hidden border-2 shrink-0 bg-white transition-all cursor-pointer ${
-                        activeImage === imgUrl ? 'border-[#1D5FAF] shadow-sm' : 'border-[#DCE6F2] hover:border-[#1D5FAF]/50'
-                      }`}
-                    >
-                      <Image
-                        src={imgUrl}
-                        alt={`Thumbnail ${i + 1}`}
-                        fill
-                        className="object-contain p-1"
-                        referrerPolicy="no-referrer"
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        <div className="space-y-6">
+          {/* Main Photo Gallery (shared with product page) */}
+          <ProductGallery
+            images={getProductImages(product)}
+            productName={product.name}
+            badges={[{ text: 'AVAILABLE ON RENT', type: 'deal' }]}
+            isWishlisted={isFavorited}
+            onToggleWishlist={() => toggleWishlist(product)}
+            onShare={handleShare}
+          />
 
           {/* Product Description & Specs */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#DCE6F2] shadow-xs space-y-6">
@@ -362,7 +331,7 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
         </div>
 
         {/* Right Column: Interactive Rental Plan Selector & Live Price Breakdown (5 cols) */}
-        <div className="lg:col-span-5 space-y-6">
+        <div className="space-y-6">
           <div className="bg-white rounded-3xl p-6 sm:p-7 border border-[#DCE6F2] shadow-lg space-y-6 sticky top-24">
             {/* Header: Plan Selection */}
             <div className="space-y-1 border-b border-[#DCE6F2] pb-4">

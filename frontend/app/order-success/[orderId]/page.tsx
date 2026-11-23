@@ -98,8 +98,8 @@ Support Helpline: ${store.supportPhone} | ${store.supportEmail}
       </div>
 
       {/* Shipment & Live Status Timeline */}
-      <div className="bg-white rounded-2xl border border-[#DCE6F2] p-6 sm:p-8 shadow-xs space-y-6">
-        <div className="flex items-center justify-between pb-4 border-b border-[#DCE6F2]">
+      {/* <div className="bg-white rounded-2xl border border-[#DCE6F2] p-6 sm:p-8 shadow-xs space-y-6">
+        {/* <div className="flex items-center justify-between pb-4 border-b border-[#DCE6F2]">
           <div>
             <h3 className="font-bold text-base text-[#12263F]">Shipment Timeline & Fulfillment</h3>
             <p className="text-xs text-[#5B6B82]">Live courier tracking via BlueDart Air Cargo</p>
@@ -107,9 +107,9 @@ Support Helpline: ${store.supportPhone} | ${store.supportEmail}
           <span className="text-xs font-bold text-[#174E90] bg-[#EAF2FC] px-3 py-1 rounded-lg">
             Expected in 2-3 Days
           </span>
-        </div>
+        </div> */}
 
-        <div className="space-y-6 relative pl-6 border-l-2 border-[#1D5FAF]/30 ml-2">
+        {/* <div className="space-y-6 relative pl-6 border-l-2 border-[#1D5FAF]/30 ml-2">
           {[
             {
               title: 'Order Verified & Serial Numbers Logged',
@@ -149,10 +149,10 @@ Support Helpline: ${store.supportPhone} | ${store.supportEmail}
               <p className="text-xs text-[#5B6B82] mt-0.5 leading-relaxed">{step.desc}</p>
             </div>
           ))}
-        </div>
+        </div> */}
 
         {/* Support Help box */}
-        <div className="p-4 bg-[#F6F9FD] rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#5B6B82]">
+        {/* <div className="p-4 bg-[#F6F9FD] rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#5B6B82]">
           <div className="flex items-center gap-2">
             <Phone className="w-4 h-4 text-[#1D5FAF]" />
             <span>Need prompt assistance with delivery or calibration?</span>
@@ -163,8 +163,8 @@ Support Helpline: ${store.supportPhone} | ${store.supportEmail}
           >
             Call Fulfillment Desk: {store.supportPhone}
           </a>
-        </div>
+        </div> */}
       </div>
-    </div>
+      
   );
 }
