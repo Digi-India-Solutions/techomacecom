@@ -14,7 +14,9 @@ import {
   lateFeeToday,
   periodLabel,
   quoteExtension,
-  rentalTotalPaise,
+  DEPOSIT_PAYMENT_PURPOSE,
+  depositChequeDuePaise,
+  onlineDuePaise,
   todayIST,
   ymd,
   addDays,
@@ -41,10 +43,8 @@ function expect(rental, statuses, action) {
   }
 }
 
-const balanceOf = (r) => {
-  const due = rentalTotalPaise(r) - capturedPaise(r.payments);
-  return due > 0n ? due : 0n;
-};
+/** Unpaid rent / charges (a deposit paid by cheque is tracked separately — depositChequeDuePaise). */
+const balanceOf = (r) => onlineDuePaise(r);
 
 async function availableUnits(productId) {
   const units = await prisma.rentalUnit.findMany({
@@ -264,6 +264,8 @@ export async function markDelivered(id, { deliveredOn }, admin) {
   expect(rental, ["dispatched"], "mark delivered");
   const due = balanceOf(rental);
   if (due > 0n) throw ApiError.conflict(`${formatINR(due)} is still unpaid — record the payment collected on delivery first`);
+  const chequeDue = depositChequeDuePaise(rental);
+  if (chequeDue > 0n) throw ApiError.conflict(`Collect the deposit cheque of ${formatINR(chequeDue)} and record it before marking delivered`);
   const start = dateOnly(deliveredOn || todayIST());
   if (start > dateOnly(todayIST())) throw ApiError.badRequest("The delivery date cannot be in the future");
   const end = addPeriods(start, rental.period, rental.periods);
@@ -321,6 +323,37 @@ export async function recordPayment(id, { amount, method, reference, note }, adm
   if (outcome === "booked") {
     notifyRental("rental_booked", rental, { amount_paid: formatINR(amount, { symbol: false }), balance_due: "" });
   }
+  return getAdminRental(id);
+}
+
+/** The customer chose to pay the refundable deposit by cheque — staff record it once collected. */
+export async function recordDepositCheque(id, { chequeNumber, bank, note }, admin) {
+  const rental = await load(id);
+  if (["cancelled", "deposit_refunded", "returned"].includes(rental.status)) throw ApiError.conflict("This rental is closed");
+  if (rental.deposit_mode !== "cheque") throw ApiError.conflict("The customer paid the deposit online on this rental");
+  const amount = depositChequeDuePaise(rental);
+  if (amount <= 0n) throw ApiError.conflict("The deposit cheque is already recorded");
+  await prisma.$transaction(async (tx) => {
+    await tx.payment.create({
+      data: {
+        rental_id: rental.id,
+        purpose: DEPOSIT_PAYMENT_PURPOSE,
+        gateway: "manual",
+        method: "cheque",
+        amount_paise: amount,
+        status: "captured",
+        captured_at: new Date(),
+        raw_response: { reference: chequeNumber, bank: bank || null, note: note || null, recordedBy: admin.name },
+      },
+    });
+    const paid = capturedPaise(await tx.payment.findMany({ where: { rental_id: rental.id } }));
+    await tx.rental.update({ where: { id: rental.id }, data: { total_paid_paise: paid } });
+    await history(tx, rental, rental.status, {
+      actorType: "admin",
+      actorId: admin.id,
+      note: `Deposit cheque ${chequeNumber}${bank ? ` (${bank})` : ""} for ${formatINR(amount)} received`,
+    });
+  });
   return getAdminRental(id);
 }
 
@@ -449,6 +482,10 @@ export async function refundDeposit(id, { amount, mode, reference, note }, admin
   expect(rental, ["returned"], "refund the deposit");
   const planned = BigInt(rental.deposit_refund_paise ?? 0n);
   if (amount > planned) throw ApiError.badRequest(`The deposit refund after deductions is ${formatINR(planned)}`);
+
+  if (amount > 0n && mode === "gateway" && rental.deposit_mode === "cheque") {
+    throw ApiError.badRequest("This deposit was paid by cheque — refund it by bank transfer or UPI and enter the reference");
+  }
 
   let refund = null;
   if (amount > 0n) {

@@ -1067,6 +1067,7 @@ model Rental {
   tax_paise            BigInt    @default(0)
   total_paid_paise     BigInt    @default(0)
   requested_start_date DateTime? @db.Date
+  requested_delivery_time String? @db.VarChar(5) // "HH:MM" (24h) slot the customer asked for, 10:00–16:00
   start_date           DateTime? @db.Date // fixed at delivery
   end_date             DateTime? @db.Date
   delivery_address     Json // snapshot
@@ -1081,6 +1082,8 @@ model Rental {
   advance_percent      Int       @default(100) @db.SmallInt
   advance_paise        BigInt    @default(0)
   balance_due          String    @default("before_dispatch") // before_dispatch | on_delivery
+  // + added: customer chooses to pay the refundable deposit online (with the booking) or by cheque (collected by staff before delivery)
+  deposit_mode         String    @default("online") @db.VarChar(10) // online | cheque
   // + added: KYC (client re-enabled 2026-11-21) — snapshot of the documents required at booking
   kyc_required_docs    String[]  @default([])
   kyc_status           String? // null = not required | pending | submitted | approved | rejected

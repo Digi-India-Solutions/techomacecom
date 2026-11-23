@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import type { CustomerRental, RentalKycDoc, RentalQuote } from '@/types';
 import { useRentalStore, useToastStore, useUserStore } from '@/lib/store';
+import DepositModeChooser from '@/components/rental/DepositModeChooser';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { useSiteSettings } from '@/lib/settings/store';
 import { useRentalPincodeCheck } from '@/lib/settings/pincode';
@@ -33,6 +34,9 @@ import {
   createRental,
   deleteKycDocument,
   fetchRentalQuote,
+  DELIVERY_TIME_SLOTS,
+  deliveryTimeLabel,
+  type DeliveryTimeSlot,
   openKycDocument,
   startRentalPayment,
   uploadKycDocument,
@@ -50,7 +54,9 @@ const MAX_MB = 8;
 export default function RentalCheckoutClient() {
   const router = useRouter();
   const hydrated = useHydrated();
-  const { draft, clearDraft } = useRentalStore();
+  const { draft, setDraft, clearDraft } = useRentalStore();
+  const depositMode = draft?.depositMode ?? 'online';
+  const deliveryTime: DeliveryTimeSlot = DELIVERY_TIME_SLOTS.find((t) => t === draft?.deliveryTime) ?? '10:00';
   const { user, isAuthenticated, setUser } = useUserStore();
   const { addToast } = useToastStore();
   const { store } = useSiteSettings();
@@ -83,7 +89,7 @@ export default function RentalCheckoutClient() {
   useEffect(() => {
     if (!draft) return;
     let alive = true;
-    fetchRentalQuote({ productSlug: draft.productSlug, period: draft.period, periods: draft.periods, startDate: draft.startDate })
+    fetchRentalQuote({ productSlug: draft.productSlug, period: draft.period, periods: draft.periods, startDate: draft.startDate, depositMode: draft.depositMode ?? 'online' })
       .then((q) => alive && setQuote(q))
       .catch((err) => alive && setQuoteError(errorMessage(err, 'This rental is no longer available with these options.')));
     return () => {
@@ -207,8 +213,10 @@ export default function RentalCheckoutClient() {
         period: draft.period,
         periods: draft.periods,
         startDate: draft.startDate,
+        deliveryTime,
         addressId: chosenAddressId,
         kycDocumentIds: Object.values(docs).map((d) => d.id),
+        depositMode,
       });
       setPendingRental(res.rental);
       if (!res.razorpay) throw new Error(res.error || 'Could not start the payment. Please try again.');
@@ -468,7 +476,7 @@ export default function RentalCheckoutClient() {
                   <dd className="text-[#12263F]">
                     <span className="font-semibold">{quote.durationLabel}</span> · {inr(quote.rate)}/{quote.period === 'daily' ? 'day' : quote.period === 'weekly' ? 'week' : 'month'}
                     <br />
-                    Requested from {day(quote.startDate)}
+                    Requested delivery: {day(quote.startDate)}, {deliveryTimeLabel(deliveryTime)}
                     <span className="block text-[12px] text-[#8A97A8]">The period starts on the day we deliver and install it.</span>
                   </dd>
                 </div>
@@ -506,6 +514,9 @@ export default function RentalCheckoutClient() {
                 <p className="font-semibold text-[#12263F]">What happens next</p>
                 <ol className="list-decimal pl-5 space-y-1">
                   <li>You pay {quote.advancePercent < 100 ? `the ${quote.advancePercent}% advance of ${inr(quote.payNow)}` : inr(quote.payNow)} now.</li>
+                  {quote.depositMode === 'cheque' && (
+                    <li>Keep a cheque of {inr(quote.depositByCheque)} ready for the refundable deposit — our team collects it before installation.</li>
+                  )}
                   {needsDocs && <li>We verify your documents (usually within a few hours).</li>}
                   <li>We confirm the booking and reserve a sanitised, serial-numbered unit for you.</li>
                   {quote.balance > 0 && (
@@ -581,8 +592,23 @@ export default function RentalCheckoutClient() {
               <div className="flex justify-between"><span className="text-[#5B6B82]">Rent</span><span>{inr(quote.rent)}</span></div>
               {quote.delivery > 0 && <div className="flex justify-between"><span className="text-[#5B6B82]">Delivery &amp; pickup</span><span>{inr(quote.delivery)}</span></div>}
               {quote.gst > 0 && <div className="flex justify-between"><span className="text-[#5B6B82]">GST ({quote.gstRate}%)</span><span>{inr(quote.gst)}</span></div>}
-              {quote.deposit > 0 && <div className="flex justify-between text-[#16A34A]"><span>Refundable deposit</span><span>{inr(quote.deposit)}</span></div>}
-              <div className="flex justify-between font-semibold border-t border-[#E8EEF5] pt-2"><span>Booking total</span><span>{inr(quote.total)}</span></div>
+              {quote.deposit > 0 && (
+                <div className="flex justify-between font-semibold border-t border-[#E8EEF5] pt-2"><span>Rent &amp; charges</span><span>{inr(quote.total - quote.deposit)}</span></div>
+              )}
+              <DepositModeChooser
+                compact
+                deposit={quote.deposit}
+                value={depositMode}
+                disabled={Boolean(pendingRental)}
+                onChange={(mode) => draft && setDraft({ ...draft, depositMode: mode })}
+              />
+              <div className="flex justify-between font-semibold border-t border-[#E8EEF5] pt-2">
+                <span>{quote.depositMode === 'cheque' ? 'Total payable online' : 'Booking total'}</span>
+                <span>{inr(quote.onlineTotal)}</span>
+              </div>
+              {quote.depositMode === 'cheque' && (
+                <div className="flex justify-between text-[#5B6B82]"><span>+ Deposit by cheque</span><span>{inr(quote.depositByCheque)}</span></div>
+              )}
               <div className="flex justify-between items-baseline rounded-xl bg-[#F3F8FE] border border-[#CFE0F5] px-3 py-2.5">
                 <span className="font-bold">Pay now{quote.advancePercent < 100 ? ` (${quote.advancePercent}%)` : ''}</span>
                 <span className="text-lg font-black text-[#1D5FAF]">{inr(quote.payNow)}</span>

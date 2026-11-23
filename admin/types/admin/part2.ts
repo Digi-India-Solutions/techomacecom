@@ -326,6 +326,9 @@ export interface AdminRental {
     maxPeriods: number;
   };
   requestedStartDate: string | null;
+  /** "HH:MM" slot the customer asked for (10:00–16:00) and its label, e.g. "2:00 PM" */
+  requestedDeliveryTime: string | null;
+  requestedDeliveryTimeLabel: string | null;
   startDate: string | null;
   endDate: string | null;
   daysLeft: number | null;
@@ -344,7 +347,10 @@ export interface AdminRental {
     balanceDue: number;
     refunded: number;
     depositRefund: number | null;
+    /** Deposit cheque still to collect (0 when the deposit was paid online) */
+    depositChequeDue: number;
   };
+  deposit: { mode: 'online' | 'cheque'; chequeReceived: boolean; chequeNumber: string | null; chequeBank: string | null; chequeReceivedAt: string | null };
   balanceDuePolicy: 'before_dispatch' | 'on_delivery';
   deliveryAddress: {
     name: string;

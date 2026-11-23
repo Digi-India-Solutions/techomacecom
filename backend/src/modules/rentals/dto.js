@@ -1,7 +1,7 @@
 import { publicUrl } from "../../lib/storage.js";
 import { toRefundDto } from "../refunds/service.js";
 import { KYC_DOCUMENT_TYPES } from "../settings/definitions.js";
-import { PERIOD_UNITS, capturedPaise, lateFeeToday, periodLabel, rentalTotalPaise, todayIST, daysBetween, dateOnly, ymd } from "./pricing.js";
+import { PERIOD_UNITS, timeLabel, DEPOSIT_PAYMENT_PURPOSE, capturedPaise, depositChequeDuePaise, lateFeeToday, onlineDuePaise, periodLabel, rentalTotalPaise, todayIST, daysBetween, dateOnly, ymd } from "./pricing.js";
 
 /** Response shapes for rentals (storefront "My rentals" + admin Rentals). Money in rupees. */
 
@@ -27,7 +27,7 @@ export const KYC_STATUS_LABEL = {
 };
 
 const DOC = Object.fromEntries(KYC_DOCUMENT_TYPES.map((d) => [d.key, d]));
-const PAYMENT_PURPOSE = { rental_booking: "Booking payment", rental_extension: "Extension", late_fee: "Late fee" };
+const PAYMENT_PURPOSE = { rental_booking: "Booking payment", rental_extension: "Extension", late_fee: "Late fee", rental_deposit: "Deposit cheque" };
 const PAYMENT_METHOD = { cash: "Cash", upi: "UPI", bank_transfer: "Bank transfer", cheque: "Cheque" };
 
 export const RENTAL_INCLUDE = {
@@ -155,7 +155,9 @@ function base(r, ctx) {
   const paid = capturedPaise(r.payments);
   const refunded = (r.refunds || []).filter((x) => x.status !== "failed").reduce((s, x) => s + BigInt(x.amount_paise), 0n);
   const advanceLeft = BigInt(r.advance_paise) - paid > 0n ? BigInt(r.advance_paise) - paid : 0n;
-  const balance = total - paid > 0n ? total - paid : 0n;
+  const balance = onlineDuePaise(r); // a cheque deposit is tracked on its own (depositChequeDue)
+  const depositChequeDue = depositChequeDuePaise(r);
+  const cheque = (r.payments || []).filter((p) => p.purpose === DEPOSIT_PAYMENT_PURPOSE && p.status === "captured").pop();
   const late = lateFeeToday(r, ctx.rental);
   const today = todayIST();
   const forward = (r.shipments || []).filter((s) => s.direction === "forward").pop();
@@ -185,6 +187,8 @@ function base(r, ctx) {
       maxPeriods: r.plan?.max_periods ?? 12,
     },
     requestedStartDate: ymd(r.requested_start_date),
+    requestedDeliveryTime: r.requested_delivery_time || null,
+    requestedDeliveryTimeLabel: timeLabel(r.requested_delivery_time),
     startDate: ymd(r.start_date),
     endDate: ymd(r.end_date),
     daysLeft: r.end_date && ["active", "overdue"].includes(r.status) ? daysBetween(dateOnly(today), r.end_date) : null,
@@ -203,6 +207,14 @@ function base(r, ctx) {
       balanceDue: rupees(balance),
       refunded: rupees(refunded),
       depositRefund: r.deposit_refund_paise != null ? rupees(r.deposit_refund_paise) : null,
+      depositChequeDue: rupees(depositChequeDue),
+    },
+    deposit: {
+      mode: r.deposit_mode || "online", // online | cheque
+      chequeReceived: r.deposit_mode === "cheque" && BigInt(r.deposit_paise) > 0n && depositChequeDue === 0n,
+      chequeNumber: cheque?.raw_response?.reference || null,
+      chequeBank: cheque?.raw_response?.bank || null,
+      chequeReceivedAt: iso(cheque?.captured_at),
     },
     balanceDuePolicy: r.balance_due,
     deliveryAddress: address(r.delivery_address),

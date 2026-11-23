@@ -40,6 +40,8 @@ export const recordRentalPayment = (
   id: string,
   input: { amount: number; method: OfflinePaymentMethod; reference?: string; note?: string }
 ) => act(id, 'payments', input);
+export const recordDepositCheque = (id: string, input: { chequeNumber: string; bank?: string; note?: string }) =>
+  act(id, 'deposit-cheque', input);
 export const extendRental = (
   id: string,
   input: { extraPeriods: number; collected: boolean; method?: OfflinePaymentMethod; reference?: string }

@@ -57,19 +57,43 @@ const roundUpToRupee = (paise) => ((paise + 99n) / 100n) * 100n;
  * @param rental      settings group "rental"
  * @param tax         settings group "tax"
  */
-export function quoteRental({ plan, gstRate, periods, rental, tax }) {
+/** Delivery time slots the customer can pick (24h "HH:MM"), 10 AM – 4 PM. */
+export const DELIVERY_TIME_SLOTS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"];
+
+/** "14:00" → "2:00 PM" */
+export function timeLabel(hhmm) {
+  if (!hhmm) return null;
+  const [h, m] = String(hhmm).split(":").map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+}
+
+export const DEPOSIT_MODES = ["online", "cheque"];
+
+/**
+ * @param depositMode "online" → the deposit is part of what is paid online (advance + balance);
+ *                    "cheque" → the deposit is collected by staff as a cheque before delivery, so the
+ *                    advance / online balance are worked out on rent + delivery + GST only.
+ */
+export function quoteRental({ plan, gstRate, periods, rental, tax, depositMode = "online" }) {
   const rate = BigInt(plan.price_paise);
   const rent = rate * BigInt(periods);
   const delivery = BigInt(plan.delivery_pickup_paise);
   const deposit = BigInt(plan.security_deposit_paise);
   const gst = tax.gstEnabled ? gstExclusive(rent + delivery, gstRate).gst : 0n;
   const total = rent + delivery + gst + deposit;
+  const mode = depositMode === "cheque" && deposit > 0n ? "cheque" : "online";
+  const depositByCheque = mode === "cheque" ? deposit : 0n;
+  const online = total - depositByCheque;
   const percent = Math.min(100, Math.max(1, Number(rental.advancePaymentPercent) || 100));
-  const advance = percent >= 100 ? total : (() => {
-    const a = roundUpToRupee((total * BigInt(percent)) / 100n);
-    return a > total ? total : a;
+  const advance = percent >= 100 ? online : (() => {
+    const a = roundUpToRupee((online * BigInt(percent)) / 100n);
+    return a > online ? online : a;
   })();
-  return { rate, rent, delivery, deposit, gst, gstRate: Number(gstRate), total, advancePercent: percent, advance, balance: total - advance };
+  return {
+    rate, rent, delivery, deposit, gst, gstRate: Number(gstRate), total,
+    depositMode: mode, depositByCheque, onlineTotal: online,
+    advancePercent: percent, advance, balance: online - advance,
+  };
 }
 
 /** Rent (+ GST) for extending by n more periods. */
@@ -85,6 +109,29 @@ export const rentalTotalPaise = (r) =>
 
 export const capturedPaise = (payments = []) =>
   payments.filter((p) => p.status === "captured").reduce((s, p) => s + BigInt(p.amount_paise), 0n);
+
+/** Payment purpose of a deposit cheque recorded by staff (kept apart from the online balance). */
+export const DEPOSIT_PAYMENT_PURPOSE = "rental_deposit";
+
+const isChequeDeposit = (r) => r.deposit_mode === "cheque" && BigInt(r.deposit_paise) > 0n;
+
+/** Part of the booking paid online / as normal payments (everything except a cheque deposit). */
+export const onlineTotalPaise = (r) => rentalTotalPaise(r) - (isChequeDeposit(r) ? BigInt(r.deposit_paise) : 0n);
+
+/** Rent / charges still unpaid (excludes the deposit when it comes by cheque). */
+export function onlineDuePaise(r, payments = r.payments || []) {
+  const paid = capturedPaise(payments.filter((p) => p.purpose !== DEPOSIT_PAYMENT_PURPOSE));
+  const due = onlineTotalPaise(r) - paid;
+  return due > 0n ? due : 0n;
+}
+
+/** Deposit cheque amount not yet recorded by staff (0 for online-deposit rentals). */
+export function depositChequeDuePaise(r, payments = r.payments || []) {
+  if (!isChequeDeposit(r)) return 0n;
+  const got = capturedPaise(payments.filter((p) => p.purpose === DEPOSIT_PAYMENT_PURPOSE));
+  const due = BigInt(r.deposit_paise) - got;
+  return due > 0n ? due : 0n;
+}
 
 /** Late fee owed today for an overdue rental (grace days are free). */
 export function lateFeeToday(rental, rentalSettings, today = todayIST()) {
