@@ -1,4 +1,4 @@
-import { BACKEND_API_URL } from '../config';
+import { BACKEND_API_URL, getResolvedBackendUrl } from '../config';
 import type { BlogPost } from '@/types';
 
 export interface CmsPageData {
@@ -172,7 +172,7 @@ export async function getCmsPage(rawSlug: string): Promise<CmsPageData | null> {
   const slug = ALIAS_MAP[cleanSlug] || cleanSlug;
 
   try {
-    const res = await fetch(`${BACKEND_API_URL}/pages/${slug}`, {
+    const res = await fetch(`${getResolvedBackendUrl()}/pages/${slug}`, {
       cache: 'no-store',
       headers: { Accept: 'application/json' },
     });
@@ -191,7 +191,7 @@ export async function getCmsPage(rawSlug: string): Promise<CmsPageData | null> {
 
 export async function listCmsPages(): Promise<CmsPageData[]> {
   try {
-    const res = await fetch(`${BACKEND_API_URL}/pages`, {
+    const res = await fetch(`${getResolvedBackendUrl()}/pages`, {
       cache: 'no-store',
       headers: { Accept: 'application/json' },
     });
@@ -210,8 +210,8 @@ export async function listCmsPages(): Promise<CmsPageData[]> {
 
 export async function getFaqs(group?: string): Promise<FaqData[]> {
   const url = group && group !== 'All'
-    ? `${BACKEND_API_URL}/faqs?group=${encodeURIComponent(group)}`
-    : `${BACKEND_API_URL}/faqs`;
+    ? `${getResolvedBackendUrl()}/faqs?group=${encodeURIComponent(group)}`
+    : `${getResolvedBackendUrl()}/faqs`;
 
   try {
     const res = await fetch(url, {
@@ -236,7 +236,7 @@ export async function getFaqs(group?: string): Promise<FaqData[]> {
 
 export async function getLiveBlogPosts(): Promise<BlogPost[]> {
   try {
-    const res = await fetch(`${BACKEND_API_URL}/blog`, {
+    const res = await fetch(`${getResolvedBackendUrl()}/blog`, {
       cache: 'no-store',
       headers: { Accept: 'application/json' },
     });
@@ -256,7 +256,7 @@ export async function getLiveBlogPosts(): Promise<BlogPost[]> {
 export async function getLiveBlogPostBySlug(slug: string): Promise<BlogPost | null> {
   const cleanSlug = String(slug).trim().toLowerCase().replace(/^\/+/, '');
   try {
-    const res = await fetch(`${BACKEND_API_URL}/blog/${cleanSlug}`, {
+    const res = await fetch(`${getResolvedBackendUrl()}/blog/${cleanSlug}`, {
       cache: 'no-store',
       headers: { Accept: 'application/json' },
     });

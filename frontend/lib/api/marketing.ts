@@ -1,4 +1,4 @@
-import { BACKEND_API_URL } from '../config';
+import { BACKEND_API_URL, getResolvedBackendUrl } from '../config';
 import type { Coupon, HeroBanner, PageBanner } from '@/types';
 
 export interface HomepageSectionConfig {
@@ -73,7 +73,7 @@ const DEFAULT_HERO_BANNERS: HeroBanner[] = [
  */
 export async function getHomepageConfig(): Promise<HomepageConfigData> {
   try {
-    const res = await fetch(`${BACKEND_API_URL}/banners/public/homepage-config`, {
+    const res = await fetch(`${getResolvedBackendUrl()}/banners/public/homepage-config`, {
       cache: 'no-store',
       next: { revalidate: 0 },
     });
@@ -111,7 +111,7 @@ export async function getHomepageConfig(): Promise<HomepageConfigData> {
  */
 export async function getHeroBanners(): Promise<HeroBanner[]> {
   try {
-    const res = await fetch(`${BACKEND_API_URL}/banners/public/hero`, {
+    const res = await fetch(`${getResolvedBackendUrl()}/banners/public/hero`, {
       cache: 'no-store',
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -146,7 +146,7 @@ export async function getPageBanners(
     if (slug) query.set('slug', slug);
     if (targetId) query.set('targetId', targetId);
 
-    const res = await fetch(`${BACKEND_API_URL}/banners/public/page?${query.toString()}`, {
+    const res = await fetch(`${getResolvedBackendUrl()}/banners/public/page?${query.toString()}`, {
       cache: 'no-store',
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -216,7 +216,7 @@ const DEFAULT_PUBLIC_COUPONS: Coupon[] = [
  */
 export async function getActiveCoupons(): Promise<Coupon[]> {
   try {
-    const res = await fetch(`${BACKEND_API_URL}/coupons/public`, {
+    const res = await fetch(`${getResolvedBackendUrl()}/coupons/public`, {
       cache: 'no-store',
       next: { revalidate: 0 },
     });
@@ -244,7 +244,7 @@ export async function applyCouponViaBackend(
   message: string;
 }> {
   try {
-    const res = await fetch(`${BACKEND_API_URL}/coupons/apply`, {
+    const res = await fetch(`${getResolvedBackendUrl()}/coupons/apply`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

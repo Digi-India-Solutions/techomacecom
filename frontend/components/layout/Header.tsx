@@ -543,7 +543,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                     </div>
 
                     <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-                      {currentCategory.subCategories.map((sub) => (
+                      {(currentCategory.subCategories || []).map((sub) => (
                         <div key={sub.id} className="space-y-2">
                           <Link
                             href={`/category/${currentCategory.slug}?sub=${sub.slug}`}
