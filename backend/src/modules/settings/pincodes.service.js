@@ -310,3 +310,27 @@ export async function check(pincode, type = "ecommerce") {
     message: `Delivery in ${deliveryDays} business day${deliveryDays === "1" ? "" : "s"}`,
   };
 }
+
+/** Featured/popular hubs to suggest in pincode check modals */
+export async function getPopularHubs() {
+  const dbHubs = await prisma.serviceablePincode.findMany({
+    where: { is_active: true, city: { not: null } },
+    select: { pincode: true, city: true },
+    orderBy: { pincode: "asc" },
+    take: 8,
+  });
+
+  if (dbHubs.length > 0) {
+    return dbHubs.map((h) => ({ name: h.city, pin: h.pincode }));
+  }
+
+  return [
+    { name: "Delhi", pin: "110001" },
+    { name: "Mumbai", pin: "400001" },
+    { name: "Bengaluru", pin: "560001" },
+    { name: "Hyderabad", pin: "500001" },
+    { name: "Chennai", pin: "600001" },
+    { name: "Kolkata", pin: "700001" },
+    { name: "Noida", pin: "201301" },
+  ];
+}

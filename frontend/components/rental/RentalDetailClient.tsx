@@ -110,13 +110,20 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
   const inr = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
   // Pincode checking state
-  const [inputPincode, setInputPincode] = useState(storedPin || '110001');
+  const [inputPincode, setInputPincode] = useState(storedPin || '');
   const [isCheckingPin, setIsCheckingPin] = useState(false);
   const [pinResult, setPinResult] = useState<{
     serviceable: boolean;
     city?: string;
     deliveryDays?: string;
   } | null>(null);
+
+  // Synchronize with storedPin when user sets location elsewhere or rehydrates
+  useEffect(() => {
+    if (storedPin) {
+      setInputPincode(storedPin);
+    }
+  }, [storedPin]);
 
   // Automatically verify the PIN against the rental serviceable list
   useEffect(() => {

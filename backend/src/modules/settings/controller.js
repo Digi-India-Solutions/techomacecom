@@ -219,3 +219,8 @@ export async function checkPincode(req, res) {
 export async function checkRentalPincode(req, res) {
   return ok(res, await pincodes.checkRental(String(req.params.pincode || "").trim()));
 }
+
+/** GET /pincodes/popular-hubs */
+export async function getPopularHubs(req, res) {
+  return ok(res, await pincodes.getPopularHubs());
+}

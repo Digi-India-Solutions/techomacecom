@@ -86,7 +86,7 @@ export default async function BrandPage({ params }: BrandPageProps) {
 
         <div className="relative z-10 p-6 sm:p-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-5">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white p-2 relative overflow-hidden shadow-lg shrink-0">
+           <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-white p-2 relative overflow-hidden shadow-lg shrink-0">
               {brand.logo ? (
                 <Image
                   src={brand.logo}

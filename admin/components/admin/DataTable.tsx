@@ -8,6 +8,7 @@ import {
   Columns3,
   Download,
   Search,
+  X,
 } from 'lucide-react';
 import { EmptyState } from './EmptyState';
 import { TableSkeleton } from './SkeletonLoader';
@@ -87,11 +88,33 @@ export function DataTable<T>({
     return initial;
   });
 
-  const activeSearch = searchValue !== undefined ? searchValue : internalSearch;
-  const setActiveSearch = (v: string) => {
+  // Controlled vs uncontrolled search input
+  const [searchInput, setSearchInput] = useState(searchValue ?? '');
+  const [activeSearch, setActiveSearch] = useState(searchValue ?? '');
+
+  // Synchronize with external searchValue if controlled
+  React.useEffect(() => {
+    if (searchValue !== undefined) {
+      setSearchInput(searchValue);
+      setActiveSearch(searchValue);
+    }
+  }, [searchValue]);
+
+  const handleSearch = () => {
     setPage(1);
-    if (onSearchChange) onSearchChange(v);
-    else setInternalSearch(v);
+    setActiveSearch(searchInput);
+    if (onSearchChange) {
+      onSearchChange(searchInput);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setPage(1);
+    setSearchInput('');
+    setActiveSearch('');
+    if (onSearchChange) {
+      onSearchChange('');
+    }
   };
 
   const filteredData = useMemo(() => {
@@ -196,15 +219,39 @@ export function DataTable<T>({
       {/* Toolbar */}
       <div className="flex flex-col gap-3 rounded-xl border border-[#DCE6F2] bg-white p-3.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="relative flex-1 min-w-[220px] max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5B6B82]" />
-            <input
-              type="text"
-              value={activeSearch}
-              onChange={(e) => setActiveSearch(e.target.value)}
-              placeholder={searchPlaceholder}
-              className="w-full rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] pl-9 pr-3 py-2 text-sm text-[#12263F] placeholder-[#5B6B82]/70 focus:border-[#1D5FAF] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1D5FAF]/20"
-            />
+          {/* Search Box with Action Button */}
+          <div className="flex items-center gap-2 flex-1 min-w-[260px] max-w-md">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5B6B82]" />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSearch();
+                }}
+                placeholder={searchPlaceholder}
+                className="w-full rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] pl-9 pr-8 py-2 text-sm text-[#12263F] placeholder-[#5B6B82]/70 focus:border-[#1D5FAF] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1D5FAF]/20"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A97A8] hover:text-[#12263F] p-0.5 rounded transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSearch}
+              className="inline-flex items-center justify-center shrink-0 rounded-lg bg-[#1D5FAF] px-4 py-2 text-sm font-semibold text-white shadow-xs hover:bg-[#164B8C] active:scale-[0.98] transition-all cursor-pointer"
+            >
+              Search
+            </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

@@ -81,6 +81,21 @@ app.use(
   })
 );
 
+// Serve product catalog images from frontend public folder if referenced via backend URL
+const FRONTEND_IMAGES_ROOT = path.join(__dirname, "../frontend/public/images");
+app.use(
+  "/images",
+  express.static(FRONTEND_IMAGES_ROOT, {
+    maxAge: "365d",
+    index: false,
+    dotfiles: "deny",
+    setHeaders(res) {
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    },
+  })
+);
+
+// API — document §12: everything under /api/v1
 // API — document §12: everything under /api/v1 (v1.0.1)
 app.use("/api/v1", apiRoutes);
 

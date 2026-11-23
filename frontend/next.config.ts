@@ -79,7 +79,11 @@ const nextConfig: NextConfig = {
   },
   output: 'standalone',
   async rewrites() {
+    const backendOrigin = BACKEND_API_URL.replace(/\/api\/v1\/?$/, '');
     return [
+      { source: '/uploads/:path*', destination: `${backendOrigin}/uploads/:path*` },
+      { source: '/src/assets/images/:path*', destination: `${backendOrigin}/src/assets/images/:path*` },
+      { source: '/assets/images/:path*', destination: `${backendOrigin}/assets/images/:path*` },
       { source: '/shipping-policy', destination: '/policies/shipping' },
       { source: '/returns-refunds', destination: '/policies/returns' },
       { source: '/rental-terms', destination: '/policies/rental-terms' },

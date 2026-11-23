@@ -13,6 +13,7 @@ import EmiModal from '@/components/common/EmiModal';
 import ProductCard from '@/components/product/ProductCard';
 import ProductGallery from '@/components/product/ProductGallery';
 import ProductReviewsSection from '@/components/product/ProductReviewsSection';
+import { getProductImages } from '@/lib/utils';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { 
   Heart, 
@@ -68,10 +69,17 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
   const { codEnabled, codMaxOrderValue } = settings?.shipping || { codEnabled: true, codMaxOrderValue: 50000 };
 
   // Pincode local check state
-  const [inputPincode, setInputPincode] = useState(storePin || '110001');
+  const [inputPincode, setInputPincode] = useState(storePin || '');
   const [checkingPin, setCheckingPin] = useState(false);
-  const [pinEstimate, setPinEstimate] = useState<string>(storeDelivery || '3-7 Business Days');
-  const [pinCity, setPinCity] = useState<string>(storeCity || 'Delhi NCR');
+  const [pinEstimate, setPinEstimate] = useState<string>(storeDelivery || '');
+  const [pinCity, setPinCity] = useState<string>(storeCity || '');
+
+  // Keep input synchronized with storePin when it updates or rehydrates
+  useEffect(() => {
+    if (storePin) {
+      setInputPincode(storePin);
+    }
+  }, [storePin]);
   const [pinCheckResult, setPinCheckResult] = useState<{
     checked: boolean;
     serviceable: boolean;
@@ -189,7 +197,8 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
 
   const handleBuyNow = () => {
     if (!product.inStock) return;
-    addItem(product, quantity, selectedVariant);
+    addItem(product, quantity, selectedVariant, false, 1, false);
+    setIsCartOpen(false);
     router.push('/checkout');
   };
 
@@ -235,7 +244,7 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
         {/* Left Gallery (5 cols) */}
         <div className="space-y-4">
           <ProductGallery
-            images={product.images && product.images.length > 0 ? product.images : [product.thumbnail]}
+            images={getProductImages(product)}
             productName={product.name}
             badges={[
               ...(product.isBestSeller ? [{ text: 'BEST SELLER', type: 'bestseller' as const }] : []),
