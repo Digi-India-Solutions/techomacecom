@@ -1684,7 +1684,7 @@ ALTER TABLE "reviews" ADD CONSTRAINT "reviews_comment_chk" CHECK (char_length("c
 ALTER TABLE "reviews" ADD CONSTRAINT "reviews_status_chk"  CHECK ("status" IN ('pending','approved','rejected'));
 
 ALTER TABLE "banners" ADD CONSTRAINT "banners_placement_chk" CHECK ("placement" IN
-  ('hero','category','brand','best_sellers','new_arrivals','offers','hot_selling','deal_of_day','brands_page','rental','sleep_test'));
+  ('hero','category','brand','best_sellers','new_arrivals','offers','hot_selling','deal_of_day','brands_page','rental','sleep_test','promo_banner_1','promo_banner_2','promo_banners','featured_categories','promo_1','promo_2'));
 ALTER TABLE "faqs" ADD CONSTRAINT "faqs_group_chk" CHECK ("group_key" IN ('general','rental','sleep_test','product'));
 ALTER TABLE "blog_posts" ADD CONSTRAINT "blog_posts_status_chk" CHECK ("status" IN ('draft','scheduled','published'));
 ALTER TABLE "settings" ADD CONSTRAINT "settings_group_chk" CHECK ("group_key" IN ('general','store','shipping','payments','tax','rental','notifications'));

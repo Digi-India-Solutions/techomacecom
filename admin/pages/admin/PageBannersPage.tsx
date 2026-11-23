@@ -37,7 +37,7 @@ export function PageBannersPage() {
   const [banners, setBanners] = useState<PageBanner[]>([]);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
-  const [selectedPageType, setSelectedPageType] = useState<'all' | PageBannerType>('all');
+  const [selectedPageType, setSelectedPageType] = useState<PageBannerType>('Category');
   const [loading, setLoading] = useState(true);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -134,18 +134,15 @@ export function PageBannersPage() {
   const flatCategories = useMemo(() => flattenCategories(categories), [categories]);
 
   const filteredBanners = useMemo(() => {
-    const list =
-      selectedPageType === 'all'
-        ? [...banners]
-        : banners.filter((b) => {
-            if (selectedPageType === 'Promo Banner 1') {
-              return b.pageType === 'Promo Banner 1' || b.pageType === 'Promo 1' || b.pageType === 'Featured Categories';
-            }
-            if (selectedPageType === 'Promo Banner 2') {
-              return b.pageType === 'Promo Banner 2' || b.pageType === 'Promo 2' || b.pageType === 'Promo Banners';
-            }
-            return b.pageType === selectedPageType;
-          });
+    const list = banners.filter((b) => {
+      if (selectedPageType === 'Promo Banner 1') {
+        return b.pageType === 'Promo Banner 1' || b.pageType === 'Promo 1' || b.pageType === 'Featured Categories';
+      }
+      if (selectedPageType === 'Promo Banner 2') {
+        return b.pageType === 'Promo Banner 2' || b.pageType === 'Promo 2' || b.pageType === 'Promo Banners';
+      }
+      return b.pageType === selectedPageType;
+    });
     return list.sort((a, b) => (a.sortOrder || 1) - (b.sortOrder || 1));
   }, [banners, selectedPageType]);
 
@@ -196,7 +193,7 @@ export function PageBannersPage() {
     if (selectedPageType === 'Promo Banner 1' || selectedPageType === 'Promo 1' || selectedPageType === 'Featured Categories') defaultLink = '/category/bipap-cpap';
     if (selectedPageType === 'Promo Banner 2' || selectedPageType === 'Promo 2' || selectedPageType === 'Promo Banners') defaultLink = '/product/euronda-e8-class-b-vacuum-autoclave-24l';
     setForm({
-      pageType: selectedPageType === 'all' ? 'Category' : selectedPageType,
+      pageType: selectedPageType,
       targetId: flatCategories[0]?.node.id || '',
       targetLabel: flatCategories[0]?.node.name || '',
       title: '',
@@ -275,17 +272,6 @@ export function PageBannersPage() {
 
       {/* Page Type Filter Chips */}
       <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-[#DCE6F2] bg-white p-2">
-        <button
-          type="button"
-          onClick={() => setSelectedPageType('all')}
-          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-            selectedPageType === 'all'
-              ? 'bg-[#1D5FAF] text-white'
-              : 'text-[#5B6B82] hover:bg-[#EAF2FC] hover:text-[#12263F]'
-          }`}
-        >
-          All Pages ({banners.length})
-        </button>
         {PAGE_TYPES.map((pt) => {
           const count = banners.filter((b) => {
             if (pt === 'Promo Banner 1') return b.pageType === 'Promo Banner 1' || b.pageType === 'Promo 1' || b.pageType === 'Featured Categories';
