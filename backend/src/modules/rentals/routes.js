@@ -55,6 +55,7 @@ adminRentalRoutes.post("/:id/assign-unit", edit, byId, validate({ body: v.assign
 adminRentalRoutes.post("/:id/dispatch", edit, byId, validate({ body: v.dispatchSchema }), c.adminDispatch);
 adminRentalRoutes.post("/:id/delivered", edit, byId, validate({ body: v.deliveredSchema }), c.adminDelivered);
 adminRentalRoutes.post("/:id/payments", edit, byId, validate({ body: v.paymentSchema }), c.adminPayment);
+adminRentalRoutes.post("/:id/deposit-cheque", edit, byId, validate({ body: v.depositChequeSchema }), c.adminDepositCheque);
 adminRentalRoutes.post("/:id/extend", edit, byId, validate({ body: v.adminExtendSchema }), c.adminExtend);
 adminRentalRoutes.post("/:id/schedule-return", edit, byId, validate({ body: v.scheduleReturnSchema }), c.adminReturn);
 adminRentalRoutes.post("/:id/receive", edit, byId, validate({ body: v.receiveSchema }), c.adminReceive);

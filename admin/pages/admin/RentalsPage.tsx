@@ -62,7 +62,7 @@ function periodCell(r: AdminRental) {
   }
   return (
     <p className="text-xs text-[#5B6B82]">
-      Wants from {r.requestedStartDate ? formatShortDate(r.requestedStartDate) : '—'}
+      Wants from {r.requestedStartDate ? formatShortDate(r.requestedStartDate) : '—'}{r.requestedDeliveryTimeLabel ? `, ${r.requestedDeliveryTimeLabel}` : ''}
     </p>
   );
 }

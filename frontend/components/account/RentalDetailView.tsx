@@ -377,7 +377,19 @@ export default function RentalDetailView({ id }: { id: string }) {
               <div className="flex justify-between"><span className="text-[#5B6B82]">Rent</span><span>{inr(r.amounts.rent)}</span></div>
               {r.amounts.delivery > 0 && <div className="flex justify-between"><span className="text-[#5B6B82]">Delivery &amp; pickup</span><span>{inr(r.amounts.delivery)}</span></div>}
               {r.amounts.gst > 0 && <div className="flex justify-between"><span className="text-[#5B6B82]">GST</span><span>{inr(r.amounts.gst)}</span></div>}
-              {r.amounts.deposit > 0 && <div className="flex justify-between text-[#16A34A]"><span>Refundable deposit</span><span>{inr(r.amounts.deposit)}</span></div>}
+              {r.amounts.deposit > 0 && (
+                <div className="flex justify-between text-[#16A34A]">
+                  <span>Refundable deposit{r.deposit?.mode === 'cheque' ? ' (by cheque)' : ''}</span>
+                  <span>{inr(r.amounts.deposit)}</span>
+                </div>
+              )}
+              {r.deposit?.mode === 'cheque' && r.amounts.deposit > 0 && r.status !== 'cancelled' && (
+                <p className="text-[12px] text-[#5B6B82]">
+                  {r.deposit.chequeReceived
+                    ? `Deposit cheque${r.deposit.chequeNumber ? ` no. ${r.deposit.chequeNumber}` : ''} received.`
+                    : `Keep a cheque of ${inr(r.amounts.depositChequeDue)} ready — our team collects it before installation.`}
+                </p>
+              )}
               <div className="flex justify-between font-semibold border-t border-[#E8EEF5] pt-2"><span>Total</span><span>{inr(r.amounts.total)}</span></div>
               <div className="flex justify-between"><span className="text-[#5B6B82]">Paid</span><span className="text-[#16A34A] font-semibold">{inr(r.amounts.paid)}</span></div>
               {r.amounts.balanceDue > 0 && r.status !== 'cancelled' && (
@@ -422,7 +434,7 @@ export default function RentalDetailView({ id }: { id: string }) {
                   Rental period <span className="font-semibold text-[#12263F]">{day(r.startDate)} → {day(r.endDate)}</span>
                 </>
               ) : (
-                <>Requested from {day(r.requestedStartDate)} · starts on delivery</>
+                <>Requested from {day(r.requestedStartDate)}{r.requestedDeliveryTimeLabel ? `, ${r.requestedDeliveryTimeLabel}` : ''} · starts on delivery</>
               )}
             </p>
             {r.unit && <p className="text-[#5B6B82]">Unit serial <span className="font-mono text-[#12263F]">{r.unit.serialNumber}</span></p>}

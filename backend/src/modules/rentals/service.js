@@ -19,7 +19,7 @@ import {
   periodLabel,
   quoteExtension,
   quoteRental,
-  rentalTotalPaise,
+  onlineDuePaise,
   todayIST,
   ymd,
 } from "./pricing.js";
@@ -161,10 +161,10 @@ export async function rentalAvailability(productId, tx = prisma) {
 // Quote (public)
 // ---------------------------------------------------------------------------
 
-export async function quote({ productId, productSlug, period, periods, startDate }) {
+export async function quote({ productId, productSlug, period, periods, startDate, depositMode }) {
   const [product, ctx] = await Promise.all([findRentalProduct({ productId, productSlug }), loadContext()]);
   const plan = pickPlan(product, period, periods);
-  const q = quoteRental({ plan, gstRate: product.gst_rate, periods, rental: ctx.rental, tax: ctx.tax });
+  const q = quoteRental({ plan, gstRate: product.gst_rate, periods, rental: ctx.rental, tax: ctx.tax, depositMode });
   const start = startDate ? dateOnly(startDate) : addDays(dateOnly(todayIST()), Number(ctx.rental.minLeadDays || 0));
   const docs = requiredDocsFor(plan, ctx.rental);
   const available = await rentalAvailability(product.id);
@@ -182,6 +182,9 @@ export async function quote({ productId, productSlug, period, periods, startDate
     gstRate: q.gstRate,
     deposit: toRupees(q.deposit),
     total: toRupees(q.total),
+    depositMode: q.depositMode,
+    depositByCheque: toRupees(q.depositByCheque),
+    onlineTotal: toRupees(q.onlineTotal),
     advancePercent: q.advancePercent,
     payNow: toRupees(q.advance),
     balance: toRupees(q.balance),
@@ -333,7 +336,7 @@ export async function createRental(customerId, input) {
     });
   }
 
-  const q = quoteRental({ plan, gstRate: product.gst_rate, periods: input.periods, rental: ctx.rental, tax: ctx.tax });
+  const q = quoteRental({ plan, gstRate: product.gst_rate, periods: input.periods, rental: ctx.rental, tax: ctx.tax, depositMode: input.depositMode });
 
   let rental;
   for (let attempt = 0; attempt < 3 && !rental; attempt++) {
@@ -354,19 +357,21 @@ export async function createRental(customerId, input) {
             charges_paise: q.delivery,
             tax_paise: q.gst,
             requested_start_date: start,
+            requested_delivery_time: input.deliveryTime,
             end_date: addPeriods(start, plan.period, input.periods), // re-based on the delivery date later
             delivery_address: address,
             status: "pending_payment",
             advance_percent: q.advancePercent,
             advance_paise: q.advance,
             balance_due: ctx.rental.balanceDue,
+            deposit_mode: q.depositMode,
             kyc_required_docs: required,
             kyc_status: required.length ? "submitted" : null,
             charges: {
               create: [
                 { type: "rent", direction: "debit", amount_paise: q.rent + q.gst, description: `${periodLabel(plan.period, input.periods)} × ${formatINR(q.rate)}${q.gst > 0n ? ` + GST ${q.gstRate}%` : ""}` },
                 ...(q.delivery > 0n ? [{ type: "delivery_pickup", direction: "debit", amount_paise: q.delivery, description: "Delivery, installation & pickup" }] : []),
-                ...(q.deposit > 0n ? [{ type: "deposit", direction: "debit", amount_paise: q.deposit, description: "Refundable security deposit" }] : []),
+                ...(q.deposit > 0n ? [{ type: "deposit", direction: "debit", amount_paise: q.deposit, description: q.depositMode === "cheque" ? "Refundable security deposit (by cheque)" : "Refundable security deposit" }] : []),
               ],
             },
           },
@@ -416,8 +421,9 @@ export async function startPayment(customerId, ref, { kind }) {
   if (!rental) throw ApiError.notFound("Rental not found");
   if (["cancelled", "deposit_refunded"].includes(rental.status)) throw ApiError.conflict("This rental is closed");
   const paid = capturedPaise(rental.payments);
+  // A deposit paid by cheque is collected by staff, never through this online payment
   const amount =
-    kind === "advance" ? BigInt(rental.advance_paise) - paid : rentalTotalPaise(rental) - paid;
+    kind === "advance" ? BigInt(rental.advance_paise) - paid : onlineDuePaise(rental);
   if (kind === "advance" && rental.status !== "pending_payment") throw ApiError.conflict("The booking payment is already done");
   if (amount <= 0n) throw ApiError.conflict("Nothing is due on this rental");
   return startRazorpay(rental, amount, "rental_booking");

@@ -4,8 +4,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Product, RentalPlanType, RentalQuote } from '@/types';
-import { fetchRentalQuote } from '@/lib/api/rentals';
+import { Product, RentalDepositMode, RentalPlanType, RentalQuote } from '@/types';
+import DepositModeChooser from '@/components/rental/DepositModeChooser';
+import { fetchRentalQuote, DELIVERY_TIME_SLOTS, deliveryTimeLabel, type DeliveryTimeSlot } from '@/lib/api/rentals';
 import { errorMessage } from '@/lib/api/backend';
 import { useRentalStore, useToastStore, usePincodeStore, useWishlistStore } from '@/lib/store';
 import ProductGallery from '@/components/product/ProductGallery';
@@ -92,16 +93,18 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
   );
   const [pickedStart, setStartDate] = useState<string>('');
   const startDate = pickedStart && pickedStart >= earliestStart ? pickedStart : earliestStart;
+  const [deliveryTime, setDeliveryTime] = useState<DeliveryTimeSlot>('10:00');
 
   // Live price from the API (GST, deposit, delivery and the advance % are all decided server-side)
   const [quote, setQuote] = useState<RentalQuote | null>(null);
+  const [depositMode, setDepositMode] = useState<RentalDepositMode>('online');
   const [quoteError, setQuoteError] = useState('');
   const [quoting, setQuoting] = useState(true);
   useEffect(() => {
     let alive = true;
     const t = setTimeout(() => {
       setQuoting(true);
-      fetchRentalQuote({ productSlug: product.slug, period: activePlan.type as 'daily' | 'weekly' | 'monthly', periods: validDuration, startDate })
+      fetchRentalQuote({ productSlug: product.slug, period: activePlan.type as 'daily' | 'weekly' | 'monthly', periods: validDuration, startDate, depositMode })
         .then((q) => {
           if (!alive) return;
           setQuote(q);
@@ -114,7 +117,7 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
       alive = false;
       clearTimeout(t);
     };
-  }, [product.slug, activePlan.type, validDuration, startDate]);
+  }, [product.slug, activePlan.type, validDuration, startDate, depositMode]);
 
   const calculatedEndDate = quote?.endDate || '';
   const formatDay = (d: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -213,6 +216,8 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
       period: activePlan.type as 'daily' | 'weekly' | 'monthly',
       periods: validDuration,
       startDate,
+      deliveryTime,
+      depositMode,
     });
     router.push('/rent/checkout');
   };
@@ -419,19 +424,35 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
             {/* 3. Start Date Picker */}
             <div className="space-y-2">
               <label className="block text-xs font-bold text-[#12263F]">
-                3. Desired Delivery / Start Date:
+                3. Desired Delivery / Start Date &amp; Time:
               </label>
-              <div className="relative">
+              <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2">
                 <input
                   type="date"
+                  aria-label="Delivery date"
                   min={earliestStart}
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className="w-full text-xs font-semibold px-3.5 py-2.5 border border-[#DCE6F2] text-[#12263F] rounded-xl bg-white focus:outline-none focus:border-[#1D5FAF]"
                 />
+                <div className="relative">
+                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#1D5FAF] pointer-events-none" />
+                  <select
+                    aria-label="Delivery time"
+                    value={deliveryTime}
+                    onChange={(e) => setDeliveryTime(e.target.value as DeliveryTimeSlot)}
+                    className="w-full appearance-none text-xs font-semibold pl-8 pr-8 py-2.5 border border-[#DCE6F2] text-[#12263F] rounded-xl bg-white focus:outline-none focus:border-[#1D5FAF] cursor-pointer"
+                  >
+                    {DELIVERY_TIME_SLOTS.map((t) => (
+                      <option key={t} value={t}>{deliveryTimeLabel(t)}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#5B6B82] pointer-events-none" />
+                </div>
               </div>
+              <p className="text-[11px] text-[#5B6B82] px-1">Delivery &amp; installation between 10 AM and 4 PM.</p>
               <div className="flex items-center justify-between text-[12px] text-[#5B6B82] px-1">
-                <span>From <strong>{formatDay(startDate)}</strong></span>
+                <span>From <strong>{formatDay(startDate)}, {deliveryTimeLabel(deliveryTime)}</strong></span>
                 <span>Return by <strong>{calculatedEndDate ? formatDay(calculatedEndDate) : '…'}</strong></span>
               </div>
             </div>
@@ -518,17 +539,22 @@ export default function RentalDetailClient({ product }: RentalDetailClientProps)
                     </div>
                   )}
                   {quote.deposit > 0 && (
-                    <div className="flex justify-between items-center text-[#16A34A] font-semibold bg-[#16A34A]/5 p-2 rounded-lg border border-[#16A34A]/20">
-                      <span className="flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5 shrink-0" /> Refundable security deposit
-                      </span>
-                      <span>{inr(quote.deposit)}</span>
+                    <div className="pt-2 border-t border-[#DCE6F2] flex justify-between items-baseline">
+                      <span className="font-bold">Rent &amp; charges</span>
+                      <span className="font-bold">{inr(quote.total - quote.deposit)}</span>
                     </div>
                   )}
+                  <DepositModeChooser deposit={quote.deposit} value={depositMode} onChange={setDepositMode} />
                   <div className="pt-2 border-t border-[#DCE6F2] flex justify-between items-baseline">
-                    <span className="font-bold">Booking total</span>
-                    <span className="font-bold">{inr(quote.total)}</span>
+                    <span className="font-bold">{quote.depositMode === 'cheque' ? 'Total payable online' : 'Booking total'}</span>
+                    <span className="font-bold">{inr(quote.onlineTotal)}</span>
                   </div>
+                  {quote.depositMode === 'cheque' && (
+                    <div className="flex justify-between items-baseline text-[#5B6B82]">
+                      <span>+ Deposit by cheque</span>
+                      <span>{inr(quote.depositByCheque)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-baseline rounded-xl bg-white border border-[#CFE0F5] px-3 py-2.5">
                     <div>
                       <span className="font-black text-sm block">Pay now{quote.advancePercent < 100 ? ` (${quote.advancePercent}% advance)` : ''}</span>

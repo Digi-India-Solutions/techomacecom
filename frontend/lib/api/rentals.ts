@@ -5,12 +5,29 @@
  */
 import { apiDelete, apiFetch, apiPost, BACKEND_URL, refreshSession, ApiClientError } from './backend';
 import type { RazorpayOrderInfo, RazorpaySuccess } from '@/lib/razorpay';
-import type { CustomerRental, RentalKycDoc, RentalQuote } from '@/types';
+import type { CustomerRental, RentalDepositMode, RentalKycDoc, RentalQuote } from '@/types';
 
 export type RentalPeriod = 'daily' | 'weekly' | 'monthly';
 
-export function fetchRentalQuote(input: { productSlug: string; period: RentalPeriod; periods: number; startDate?: string }) {
-  return apiPost<RentalQuote>('/rentals/quote', input);
+/** Delivery time slots (24h "HH:MM") — same list as the API: 10 AM to 4 PM. */
+export const DELIVERY_TIME_SLOTS = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'] as const;
+export type DeliveryTimeSlot = (typeof DELIVERY_TIME_SLOTS)[number];
+
+/** "14:00" → "2:00 PM" */
+export function deliveryTimeLabel(hhmm?: string | null) {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
+export function fetchRentalQuote(input: { productSlug: string; period: RentalPeriod; periods: number; startDate?: string; depositMode?: RentalDepositMode }) {
+  return apiPost<RentalQuote>('/rentals/quote', input).then((q) => ({
+    ...q,
+    // Defaults for an API that predates the deposit-by-cheque option
+    depositMode: q.depositMode ?? 'online',
+    depositByCheque: q.depositByCheque ?? 0,
+    onlineTotal: q.onlineTotal ?? q.total,
+  }));
 }
 
 export const fetchMyRentals = () => apiFetch<CustomerRental[]>('/rentals');
@@ -21,8 +38,10 @@ export interface CreateRentalInput {
   period: RentalPeriod;
   periods: number;
   startDate: string;
+  deliveryTime: DeliveryTimeSlot;
   addressId: string;
   kycDocumentIds: string[];
+  depositMode: RentalDepositMode;
 }
 
 export function createRental(input: CreateRentalInput) {
