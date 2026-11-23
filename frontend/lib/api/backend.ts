@@ -7,7 +7,7 @@
  * A 401 triggers one silent POST /auth/refresh, then the request is retried.
  */
 
-import { BACKEND_API_URL } from '../config';
+import { BACKEND_API_URL, getResolvedBackendUrl } from '../config';
 
 // Local or production API, chosen automatically (lib/config.ts)
 export const BACKEND_URL = BACKEND_API_URL;
@@ -39,7 +39,8 @@ let refreshing: Promise<boolean> | null = null;
 
 /** One refresh at a time, shared by every request that hit a 401 together. */
 export function refreshSession(): Promise<boolean> {
-  refreshing ??= fetch(`${BACKEND_URL}/auth/refresh`, { method: 'POST', credentials: 'include' })
+  const baseUrl = getResolvedBackendUrl();
+  refreshing ??= fetch(`${baseUrl}/auth/refresh`, { method: 'POST', credentials: 'include' })
     .then((r) => r.ok)
     .catch(() => false)
     .finally(() => {
@@ -49,8 +50,9 @@ export function refreshSession(): Promise<boolean> {
 }
 
 async function send(path: string, init: RequestInit): Promise<Response> {
+  const baseUrl = getResolvedBackendUrl();
   try {
-    return await fetch(`${BACKEND_URL}${path}`, {
+    return await fetch(`${baseUrl}${path}`, {
       ...init,
       credentials: 'include',
       headers: {

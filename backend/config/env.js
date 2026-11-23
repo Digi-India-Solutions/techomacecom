@@ -54,9 +54,18 @@ const apiUrl = urlFor("API_URL", `http://localhost:${port}`); // public origin o
 function corsOrigins() {
   const list = [frontendUrl, adminUrl];
   for (const url of [frontendUrl, adminUrl]) {
-    const u = new URL(url);
-    if (u.hostname === "localhost") list.push(url.replace("localhost", "127.0.0.1"));
-    else if (!u.hostname.startsWith("www.") && u.hostname.split(".").length === 2) list.push(url.replace("://", "://www."));
+    try {
+      const u = new URL(url);
+      if (u.hostname === "localhost") {
+        list.push(url.replace("localhost", "127.0.0.1"));
+      } else {
+        if (!u.hostname.startsWith("www.") && u.hostname.split(".").length === 2) {
+          list.push(url.replace("://", "://www."));
+        }
+        if (url.startsWith("http://")) list.push(url.replace("http://", "https://"));
+        if (url.startsWith("https://")) list.push(url.replace("https://", "http://"));
+      }
+    } catch {}
   }
   const extra = optional(isProduction ? "PRODUCTION_URL" : "LOCAL_URL"); // optional extra origins, comma-separated
   list.push(...extra.split(",").map((o) => trimSlash(o.trim())).filter(Boolean));
