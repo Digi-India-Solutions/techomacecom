@@ -629,6 +629,67 @@ export async function updateProduct(idOrSlug, payload, adminUser) {
       }
     }
 
+    // Update images if provided
+    if (payload.images !== undefined && Array.isArray(payload.images)) {
+      await tx.productImage.deleteMany({
+        where: { product_id: pId },
+      });
+      for (let idx = 0; idx < payload.images.length; idx++) {
+        const img = payload.images[idx];
+        if (!img.url) continue;
+        await tx.productImage.create({
+          data: {
+            product_id: pId,
+            url: img.url,
+            alt_text: img.altText || payload.name || existing.name,
+            type: img.type || (idx === 0 ? "main" : "angle"),
+            sort_order: img.sortOrder ?? idx,
+          },
+        });
+      }
+    }
+
+    // Update specifications if provided
+    if (payload.specifications !== undefined && Array.isArray(payload.specifications)) {
+      await tx.productSpec.deleteMany({
+        where: { product_id: pId },
+      });
+      for (let idx = 0; idx < payload.specifications.length; idx++) {
+        const s = payload.specifications[idx];
+        if (!s.key || !s.value) continue;
+        await tx.productSpec.create({
+          data: {
+            product_id: pId,
+            spec_key: s.key.trim(),
+            spec_value: s.value.trim(),
+            sort_order: s.sortOrder ?? idx,
+          },
+        });
+      }
+    }
+
+    // Update rental plans if provided
+    if (payload.rental?.plans !== undefined && Array.isArray(payload.rental.plans)) {
+      await tx.rentalPlan.deleteMany({
+        where: { product_id: pId },
+      });
+      if (payload.rental.enabled && payload.rental.plans.length > 0) {
+        for (const plan of payload.rental.plans) {
+          await tx.rentalPlan.create({
+            data: {
+              product_id: pId,
+              plan_type: plan.type || "monthly",
+              price_per_month_paise: BigInt(Math.round((plan.price || 0) * 100)),
+              min_duration_months: plan.minDuration || 1,
+              max_duration_months: plan.maxDuration || 12,
+              security_deposit_paise: BigInt(Math.round((plan.securityDeposit || 0) * 100)),
+              delivery_pickup_charge_paise: BigInt(Math.round((plan.installationFee || 0) * 100)),
+            },
+          });
+        }
+      }
+    }
+
     // Refresh and return
     const full = await tx.product.findUnique({
       where: { id: pId },

@@ -307,6 +307,8 @@ export async function suggestions(q) {
       price: p.price,
       thumbnail: p.thumbnail,
       brandName: p.brandName,
+      rentEnabled: Boolean(p.rentEnabled),
+      rentPricePerMonth: p.rentPricePerMonth || null,
     })),
     categories: index.rows
       .filter((r) => index.visible.has(String(r.id)) && r.name.toLowerCase().includes(needle))

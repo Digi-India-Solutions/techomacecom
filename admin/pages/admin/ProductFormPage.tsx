@@ -1678,7 +1678,7 @@ export function ProductFormPage() {
                 />
               </FormField>
 
-              <FormField label="Doctor Prescription Required">
+              {/* <FormField label="Doctor Prescription Required">
                 <select
                   value={form.rental.prescriptionRequired ? 'yes' : 'no'}
                   onChange={(e) =>
@@ -1692,7 +1692,7 @@ export function ProductFormPage() {
                   <option value="yes">Yes (Clinical Rx upload required)</option>
                   <option value="no">No</option>
                 </select>
-              </FormField>
+              </FormField> */}
             </div>
           </div>
         )}

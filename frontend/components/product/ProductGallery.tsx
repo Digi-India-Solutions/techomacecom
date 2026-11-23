@@ -52,23 +52,48 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
 }) => {
   // Normalize incoming images to { url, alt, type } objects
   const normalizedImages: ProductImage[] = React.useMemo(() => {
-    if (!images || images.length === 0) {
+    const validImages = (images || []).filter((img) => {
+      if (!img) return false;
+      if (typeof img === 'string') return img.trim().length > 0;
+      return Boolean(img.url && img.url.trim().length > 0);
+    });
+
+    if (validImages.length === 0) {
+      const lower = productName.toLowerCase();
+      let fallback = '/images/prod_bp_main.jpg';
+      if (lower.includes('oxygen') || lower.includes('concentrator')) {
+        fallback = '/images/prod_oxygen_main.jpg';
+      } else if (lower.includes('autoclave') || lower.includes('steriliz')) {
+        fallback = '/images/prod_autoclave_main.jpg';
+      } else if (lower.includes('chair') || lower.includes('dental')) {
+        fallback = '/images/prod_dental_chair_1793803541905.jpg';
+      } else if (lower.includes('wheelchair')) {
+        fallback = '/images/prod_wheelchair_main.jpg';
+      } else if (lower.includes('cpap') || lower.includes('bipap')) {
+        fallback = '/images/prod_cpap_main.jpg';
+      } else if (lower.includes('nebuliz')) {
+        fallback = '/images/prod_nebulizer_main.jpg';
+      }
       return [{
-        url: '/images/hero_medical_sale_1793803411713.jpg',
+        url: fallback,
         alt: productName,
         type: 'main'
       }];
     }
-    return images.map((img, idx) => {
+
+    return validImages.map((img, idx) => {
       if (typeof img === 'string') {
         const types: ProductImage['type'][] = ['main', 'angle', 'detail', 'in-use', 'box-contents', 'infographic'];
         return {
-          url: img,
+          url: img.trim(),
           alt: `${productName} view ${idx + 1}`,
           type: types[idx] || 'detail'
         };
       }
-      return img;
+      return {
+        ...img,
+        url: img.url.trim(),
+      };
     });
   }, [images, productName]);
 

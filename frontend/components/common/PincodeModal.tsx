@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { usePincodeStore, useToastStore } from '@/lib/store';
 import { checkPincodeServiceability } from '@/lib/api';
+import { getPopularHubs } from '@/lib/settings/pincode-api';
 import { MapPin, X, CheckCircle, Truck, AlertCircle, ArrowRight } from 'lucide-react';
 import { useSiteSettings } from '@/lib/settings/store';
 
@@ -13,6 +14,7 @@ export const PincodeModal: React.FC = () => {
   const settings = useSiteSettings();
   const [inputPin, setInputPin] = useState(pincode || '');
   const [loading, setLoading] = useState(false);
+  const [hubs, setHubs] = useState<{ name: string; pin: string }[]>([]);
   const [result, setResult] = useState<{
     serviceable: boolean;
     city: string;
@@ -22,11 +24,37 @@ export const PincodeModal: React.FC = () => {
   } | null>(null);
   const [error, setError] = useState('');
 
+  // Keep input in sync with stored pincode when opened or rehydrated from localStorage
+  useEffect(() => {
+    if (isPincodeModalOpen) {
+      const current = pincode || '';
+      setInputPin(current);
+      setError('');
+      if (current && /^\d{6}$/.test(current)) {
+        checkPincodeServiceability(current)
+          .then((res) => setResult(res))
+          .catch(() => setResult(null));
+      } else {
+        setResult(null);
+      }
+    }
+  }, [pincode, isPincodeModalOpen]);
+
+  useEffect(() => {
+    let alive = true;
+    getPopularHubs().then((data) => {
+      if (alive && data.length > 0) setHubs(data);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   if (!isPincodeModalOpen) return null;
 
-  const handleCheck = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!/^\d{6}$/.test(inputPin.trim())) {
+  const handleCheck = async (pinToCheck?: string) => {
+    const pin = (typeof pinToCheck === 'string' ? pinToCheck : inputPin).trim();
+    if (!/^\d{6}$/.test(pin)) {
       setError('Please enter a valid 6-digit Indian PIN code');
       setResult(null);
       return;
@@ -35,14 +63,14 @@ export const PincodeModal: React.FC = () => {
     setError('');
     setLoading(true);
     try {
-      const res = await checkPincodeServiceability(inputPin.trim());
+      const res = await checkPincodeServiceability(pin);
       setResult(res);
       if (res.serviceable) {
-        setPincode(inputPin.trim(), res.city, res.state, res.deliveryDays);
+        setPincode(pin, res.city, res.state, res.deliveryDays);
         addToast({
           type: 'success',
           title: 'Location Updated',
-          message: `Delivery set to ${res.city}, ${res.state} (${inputPin.trim()})`
+          message: `Delivery set to ${res.city}, ${res.state} (${pin})`
         });
       }
     } catch {
@@ -54,9 +82,7 @@ export const PincodeModal: React.FC = () => {
 
   const handleQuickSelect = (pin: string) => {
     setInputPin(pin);
-    setTimeout(() => {
-      handleCheck();
-    }, 50);
+    handleCheck(pin);
   };
 
   return (
@@ -79,7 +105,13 @@ export const PincodeModal: React.FC = () => {
           </div>
         </div>
 
-        <form onSubmit={handleCheck} className="space-y-3">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleCheck();
+          }}
+          className="space-y-3"
+        >
           <div className="relative flex items-center">
             <input
               id="delivery-pincode-input"
@@ -108,9 +140,23 @@ export const PincodeModal: React.FC = () => {
           </div>
 
           {error && (
-            <div className="flex items-center gap-1.5 text-xs text-[#DC2626] font-medium">
-              <AlertCircle className="w-4 h-4" />
-              {error}
+            <div className="flex items-center gap-1.5 text-xs text-[#DC2626] font-medium p-2.5 rounded-lg bg-red-50 border border-red-200">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {result && !result.serviceable && !error && (
+            <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 space-y-1">
+              <p className="font-semibold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                PIN code {inputPin} is currently not serviceable
+              </p>
+              <p className="text-[11px] text-amber-700">
+                {settings.shipping.restrictedToListedPincodes
+                  ? "We only ship to our verified courier pincodes right now."
+                  : "We're expanding our medical logistics to this area soon."}
+              </p>
             </div>
           )}
 
@@ -140,19 +186,12 @@ export const PincodeModal: React.FC = () => {
         <div className="mt-5 pt-4 border-t border-[#DCE6F2]">
           <div className="text-xs font-semibold text-[#5B6B82] mb-2">Popular Healthcare Hubs:</div>
           <div className="flex flex-wrap gap-1.5">
-            {[
-              { name: 'Delhi', pin: '110001' },
-              { name: 'Mumbai', pin: '400001' },
-              { name: 'Bengaluru', pin: '560001' },
-              { name: 'Hyderabad', pin: '500001' },
-              { name: 'Chennai', pin: '600001' },
-              { name: 'Kolkata', pin: '700001' },
-              { name: 'Noida', pin: '201301' }
-            ].map((city) => (
+            {hubs.map((city) => (
               <button
                 key={city.pin}
+                type="button"
                 onClick={() => handleQuickSelect(city.pin)}
-                className="text-xs bg-[#F6F9FD] hover:bg-[#EAF2FC] hover:text-[#174E90] hover:border-[#1D5FAF]/30 border border-[#DCE6F2] px-2.5 py-1 rounded-md transition-colors font-medium text-[#12263F]"
+                className="text-xs bg-[#F6F9FD] hover:bg-[#EAF2FC] hover:text-[#174E90] hover:border-[#1D5FAF]/30 border border-[#DCE6F2] px-2.5 py-1 rounded-md transition-colors font-medium text-[#12263F] cursor-pointer"
               >
                 {city.name} ({city.pin})
               </button>

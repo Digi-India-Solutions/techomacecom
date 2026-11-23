@@ -61,3 +61,27 @@ export function checkRentalPincode(pincode: string): Promise<PincodeCheck> {
   }
   return rentalCache.get(pin)!;
 }
+
+/**
+ * Fetch popular serviceable hubs dynamically from admin-configured PIN codes.
+ */
+export async function getPopularHubs(): Promise<{ name: string; pin: string }[]> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/pincodes/popular-hubs`);
+    const body = await res.json();
+    if (body.success && Array.isArray(body.data) && body.data.length > 0) {
+      return body.data;
+    }
+  } catch {
+    // fallback gracefully
+  }
+  return [
+    { name: 'Delhi', pin: '110001' },
+    { name: 'Mumbai', pin: '400001' },
+    { name: 'Bengaluru', pin: '560001' },
+    { name: 'Hyderabad', pin: '500001' },
+    { name: 'Chennai', pin: '600001' },
+    { name: 'Kolkata', pin: '700001' },
+    { name: 'Noida', pin: '201301' },
+  ];
+}

@@ -219,10 +219,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
             <MapPin className="w-5 h-5 mt-0.5 text-[#F28C38] shrink-0" />
             <span className="leading-tight" suppressHydrationWarning>
               <span className="block text-sm font-semibold text-white truncate max-w-[170px]" suppressHydrationWarning>
-                {hydrated && pincode ? `Deliver to ${pincode}` : 'Deliver to 110001'}
+                {hydrated && pincode ? `Deliver to ${pincode}` : 'Select Location'}
               </span>
               <span className="flex items-center gap-0.5 text-[11px] font-semibold text-[#93C5FD] group-hover:text-white transition-colors" suppressHydrationWarning>
-                {hydrated && pincode ? (city || 'Change location') : 'New Delhi'}
+                {hydrated && pincode ? (city || 'Change location') : 'Set Pincode'}
                 <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
               </span>
             </span>
@@ -272,31 +272,66 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                         </div>
                         <div className="space-y-1">
                           {suggestions.products.map((p) => (
-                            <Link
+                            <div
                               key={p.id}
-                              href={`/product/${p.slug}`}
-                              onClick={() => setIsSearchFocused(false)}
                               className="flex items-center gap-3.5 p-2 rounded-xl hover:bg-[#EAF2FC] transition-colors group"
                             >
-                              <div className="w-12 h-12 rounded-lg bg-[#F6F9FD] border border-[#DCE6F2] relative shrink-0 overflow-hidden flex items-center justify-center">
-                                <Image
-                                  src={p.thumbnail}
-                                  alt={p.name}
-                                  fill
-                                  className="object-contain p-1"
-                                  referrerPolicy="no-referrer"
-                                />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-xs text-[#5B6B82] font-semibold">{p.brandName}</div>
-                                <div className="text-sm font-semibold text-[#12263F] group-hover:text-[#1D5FAF] truncate font-heading">
-                                  {p.name}
+                              <Link
+                                href={`/product/${p.slug}`}
+                                onClick={() => setIsSearchFocused(false)}
+                                className="flex items-center gap-3.5 flex-1 min-w-0"
+                              >
+                                <div className="w-12 h-12 rounded-lg bg-[#F6F9FD] border border-[#DCE6F2] relative shrink-0 overflow-hidden flex items-center justify-center">
+                                  <Image
+                                    src={p.thumbnail}
+                                    alt={p.name}
+                                    fill
+                                    className="object-contain p-1"
+                                    referrerPolicy="no-referrer"
+                                  />
                                 </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs text-[#5B6B82] font-semibold">{p.brandName}</div>
+                                  <div className="text-sm font-semibold text-[#12263F] group-hover:text-[#1D5FAF] truncate font-heading">
+                                    {p.name}
+                                  </div>
+                                </div>
+                              </Link>
+
+                              <div className="flex items-center gap-2.5 shrink-0">
+                                <Link
+                                  href={`/product/${p.slug}`}
+                                  onClick={() => setIsSearchFocused(false)}
+                                  className="text-right group/buy"
+                                >
+                                  <div className="text-sm font-bold text-[#1D5FAF] font-body">
+                                    ₹{p.price.toLocaleString('en-IN')}
+                                  </div>
+                                  <span className="text-[10px] text-[#5B6B82] block leading-tight font-medium group-hover/buy:text-[#1D5FAF]">
+                                    Buy Now &rarr;
+                                  </span>
+                                </Link>
+
+                                {p.rentEnabled && (
+                                  <Link
+                                    href={`/rent/${p.slug}`}
+                                    onClick={() => setIsSearchFocused(false)}
+                                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#EFF6FF] hover:bg-[#1D5FAF] text-[#1D5FAF] hover:text-white border border-[#BFDBFE] hover:border-[#1D5FAF] rounded-lg transition-all text-xs font-semibold shadow-2xs group/rent"
+                                    title={`Rent ${p.name}`}
+                                  >
+                                    <Bed className="w-3.5 h-3.5 shrink-0 text-[#1D5FAF] group-hover/rent:text-white" />
+                                    <div className="text-left leading-tight">
+                                      <span className="block text-[11px] font-bold">Rent</span>
+                                      {p.rentPricePerMonth ? (
+                                        <span className="block text-[9px] opacity-85 font-normal">
+                                          ₹{p.rentPricePerMonth.toLocaleString('en-IN')}/mo
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </Link>
+                                )}
                               </div>
-                              <div className="text-sm font-bold text-[#1D5FAF] shrink-0 font-body">
-                                ₹{p.price.toLocaleString('en-IN')}
-                              </div>
-                            </Link>
+                            </div>
                           ))}
                         </div>
                       </div>

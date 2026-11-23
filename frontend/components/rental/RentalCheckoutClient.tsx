@@ -67,6 +67,17 @@ export default function RentalCheckoutClient() {
   const [payError, setPayError] = useState('');
   const [pendingRental, setPendingRental] = useState<CustomerRental | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+  const [modalPreview, setModalPreview] = useState<{ url: string; title: string; isPdf: boolean } | null>(null);
+
+  // Clean up object URLs on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(previewUrls).forEach((url) => {
+        if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+      });
+    };
+  }, [previewUrls]);
 
   // Fresh quote for the saved selection (prices / advance % may have changed since the rent page)
   useEffect(() => {
@@ -131,6 +142,10 @@ export default function RentalCheckoutClient() {
     setUploading(docType);
     try {
       const old = docs[docType];
+      if (file.type.startsWith('image/')) {
+        const localBlob = URL.createObjectURL(file);
+        setPreviewUrls((prev) => ({ ...prev, [docType]: localBlob }));
+      }
       const saved = await uploadKycDocument(docType, file);
       setDocs((d) => ({ ...d, [docType]: saved }));
       if (old) deleteKycDocument(old.id).catch(() => undefined);
@@ -141,13 +156,26 @@ export default function RentalCheckoutClient() {
     }
   };
 
-  const viewDoc = async (doc: RentalKycDoc) => {
-    const win = window.open('', '_blank');
+  const getDocPreviewUrl = async (doc: RentalKycDoc) => {
+    if (previewUrls[doc.docType]) return previewUrls[doc.docType];
     try {
       const url = await openKycDocument(doc.id);
-      if (win) win.location.href = url;
+      setPreviewUrls((prev) => ({ ...prev, [doc.docType]: url }));
+      return url;
     } catch (err) {
-      win?.close();
+      addToast({ type: 'error', title: 'Could not load preview', message: errorMessage(err) });
+      return null;
+    }
+  };
+
+  const viewDoc = async (doc: RentalKycDoc) => {
+    try {
+      const url = await getDocPreviewUrl(doc);
+      if (url) {
+        const isPdf = doc.mimeType?.includes('pdf') || doc.fileName?.toLowerCase().endsWith('.pdf');
+        setModalPreview({ url, title: doc.label || doc.fileName, isPdf });
+      }
+    } catch (err) {
       addToast({ type: 'error', title: 'Could not open the file', message: errorMessage(err) });
     }
   };
@@ -336,33 +364,75 @@ export default function RentalCheckoutClient() {
                 {quote.kyc.documents.map((d) => {
                   const doc = docs[d.key];
                   const busy = uploading === d.key;
+                  const previewUrl = previewUrls[d.key];
+                  const isPdf = doc && (doc.mimeType?.includes('pdf') || doc.fileName?.toLowerCase().endsWith('.pdf'));
+
                   return (
-                    <li key={d.key} className={`rounded-xl border p-4 ${doc ? 'border-[#16A34A]/40 bg-[#F0FDF4]/60' : 'border-[#DCE6F2]'}`}>
+                    <li key={d.key} className={`rounded-xl border p-4 transition-all ${doc ? 'border-[#16A34A]/40 bg-[#F0FDF4]/60' : 'border-[#DCE6F2]'}`}>
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-start gap-3 min-w-0">
-                          <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${doc ? 'bg-[#16A34A] text-white' : 'bg-[#EAF2FC] text-[#1D5FAF]'}`}>
-                            {doc ? <Check className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
-                          </span>
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          {/* Image Thumbnail / Icon Preview */}
+                          {doc && previewUrl && !isPdf ? (
+                            <button
+                              type="button"
+                              onClick={() => viewDoc(doc)}
+                              className="relative w-14 h-14 rounded-lg border border-[#16A34A]/50 overflow-hidden shrink-0 group cursor-pointer bg-white"
+                              title="Click to view full preview"
+                            >
+                              <img src={previewUrl} alt={d.label} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              <span className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                                <Eye className="w-4 h-4" />
+                              </span>
+                            </button>
+                          ) : (
+                            <span className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${doc ? 'bg-[#16A34A] text-white' : 'bg-[#EAF2FC] text-[#1D5FAF]'}`}>
+                              {doc ? <Check className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                            </span>
+                          )}
+
                           <div className="min-w-0">
                             <p className="text-[14px] font-semibold text-[#12263F]">{d.label}</p>
                             {doc ? (
-                              <button type="button" onClick={() => viewDoc(doc)} className="text-[12px] text-[#1D5FAF] hover:underline inline-flex items-center gap-1 cursor-pointer max-w-full">
-                                <Eye className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{doc.fileName}</span>
-                              </button>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => viewDoc(doc)}
+                                  className="text-[12px] font-medium text-[#1D5FAF] hover:underline inline-flex items-center gap-1 cursor-pointer max-w-full"
+                                >
+                                  <Eye className="w-3.5 h-3.5 shrink-0" />
+                                  <span className="truncate">{doc.fileName}</span>
+                                </button>
+                                <span className="text-[11px] text-[#16A34A] font-semibold bg-[#DCFCE7] px-2 py-0.5 rounded-full">
+                                  Uploaded
+                                </span>
+                              </div>
                             ) : (
                               <p className="text-[12px] text-[#8A97A8]">{d.hint}</p>
                             )}
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => fileInputs.current[d.key]?.click()}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#D5DEEA] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#12263F] hover:border-[#1D5FAF] hover:text-[#1D5FAF] disabled:opacity-50 cursor-pointer"
-                        >
-                          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                          {busy ? 'Uploading…' : doc ? 'Replace' : 'Upload'}
-                        </button>
+
+                        <div className="flex items-center gap-2">
+                          {doc && !previewUrl && !isPdf && (
+                            <button
+                              type="button"
+                              onClick={() => getDocPreviewUrl(doc)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[#DCE6F2] bg-white px-2.5 py-1.5 text-xs text-[#5B6B82] hover:text-[#1D5FAF] cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Show preview
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => fileInputs.current[d.key]?.click()}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#D5DEEA] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#12263F] hover:border-[#1D5FAF] hover:text-[#1D5FAF] disabled:opacity-50 cursor-pointer shadow-2xs"
+                          >
+                            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                            {busy ? 'Uploading…' : doc ? 'Replace' : 'Upload'}
+                          </button>
+                        </div>
+
                         <input
                           ref={(el) => {
                             fileInputs.current[d.key] = el;
@@ -537,6 +607,52 @@ export default function RentalCheckoutClient() {
           </Link>
         </aside>
       </div>
+
+      {/* Modal Preview for Documents */}
+      {modalPreview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setModalPreview(null)}
+        >
+          <div
+            className="relative max-w-2xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl border border-[#DCE6F2]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#DCE6F2] bg-[#F6F9FD]">
+              <h3 className="text-sm font-semibold text-[#12263F]">{modalPreview.title}</h3>
+              <button
+                type="button"
+                onClick={() => setModalPreview(null)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#5B6B82] hover:text-[#12263F] hover:bg-[#EAF2FC] transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 max-h-[75vh] flex items-center justify-center overflow-auto bg-[#0F172A]/5">
+              {modalPreview.isPdf ? (
+                <iframe src={modalPreview.url} title={modalPreview.title} className="w-full h-[65vh] rounded-lg border border-[#DCE6F2]" />
+              ) : (
+                <img
+                  src={modalPreview.url}
+                  alt={modalPreview.title}
+                  className="max-h-[65vh] w-auto max-w-full rounded-lg object-contain shadow-sm"
+                />
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-[#DCE6F2] bg-white flex justify-end">
+              <button
+                type="button"
+                onClick={() => setModalPreview(null)}
+                className="px-4 py-2 rounded-xl bg-[#1D5FAF] hover:bg-[#174E90] text-white text-xs font-semibold cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

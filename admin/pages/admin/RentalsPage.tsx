@@ -139,7 +139,7 @@ export function RentalsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      {/* <div className="flex w-full flex-nowrap items-center justify-between gap-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#12263F]">Rentals</h1>
           <p className="mt-0.5 text-sm text-[#5B6B82]">
@@ -169,7 +169,47 @@ export function RentalsPage() {
             </Link>
           )}
         </div>
-      </div>
+      </div> */}
+
+      <div className="flex w-full items-center justify-between gap-4">
+  <div className="flex-1 min-w-0">
+    <h1 className="text-2xl font-bold tracking-tight text-[#12263F]">
+      Rentals
+    </h1>
+    <p className="mt-0.5 whitespace-nowrap text-sm text-[#5B6B82]">
+      Verify KYC, confirm bookings, assign serial-numbered units, track deliveries, extensions and returns, and refund deposits.
+    </p>
+  </div>
+
+  <div className="ml-auto flex shrink-0 items-center gap-2">
+    {summary && summary.depositsHeld > 0 && (
+      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-[#DCE6F2] bg-white px-3 py-2 text-xs text-[#5B6B82]">
+        <IndianRupee className="h-3.5 w-3.5" /> Deposits held
+        <strong className="text-[#12263F]">
+          {formatINR(summary.depositsHeld)}
+        </strong>
+      </span>
+    )}
+
+    <button
+      type="button"
+      onClick={load}
+      disabled={loading}
+      className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#DCE6F2] bg-white px-3 py-2 text-xs font-semibold text-[#12263F] hover:bg-[#EAF2FC] disabled:opacity-50"
+    >
+      <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+    </button>
+
+    {can('rentals.create') && (
+      <Link
+        to="/admin/rentals/new"
+        className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#1D5FAF] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
+      >
+        <Plus className="h-3.5 w-3.5" /> New rental
+      </Link>
+    )}
+  </div>
+</div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {kpis.map((k) => {

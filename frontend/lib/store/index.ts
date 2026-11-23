@@ -10,7 +10,7 @@ interface CartState {
   items: CartItem[];
   coupon: Coupon | null;
   isCartOpen: boolean;
-  addItem: (product: Product, quantity?: number, variant?: Variant, isRental?: boolean, rentalTenureMonths?: number) => void;
+  addItem: (product: Product, quantity?: number, variant?: Variant, isRental?: boolean, rentalTenureMonths?: number, openCart?: boolean) => void;
   updateQuantity: (productId: string, quantity: number, variantId?: string) => void;
   removeItem: (productId: string, variantId?: string) => void;
   clearCart: () => void;
@@ -36,7 +36,7 @@ export const useCartStore = create<CartState>()(
       coupon: null,
       isCartOpen: false,
 
-      addItem: (product, quantity = 1, variant, isRental = false, rentalTenureMonths = 1) => {
+      addItem: (product, quantity = 1, variant, isRental = false, rentalTenureMonths = 1, openCart = true) => {
         set((state) => {
           const existingIndex = state.items.findIndex(
             (item) =>
@@ -56,7 +56,7 @@ export const useCartStore = create<CartState>()(
           if (existingIndex > -1) {
             const newItems = [...state.items];
             newItems[existingIndex].quantity += quantity;
-            return { items: newItems, isCartOpen: true };
+            return { items: newItems, isCartOpen: openCart };
           } else {
             const newItem: CartItem = {
               productId: product.id,
@@ -69,7 +69,7 @@ export const useCartStore = create<CartState>()(
               isRental,
               rentalTenureMonths: isRental ? rentalTenureMonths : undefined
             };
-            return { items: [...state.items, newItem], isCartOpen: true };
+            return { items: [...state.items, newItem], isCartOpen: openCart };
           }
         });
       },
@@ -252,10 +252,10 @@ interface PincodeState {
 export const usePincodeStore = create<PincodeState>()(
   persist(
     (set) => ({
-      pincode: '110001',
-      city: 'New Delhi',
-      stateName: 'Delhi',
-      deliveryDays: 'Same Day / Next Day Delivery',
+      pincode: '',
+      city: '',
+      stateName: '',
+      deliveryDays: '',
       isPincodeModalOpen: false,
       setPincodeModalOpen: (open) => set({ isPincodeModalOpen: open }),
       setPincode: (pincode, city, stateName, deliveryDays) =>

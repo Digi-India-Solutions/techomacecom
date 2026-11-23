@@ -198,7 +198,16 @@ export async function getRentableProducts(): Promise<Product[]> {
 }
 
 export interface SearchSuggestions {
-  products: { id: string; name: string; slug: string; price: number; thumbnail: string; brandName: string }[];
+  products: {
+    id: string;
+    name: string;
+    slug: string;
+    price: number;
+    thumbnail: string;
+    brandName: string;
+    rentEnabled?: boolean;
+    rentPricePerMonth?: number | null;
+  }[];
   categories: { id: string; name: string; slug: string; path?: string }[];
   brands: { id: string; name: string; slug: string }[];
 }

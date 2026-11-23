@@ -479,7 +479,7 @@ export function BrandsPage() {
               </button>
             ) : null}
           </FormField>
-
+{/* 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FormField label="Desktop Banner">
               <input
@@ -499,7 +499,7 @@ export function BrandsPage() {
               />
               {renderImagePreview('mobileBannerUrl', 'Mobile banner')}
             </FormField>
-          </div>
+          </div> */}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
             <FormField label="Country of Origin">

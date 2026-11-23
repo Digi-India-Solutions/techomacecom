@@ -64,6 +64,7 @@ adminSettingsRoutes.put("/:group", edit, groupParam, c.saveGroup);
 
 export const publicSettingsRoutes = Router();
 publicSettingsRoutes.get("/settings/public", c.publicSettings);
+publicSettingsRoutes.get("/pincodes/popular-hubs", c.getPopularHubs);
 publicSettingsRoutes.get("/pincodes/rental/:pincode", c.checkRentalPincode);
 publicSettingsRoutes.get("/rentals/pincodes/:pincode", c.checkRentalPincode);
 publicSettingsRoutes.get("/pincodes/:pincode", c.checkPincode);
