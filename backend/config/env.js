@@ -50,26 +50,43 @@ const frontendUrl = urlFor("FRONTEND_URL", "http://localhost:3000");
 const adminUrl = urlFor("ADMIN_URL", "http://localhost:3001");
 const apiUrl = urlFor("API_URL", `http://localhost:${port}`); // public origin of this API (no /api/v1)
 
-/** Browser origins allowed by CORS: the storefront + admin above, their www / 127.0.0.1 twins, plus extras. */
+/** Browser origins allowed by CORS: storefront + admin (local & production), www / 127.0.0.1 twins, plus extras. */
 function corsOrigins() {
-  const list = [frontendUrl, adminUrl];
-  for (const url of [frontendUrl, adminUrl]) {
+  const origins = new Set();
+  const candidates = [
+    frontendUrl,
+    adminUrl,
+    process.env.FRONTEND_URL_LOCAL,
+    process.env.FRONTEND_URL_PRODUCTION,
+    process.env.ADMIN_URL_LOCAL,
+    process.env.ADMIN_URL_PRODUCTION,
+  ].filter(Boolean);
+
+  for (const raw of candidates) {
+    const url = trimSlash(raw);
+    if (!url) continue;
+    origins.add(url);
     try {
       const u = new URL(url);
       if (u.hostname === "localhost") {
-        list.push(url.replace("localhost", "127.0.0.1"));
+        origins.add(url.replace("localhost", "127.0.0.1"));
       } else {
         if (!u.hostname.startsWith("www.") && u.hostname.split(".").length === 2) {
-          list.push(url.replace("://", "://www."));
+          origins.add(url.replace("://", "://www."));
         }
-        if (url.startsWith("http://")) list.push(url.replace("http://", "https://"));
-        if (url.startsWith("https://")) list.push(url.replace("https://", "http://"));
+        if (url.startsWith("http://")) origins.add(url.replace("http://", "https://"));
+        if (url.startsWith("https://")) origins.add(url.replace("https://", "http://"));
       }
     } catch {}
   }
-  const extra = optional(isProduction ? "PRODUCTION_URL" : "LOCAL_URL"); // optional extra origins, comma-separated
-  list.push(...extra.split(",").map((o) => trimSlash(o.trim())).filter(Boolean));
-  return [...new Set(list)];
+
+  const extra = `${optional("PRODUCTION_URL")},${optional("LOCAL_URL")},${optional("CORS_ORIGINS")}`;
+  for (const o of extra.split(",")) {
+    const clean = trimSlash(o.trim());
+    if (clean) origins.add(clean);
+  }
+
+  return [...origins];
 }
 
 const jwtSecret = required("JWT_SECRET_KEY");
@@ -100,8 +117,9 @@ export const env = {
   },
 
   cookie: {
-    domain: optional("COOKIE_DOMAIN") || undefined, // e.g. .buydenmed.com in production
+    domain: isProduction ? (optional("COOKIE_DOMAIN") || ".buydenmed.com") : undefined, // only in production (e.g. .buydenmed.com)
     secure: bool("COOKIE_SECURE", isProduction),
+    sameSite: optional("COOKIE_SAMESITE", isProduction ? "none" : "lax"),
   },
 
   otp: {

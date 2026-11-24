@@ -70,7 +70,7 @@ function baseCookie(path) {
   return {
     httpOnly: true,
     secure: env.cookie.secure,
-    sameSite: "lax",
+    sameSite: env.cookie.sameSite || "lax",
     domain: env.cookie.domain,
     path,
   };

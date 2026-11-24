@@ -11,7 +11,7 @@ interface ShopByBrandSliderProps {
   title?: string;
 }
 
-export const ShopByBrandSlider: React.FC<ShopByBrandSliderProps> = ({ brands, title = 'Shop by Brands' }) => {
+export const ShopByBrandSlider: React.FC<ShopByBrandSliderProps> = ({ brands, title = 'Authorized Global Brands' }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scrollLeft = () => {
@@ -27,27 +27,27 @@ export const ShopByBrandSlider: React.FC<ShopByBrandSliderProps> = ({ brands, ti
   };
 
   return (
-    <section className="my-10 sm:my-14">
-      <div className="max-w-[1320px] mx-auto px-4 sm:px-6">
+    <section className="my-6 sm:my-14">
+      <div className="max-w-[1320px] mx-auto px-3 sm:px-6">
         {/* Header */}
-        <div className="flex items-end justify-between mb-5 sm:mb-6">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-[#12263F] font-heading relative inline-block">
-              {title || 'Shop by Brands'}
-              <span className="absolute bottom-[-4px] left-0 w-10 h-[3px] bg-[#1D5FAF] rounded-full" />
+        <div className="flex items-start sm:items-end justify-between gap-3 mb-3.5 sm:mb-6">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg sm:text-2xl font-bold text-[#12263F] font-heading relative inline-block">
+              {title || 'Authorized Global Brands'}
+              <span className="absolute bottom-[-3px] sm:bottom-[-4px] left-0 w-8 sm:w-10 h-[2.5px] sm:h-[3px] bg-[#1D5FAF] rounded-full" />
             </h2>
-            <p className="text-xs sm:text-sm text-[#5B6B82] font-body mt-2">
+            <p className="text-[11px] sm:text-sm text-[#5B6B82] font-body mt-1 sm:mt-2 line-clamp-1 sm:line-clamp-none">
               Explore equipment, handpieces and critical consumables by trusted clinical manufacturers
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 pt-0.5 sm:pt-0">
             <Link
               href="/brands"
-              className="text-xs sm:text-sm font-bold text-[#1D5FAF] hover:text-[#174E90] flex items-center gap-1 font-heading transition-colors"
+              className="text-xs sm:text-sm font-bold text-[#1D5FAF] hover:text-[#174E90] flex items-center gap-0.5 sm:gap-1 font-heading transition-colors whitespace-nowrap"
             >
               <span>All Brands</span>
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </Link>
 
             <div className="hidden sm:flex items-center gap-1.5 ml-1">
@@ -71,19 +71,19 @@ export const ShopByBrandSlider: React.FC<ShopByBrandSliderProps> = ({ brands, ti
           </div>
         </div>
 
-        {/* Brand tiles slider */}
+        {/* Brand tiles slider — on mobile 5.5 cards visible in front (5 full + 1 half peek), on desktop w-44 scrollable */}
         <div
           ref={scrollRef}
-          className="flex items-start gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 scroll-smooth no-scrollbar"
+          className="flex items-start gap-2 sm:gap-5 overflow-x-auto pb-3 sm:pb-4 pt-1 scroll-smooth snap-x no-scrollbar"
         >
           {brands.map((brand) => (
             <Link
               key={brand.id}
               href={`/brand/${brand.slug}`}
-              className="group shrink-0 w-36 sm:w-44 flex flex-col items-center text-center cursor-pointer"
+              className="group snap-start shrink-0 min-w-0 w-[calc((100%-40px)/5.5)] sm:w-44 flex flex-col items-center text-center cursor-pointer"
             >
               {/* Brand Logo Box */}
-              <div className="w-full h-24 sm:h-28 rounded-2xl bg-white border border-[#DCE6F2] group-hover:border-[#1D5FAF] p-3 flex items-center justify-center shadow-xs group-hover:shadow-md transition-all duration-300 group-hover:-translate-y-1 overflow-hidden">
+              <div className="w-full aspect-square sm:aspect-auto sm:h-28 rounded-xl sm:rounded-2xl bg-white border border-[#DCE6F2] group-hover:border-[#1D5FAF] p-1.5 sm:p-3 flex items-center justify-center shadow-2xs group-hover:shadow-md transition-all duration-300 group-hover:-translate-y-0.5 sm:group-hover:-translate-y-1 overflow-hidden">
                 {brand.logo || brand.logoUrl ? (
                   <div className="relative w-full h-full flex items-center justify-center">
                     <Image
@@ -91,20 +91,20 @@ export const ShopByBrandSlider: React.FC<ShopByBrandSliderProps> = ({ brands, ti
                       alt={brand.name}
                       fill
                       className="object-contain transition-transform duration-300 group-hover:scale-105"
-                      sizes="(max-width: 640px) 160px, 200px"
+                      sizes="(max-width: 640px) 70px, 200px"
                       referrerPolicy="no-referrer"
                     />
                   </div>
                 ) : (
-                  <div className="w-12 h-12 rounded-xl bg-[#EAF2FC] text-[#1D5FAF] flex items-center justify-center font-heading font-bold text-base transition-transform duration-300 group-hover:scale-110">
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#EAF2FC] text-[#1D5FAF] flex items-center justify-center font-heading font-bold text-xs sm:text-base transition-transform duration-300 group-hover:scale-110">
                     {brand.name.slice(0, 2).toUpperCase()}
                   </div>
                 )}
               </div>
 
               {/* Brand Name - Below the Box */}
-              <div className="w-full mt-2.5 text-center px-1">
-                <h3 className="font-heading font-bold text-xs sm:text-sm text-[#12263F] group-hover:text-[#1D5FAF] transition-colors line-clamp-1">
+              <div className="w-full mt-1.5 sm:mt-2.5 text-center px-0.5">
+                <h3 className="font-heading font-semibold sm:font-bold text-[10px] sm:text-sm text-[#12263F] group-hover:text-[#1D5FAF] transition-colors line-clamp-1 truncate">
                   {brand.name}
                 </h3>
               </div>

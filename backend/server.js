@@ -115,9 +115,11 @@ function describeError(error) {
 async function start() {
   try {
     await connectDB();
-    const server = app.listen(PORT, '127.0.0.1', () => {
-      console.log(`Server running on http://localhost:${PORT} (${env.nodeEnv})`);
-      console.log(`API base: http://localhost:${PORT}/api/v1`);
+    const HOST = process.env.HOST || (env.isProduction ? '0.0.0.0' : '127.0.0.1');
+    const server = app.listen(PORT, HOST, () => {
+      console.log(`Server running on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT} (${env.nodeEnv})`);
+      console.log(`API base: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/api/v1`);
+      console.log(`Environment mode: ${env.nodeEnv.toUpperCase()}`);
       console.log(`CORS allowed origins: ${allowedOrigins.join(", ") || "none"}`);
       if (!env.google.clientId) console.log("Google sign-in: off (set GOOGLE_CLIENT_ID to enable)");
       if (env.sms.provider === "console") console.log("OTP SMS: printed to this console (SMS_PROVIDER=console)");

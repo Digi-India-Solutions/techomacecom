@@ -69,15 +69,17 @@ export default async function HomePage() {
 
   const activePromo1Banners = promo1Banners && promo1Banners.length > 0
     ? promo1Banners.map((b, idx) => {
-        const image = b.imageDesktop || b.desktopImageUrl || b.imageUrl || '';
+        const desktopImage = b.imageDesktop || b.desktopImageUrl || b.imageUrl || '';
+        const mobileImage = b.imageMobile || b.mobileImageUrl || desktopImage;
         return {
           id: String(b.id || `promo1-${idx}`),
           href: b.linkUrl || b.link || '/',
           title: b.title || '',
           brand: b.title?.includes('-') ? b.title.split('-')[0].trim() : '',
           tagline: b.tagline || '',
-          creative: image,
-          image: image,
+          creative: desktopImage,
+          mobileCreative: mobileImage,
+          image: desktopImage,
         };
       })
     : [];
@@ -85,7 +87,8 @@ export default async function HomePage() {
   const activePromo2Banners = promo2Banners && promo2Banners.length > 0
     ? promo2Banners.map((b, idx) => {
         const def = PROMO_BANNERS[idx] || {};
-        const image = b.imageDesktop || b.desktopImageUrl || b.imageUrl || def.creative || def.image;
+        const desktopImage = b.imageDesktop || b.desktopImageUrl || b.imageUrl || def.creative || def.image;
+        const mobileImage = b.imageMobile || b.mobileImageUrl || desktopImage;
 
         return {
           ...def,
@@ -94,8 +97,9 @@ export default async function HomePage() {
           title: b.title ? (b.title.includes('-') ? b.title.split('-').slice(1).join('-').trim() : b.title) : (def.title || ''),
           brand: b.title?.includes('-') ? b.title.split('-')[0].trim() : (def.brand || ''),
           tagline: b.tagline || def.tagline || '',
-          creative: image,
-          image: image,
+          creative: desktopImage,
+          mobileCreative: mobileImage,
+          image: desktopImage,
         };
       })
     : (hotSellingBanners && hotSellingBanners.length >= 3
@@ -103,6 +107,7 @@ export default async function HomePage() {
           id: String(b.id),
           href: b.linkUrl || b.link || '/',
           creative: b.imageDesktop || b.desktopImageUrl,
+          mobileCreative: b.imageMobile || b.mobileImageUrl || b.imageDesktop || b.desktopImageUrl,
           title: b.title,
           tagline: b.tagline,
         }))

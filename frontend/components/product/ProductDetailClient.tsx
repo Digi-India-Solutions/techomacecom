@@ -10,7 +10,7 @@ import { checkPincodeServiceability } from '@/lib/api';
 import { useSiteSettings } from '@/lib/settings/store';
 import { Review } from '@/types';
 import EmiModal from '@/components/common/EmiModal';
-import ProductCard from '@/components/product/ProductCard';
+import ProductCard, { getProductDealTargetMs } from '@/components/product/ProductCard';
 import ProductGallery from '@/components/product/ProductGallery';
 import ProductReviewsSection from '@/components/product/ProductReviewsSection';
 import { getProductImages } from '@/lib/utils';
@@ -41,6 +41,38 @@ interface ProductDetailClientProps {
   relatedProducts: Product[];
   initialReviews?: Review[];
 }
+
+const DetailDealCountdown: React.FC<{ product: Product }> = ({ product }) => {
+  const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number; seconds: number } | null>(null);
+
+  useEffect(() => {
+    const targetMs = getProductDealTargetMs(product);
+
+    const tick = () => {
+      const now = Date.now();
+      const diff = Math.max(0, targetMs - now);
+      const totalSec = Math.floor(diff / 1000);
+      const hours = Math.floor(totalSec / 3600);
+      const minutes = Math.floor((totalSec % 3600) / 60);
+      const seconds = totalSec % 60;
+      setTimeLeft({ hours, minutes, seconds });
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [product.id, product.dealExpiresAt]);
+
+  if (!timeLeft) {
+    return <span>LIMITED TIME</span>;
+  }
+
+  return (
+    <span>
+      Ends in: {String(timeLeft.hours).padStart(2, '0')}h : {String(timeLeft.minutes).padStart(2, '0')}m : {String(timeLeft.seconds).padStart(2, '0')}s
+    </span>
+  );
+};
 
 export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
   product,
@@ -342,7 +374,7 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
               </div>
               <div className="inline-flex items-center gap-1.5 bg-black/25 backdrop-blur-xs px-3 py-1.5 rounded-lg text-xs font-mono font-bold">
                 <Clock className="w-3.5 h-3.5 text-white/90" />
-                <span>LIMITED TIME</span>
+                <DetailDealCountdown product={product} />
               </div>
             </div>
           )}

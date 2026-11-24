@@ -133,17 +133,17 @@ export const Footer: React.FC = () => {
   return (
     <footer className="bg-[#17191D] text-[#B4BAC3] font-body pb-16 lg:pb-0">
       {/* ── Main columns ───────────────────────────────────────── */}
-      <div className="max-w-[1320px] mx-auto px-4 sm:px-6 pt-12 lg:pt-14 pb-10">
+      <div className="max-w-[1320px] mx-auto px-3 sm:px-6 pt-8 sm:pt-12 lg:pt-14 pb-8 sm:pb-10">
         <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-[1.5fr_repeat(4,1fr)] gap-x-8 gap-y-2 md:gap-y-10">
           {/* About + contact */}
-          <div className="md:col-span-4 lg:col-span-1 pb-6 md:pb-0 lg:pr-6">
+          <div className="md:col-span-4 lg:col-span-1 pb-4 sm:pb-6 md:pb-0 lg:pr-6">
             <Logo variant="dark" size="md" showTagline={false} placement="footer" />
-            <p className="mt-4 text-[14px] leading-relaxed text-[#9AA1AB] max-w-sm">
+            <p className="mt-3 sm:mt-4 text-[13px] sm:text-[14px] leading-relaxed text-[#9AA1AB] max-w-sm">
               India&apos;s online store for genuine medical and dental equipment, consumables and rentals —
               with GST invoices and pan-India delivery.
             </p>
 
-            <ul className="mt-6 space-y-3 text-[14px]">
+            <ul className="mt-4 sm:mt-6 space-y-2.5 sm:space-y-3 text-[13px] sm:text-[14px]">
               <li className="flex items-start gap-3">
                 <Phone className="w-4 h-4 mt-0.5 text-[#8B929C] shrink-0" />
                 <span>
@@ -228,28 +228,40 @@ export const Footer: React.FC = () => {
 
       {/* ── Popular categories index ───────────────────────────── */}
       <div className="border-t border-[#2A2E35]">
-        <div className="max-w-[1320px] mx-auto px-4 sm:px-6 py-8">
-          <h3 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-white mb-4">
+        <div className="max-w-[1320px] mx-auto px-3 sm:px-6 py-5 sm:py-8">
+          <h3 className="text-[12px] sm:text-[13px] font-semibold uppercase tracking-[0.08em] text-white mb-2.5 sm:mb-4">
             Popular Categories
           </h3>
-          <div className="space-y-2.5 text-[13px] leading-relaxed">
-            {categories.map((cat) => (
-              <p key={cat.id}>
-                <Link href={`/category/${cat.slug}`} className="font-semibold text-[#D5D9DF] hover:text-white">
-                  {cat.name}:
-                </Link>{' '}
-                {cat.subCategories.map((sub, i) => (
-                  <React.Fragment key={sub.id}>
-                    <Link
-                      href={`/category/${cat.slug}?sub=${sub.slug}`}
-                      className="text-[#8B929C] hover:text-white transition-colors"
-                    >
-                      {sub.name}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs sm:text-[13px] leading-relaxed">
+            {categories.map((cat, idx) => (
+              <React.Fragment key={cat.id}>
+                {cat.subCategories && cat.subCategories.length > 0 ? (
+                  <span className="inline-flex items-center flex-wrap gap-1">
+                    <Link href={`/category/${cat.slug}`} className="font-semibold text-[#D5D9DF] hover:text-white">
+                      {cat.name}:
                     </Link>
-                    {i < cat.subCategories.length - 1 && <span className="text-[#4A5059] mx-1.5">|</span>}
-                  </React.Fragment>
-                ))}
-              </p>
+                    {cat.subCategories.map((sub, i) => (
+                      <React.Fragment key={sub.id}>
+                        <Link
+                          href={`/category/${cat.slug}?sub=${sub.slug}`}
+                          className="text-[#8B929C] hover:text-white transition-colors"
+                        >
+                          {sub.name}
+                        </Link>
+                        {i < cat.subCategories.length - 1 && <span className="text-[#4A5059]">|</span>}
+                      </React.Fragment>
+                    ))}
+                  </span>
+                ) : (
+                  <Link
+                    href={`/category/${cat.slug}`}
+                    className="text-[#8B929C] hover:text-white font-medium transition-colors"
+                  >
+                    {cat.name}
+                  </Link>
+                )}
+                {idx < categories.length - 1 && <span className="text-[#4A5059]">•</span>}
+              </React.Fragment>
             ))}
           </div>
         </div>
@@ -257,25 +269,25 @@ export const Footer: React.FC = () => {
 
       {/* ── Payments + assurances ──────────────────────────────── */}
       <div className="border-t border-[#2A2E35]">
-        <div className="max-w-[1320px] mx-auto px-4 sm:px-6 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[13px] text-[#8B929C] mr-2">We accept</span>
+        <div className="max-w-[1320px] mx-auto px-3 sm:px-6 py-5 sm:py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-5">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className="text-xs sm:text-[13px] text-[#8B929C] mr-1 sm:mr-2">We accept</span>
             {PAYMENT_METHODS.map((m) => {
               const Icon = m.icon;
               return (
                 <span
                   key={m.name}
                   title={m.name}
-                  className={`h-7 ${m.width} bg-white rounded px-1.5 flex items-center justify-center gap-1.5 shrink-0`}
+                  className={`h-6 sm:h-7 ${m.width} bg-white rounded px-1.5 flex items-center justify-center gap-1 shrink-0`}
                 >
                   {m.logo ? (
-                    <span className="relative w-full h-[16px]">
+                    <span className="relative w-full h-[14px] sm:h-[16px]">
                       <Image src={m.logo} alt={m.name} fill unoptimized className="object-contain" />
                     </span>
                   ) : (
                     <>
-                      {Icon && <Icon className="w-3.5 h-3.5 text-[#1F3A68]" aria-hidden="true" />}
-                      <span className="text-[11px] font-semibold text-[#1F2937] whitespace-nowrap">{m.name}</span>
+                      {Icon && <Icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#1F3A68]" aria-hidden="true" />}
+                      <span className="text-[10px] sm:text-[11px] font-semibold text-[#1F2937] whitespace-nowrap">{m.name}</span>
                     </>
                   )}
                 </span>
@@ -283,22 +295,31 @@ export const Footer: React.FC = () => {
             })}
           </div>
 
-          <ul className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] text-[#8B929C]">
-            <li>100% genuine products</li>
-            <li>GST invoice on every order</li>
-            <li>Secure payments</li>
+          <ul className="flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-1 text-xs sm:text-[13px] text-[#8B929C]">
+            <li className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#4ADE80]" />
+              <span>100% genuine products</span>
+            </li>
+            <li className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#4ADE80]" />
+              <span>GST invoice on every order</span>
+            </li>
+            <li className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#4ADE80]" />
+              <span>Secure payments</span>
+            </li>
           </ul>
         </div>
       </div>
 
       {/* ── Legal bar ──────────────────────────────────────────── */}
       <div className="bg-[#111315] border-t border-[#2A2E35]">
-        <div className="max-w-[1320px] mx-auto px-4 sm:px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-[13px] text-[#8B929C]">
+        <div className="max-w-[1320px] mx-auto px-3 sm:px-6 py-4 sm:py-5 pb-24 lg:pb-5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs sm:text-[13px] text-[#8B929C]">
           <p>
             © {year} {store.storeName}. All rights reserved.
             {store.gstin && <span className="ml-2 text-[#5A616B]">GSTIN {store.gstin}</span>}
           </p>
-          <nav aria-label="Legal" className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <nav aria-label="Legal" className="flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-1.5">
             <Link href="/policies/privacy" className="hover:text-white transition-colors">
               Privacy
             </Link>
