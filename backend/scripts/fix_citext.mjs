@@ -1,18 +1,8 @@
+import "../config/load-env.js";
 import pg from 'pg';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { getDbConfig } from '../db/config.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-
-const client = new pg.Client({
-  host: process.env.DB_HOST_LOCAL || 'localhost',
-  port: Number(process.env.DB_PORT_LOCAL) || 5432,
-  user: process.env.DB_USER_LOCAL || 'postgres',
-  password: process.env.DB_PASSWORD_LOCAL || '1234',
-  database: process.env.DB_NAME_LOCAL || 'TECHOMACECOM',
-});
+const client = new pg.Client(getDbConfig());
 
 async function run() {
   await client.connect();
