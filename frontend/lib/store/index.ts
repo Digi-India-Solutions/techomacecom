@@ -361,6 +361,10 @@ export interface RentalDraft {
   period: 'daily' | 'weekly' | 'monthly';
   periods: number;
   startDate: string;
+  /** Delivery time slot, 24h "HH:MM" between 10:00 and 16:00 */
+  deliveryTime?: string;
+  /** Refundable deposit paid online with the booking, or by cheque before delivery */
+  depositMode?: 'online' | 'cheque';
 }
 
 interface RentalState {

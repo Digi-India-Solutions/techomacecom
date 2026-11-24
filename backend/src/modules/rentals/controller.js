@@ -74,6 +74,10 @@ export async function adminPayment(req, res) {
   const r = await admin.recordPayment(p(req).id, req.body, req.admin);
   return ok(res, await audit(req, r, `Recorded ₹${Number(req.body.amount) / 100} ${req.body.method} payment on ${r.rentalNumber}`, "create"));
 }
+export async function adminDepositCheque(req, res) {
+  const r = await admin.recordDepositCheque(p(req).id, req.body, req.admin);
+  return ok(res, await audit(req, r, `Recorded deposit cheque ${req.body.chequeNumber} (₹${r.amounts.deposit}) on ${r.rentalNumber}`, "create"));
+}
 export async function adminExtend(req, res) {
   const r = await admin.extendRental(p(req).id, req.body, req.admin);
   return ok(res, await audit(req, r, `Extended ${r.rentalNumber} by ${req.body.extraPeriods} ${r.plan.unit}(s) till ${r.endDate}`));

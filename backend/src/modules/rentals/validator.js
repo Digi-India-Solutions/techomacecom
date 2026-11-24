@@ -1,3 +1,4 @@
+import { DELIVERY_TIME_SLOTS } from "./pricing.js";
 import { z } from "zod";
 import { mobileField } from "../../lib/mobile.js";
 import { rupeesField, stateCode, GST_STATE_CODES } from "../../lib/money.js";
@@ -28,6 +29,7 @@ export const quoteSchema = z.object({
   period,
   periods: z.coerce.number().int().min(1).max(365),
   startDate: date("Choose a start date").optional(),
+  depositMode: z.enum(["online", "cheque"]).default("online"),
 });
 
 const address = z.object({
@@ -52,6 +54,8 @@ export const createRentalSchema = z
     addressId: id.optional(),
     address: address.optional(),
     kycDocumentIds: z.array(id).max(20).default([]),
+    deliveryTime: z.enum(DELIVERY_TIME_SLOTS, { error: "Choose a delivery time between 10 AM and 4 PM" }),
+    depositMode: z.enum(["online", "cheque"]).default("online"),
   })
   .refine((v) => v.addressId || v.address, { message: "Choose a delivery address", path: ["address"] })
   .refine((v) => v.productId || v.productSlug, { message: "Choose a product", path: ["productId"] });
@@ -96,6 +100,11 @@ export const dispatchSchema = z.object({
   note: optionalText(500),
 });
 export const deliveredSchema = z.object({ deliveredOn: date("Choose the delivery date").optional() });
+export const depositChequeSchema = z.object({
+  chequeNumber: z.string().trim().min(3, "Enter the cheque number").max(30),
+  bank: optionalText(80),
+  note: optionalText(300),
+});
 export const paymentSchema = z.object({
   amount: rupeesField({ min: 1 }),
   method: z.enum(["cash", "upi", "bank_transfer", "cheque"], { error: "Choose how it was paid" }),

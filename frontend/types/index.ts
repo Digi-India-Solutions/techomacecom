@@ -634,6 +634,8 @@ export interface RentalKycDoc {
 }
 
 /** POST /rentals/quote — the server's price for a plan + duration */
+export type RentalDepositMode = 'online' | 'cheque';
+
 export interface RentalQuote {
   productId: string;
   /** Free rentable units right now (serial-numbered machines) */
@@ -649,6 +651,11 @@ export interface RentalQuote {
   gstRate: number;
   deposit: number;
   total: number;
+  /** How the refundable deposit is paid — "cheque" leaves it out of the online payment */
+  depositMode: RentalDepositMode;
+  depositByCheque: number;
+  /** Everything paid online (total − deposit when it comes by cheque) */
+  onlineTotal: number;
   advancePercent: number;
   payNow: number;
   balance: number;
@@ -690,6 +697,8 @@ export interface CustomerRental {
   product: { id: string; name: string; slug: string; brand: string; image: string };
   plan: { period: 'daily' | 'weekly' | 'monthly'; periodLabel: string; unit: string; rate: number; periods: number; durationLabel: string; minPeriods: number; maxPeriods: number };
   requestedStartDate: string | null;
+  requestedDeliveryTime: string | null;
+  requestedDeliveryTimeLabel: string | null;
   startDate: string | null;
   endDate: string | null;
   daysLeft: number | null;
@@ -708,7 +717,10 @@ export interface CustomerRental {
     balanceDue: number;
     refunded: number;
     depositRefund: number | null;
+    /** Deposit cheque not yet collected by staff (0 when paid online) */
+    depositChequeDue: number;
   };
+  deposit: { mode: RentalDepositMode; chequeReceived: boolean; chequeNumber: string | null; chequeBank: string | null; chequeReceivedAt: string | null };
   balanceDuePolicy: 'before_dispatch' | 'on_delivery';
   deliveryAddress: { name: string; phone: string; organisation: string; line1: string; line2: string; landmark: string; city: string; state: string; pincode: string } | null;
   kyc: {

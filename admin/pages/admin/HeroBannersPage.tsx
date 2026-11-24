@@ -236,7 +236,7 @@ export function HeroBannersPage() {
         {activeBanners[0] ? (
           <div className="flex justify-center rounded-xl bg-[#F6F9FD] border border-[#DCE6F2] p-4">
             <div
-              className={`relative overflow-hidden rounded-xl border border-[#DCE6F2] bg-[#0B2545] shadow-sm ${
+              className={`relative overflow-hidden rounded-xl border border-[#DCE6F2] bg-[#0B2545] shadow-sm flex items-center justify-center ${
                 previewDevice === 'desktop'
                   ? 'w-full aspect-[1920/500] max-h-[260px]'
                   : 'w-[280px] aspect-[4/3]'
@@ -249,6 +249,7 @@ export function HeroBannersPage() {
                     : activeBanners[0].mobileImageUrl
                 }
                 alt={activeBanners[0].altText || activeBanners[0].title}
+                className="h-full w-full object-cover object-center"
               />
               <div className="absolute inset-0 bg-gradient-to-r from-[#0B2545]/85 via-[#0B2545]/40 to-transparent flex flex-col justify-center px-6 text-white">
                 <span className="text-[10px] uppercase tracking-wider text-white/75 font-semibold">
@@ -308,8 +309,8 @@ export function HeroBannersPage() {
                     </span>
                   </div>
 
-                  <div className="h-14 w-28 shrink-0 overflow-hidden rounded-lg border border-[#DCE6F2] bg-[#F6F9FD]">
-                    <SafeImage src={b.desktopImageUrl} alt={b.title} />
+                  <div className="h-14 w-28 shrink-0 overflow-hidden rounded-lg border border-[#DCE6F2] bg-[#F6F9FD] flex items-center justify-center">
+                    <SafeImage src={b.desktopImageUrl} alt={b.title} className="h-full w-full object-contain object-center" />
                   </div>
 
                   <div className="min-w-0">

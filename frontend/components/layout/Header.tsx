@@ -205,7 +205,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
             >
               <Menu className="w-6 h-6" />
             </button>
-            <Logo variant="dark" size="xl" showTagline={false} centerWordmark />
+            <Logo variant="dark" size="lg" showTagline={false} centerWordmark />
           </div>
 
           {/* Delivery location — sits right after the logo */}

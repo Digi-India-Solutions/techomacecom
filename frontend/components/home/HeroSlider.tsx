@@ -68,7 +68,7 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({ banners }) => {
   if (!banners || slideCount === 0) {
     return (
       <div
-        className="skeleton w-full aspect-[16/9] md:aspect-[1920/480]"
+        className="skeleton w-full aspect-[4/3] sm:aspect-[16/9] md:aspect-[1920/500]"
         aria-label="Loading hero banners"
       />
     );
@@ -97,20 +97,22 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({ banners }) => {
           return (
             <div
               key={banner.id}
-              className="relative w-full shrink-0 aspect-[16/10] sm:aspect-[16/8] md:aspect-[1920/480] max-h-[500px] overflow-hidden"
+              className="relative w-full shrink-0 aspect-[4/3] sm:aspect-[16/9] md:aspect-[1920/500] overflow-hidden"
             >
               <Link
                 href={banner.link}
                 className="block w-full h-full relative focus:outline-none"
                 aria-label={banner.alt}
               >
-                {/* Desktop & Tablet Banner Image */}
+                {/* Desktop & Tablet Banner Image Placeholder */}
                 {!desktopLoaded && (
                   <div
                     className="absolute inset-0 bg-[#EBF4FB] animate-pulse"
                     aria-hidden="true"
                   />
                 )}
+
+                {/* Desktop Banner Image (1920×500) - Edge-to-edge with no gaps */}
                 <Image
                   src={banner.imageDesktop}
                   alt={banner.alt}
@@ -123,7 +125,7 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({ banners }) => {
                   onLoad={() => markLoaded(`${banner.id}-desktop`)}
                 />
 
-                {/* Mobile Banner Image */}
+                {/* Mobile Banner Image (800×600) - Edge-to-edge with no gaps */}
                 <Image
                   src={banner.imageMobile}
                   alt={banner.alt}

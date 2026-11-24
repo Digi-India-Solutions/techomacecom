@@ -33,6 +33,7 @@ import {
   recordRentalPayment,
   refundRental,
   refundRentalDeposit,
+  recordDepositCheque,
   reviewKyc,
   scheduleRentalReturn,
   sendRentalReminder,
@@ -95,6 +96,7 @@ export function RentalDetailPage() {
   const [deliveredOn, setDeliveredOn] = useState(todayLocal());
   const [payment, setPayment] = useState<{ amount: number; method: OfflinePaymentMethod; reference: string }>({ amount: 0, method: 'upi', reference: '' });
   const [showPayment, setShowPayment] = useState(false);
+  const [cheque, setCheque] = useState({ number: '', bank: '' });
   const [ext, setExt] = useState<{ periods: number; collected: boolean; method: OfflinePaymentMethod; reference: string }>({ periods: 1, collected: true, method: 'upi', reference: '' });
   const [pickup, setPickup] = useState({ pickupDate: plusDays(1), courier: 'Buy Denmed pickup team', awb: '' });
   const [inspect, setInspect] = useState<{ condition: 'good' | 'needs_service' | 'damaged'; notes: string; deductions: { type: DeductionType; amount: number; description: string }[] }>({
@@ -116,7 +118,8 @@ export function RentalDetailPage() {
     setRefund((f) => ({
       ...f,
       amount: r.status === 'returned' ? r.amounts.depositRefund ?? 0 : Math.max(0, r.amounts.paid - r.amounts.refunded),
-      mode: r.payments.some((p) => p.method.startsWith('Online')) ? 'gateway' : 'bank_transfer',
+      // A cheque deposit cannot go back through Razorpay
+      mode: r.status === 'returned' && r.deposit?.mode === 'cheque' ? 'bank_transfer' : r.payments.some((p) => p.method.startsWith('Online')) ? 'gateway' : 'bank_transfer',
     }));
     setKycDecisions({});
     if (r.returnRequestedOn) setPickup((p) => ({ ...p, pickupDate: r.returnRequestedOn! }));
@@ -187,6 +190,34 @@ export function RentalDetailPage() {
   const deductionTotal = inspect.deductions.reduce((s, d) => s + (Number(d.amount) || 0), 0);
   const refundMax = r.status === 'returned' ? r.amounts.depositRefund ?? 0 : Math.max(0, r.amounts.paid - r.amounts.refunded);
   const extensionCost = ext.periods * r.plan.rate;
+  const chequePending = r.deposit?.mode === 'cheque' && r.amounts.depositChequeDue > 0 && !['cancelled', 'deposit_refunded', 'returned'].includes(r.status);
+
+  const chequeForm = (
+    <div className="space-y-3 rounded-lg border border-[#16A34A]/30 bg-[#16A34A]/5 p-3.5">
+      <p className="text-xs font-semibold text-[#12263F]">
+        Customer pays the refundable deposit of {formatINR(r.amounts.depositChequeDue)} by cheque — record it once collected
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <FormField label="Cheque number" required error={fe.chequeNumber}>
+          <input value={cheque.number} onChange={(e) => setCheque((c) => ({ ...c, number: e.target.value }))} className={`${inputClass} font-mono`} />
+        </FormField>
+        <FormField label="Bank">
+          <input value={cheque.bank} onChange={(e) => setCheque((c) => ({ ...c, bank: e.target.value }))} className={inputClass} />
+        </FormField>
+      </div>
+      <button
+        type="button"
+        disabled={busy || cheque.number.trim().length < 3}
+        onClick={async () => {
+          if (await run('record the deposit cheque', () => recordDepositCheque(r.id, { chequeNumber: cheque.number.trim(), bank: cheque.bank.trim() || undefined }), 'Deposit cheque recorded'))
+            setCheque({ number: '', bank: '' });
+        }}
+        className={btnSuccess}
+      >
+        <Banknote className="h-3.5 w-3.5" /> Record cheque of {formatINR(r.amounts.depositChequeDue)}
+      </button>
+    </div>
+  );
 
   const paymentForm = (
     <div className="space-y-3 rounded-lg border border-[#DCE6F2] bg-white p-3.5">
@@ -314,6 +345,13 @@ export function RentalDetailPage() {
               Collect the balance of <strong>{formatINR(r.amounts.balanceDue)}</strong> on delivery and record it before marking delivered.
             </p>
             {paymentForm}
+          </>
+        ) : chequePending ? (
+          <>
+            <p className="rounded-lg border border-[#F28C38]/35 bg-[#F28C38]/10 p-3 text-xs text-[#B85A0E]">
+              Collect the deposit cheque of <strong>{formatINR(r.amounts.depositChequeDue)}</strong> on delivery and record it before marking delivered.
+            </p>
+            {chequeForm}
           </>
         ) : (
           <>
@@ -678,7 +716,7 @@ export function RentalDetailPage() {
                 ['Rent', r.amounts.rent],
                 ['Delivery & pickup', r.amounts.delivery],
                 ['GST', r.amounts.gst],
-                ['Deposit (refundable)', r.amounts.deposit],
+                [r.deposit?.mode === 'cheque' ? 'Deposit (by cheque)' : 'Deposit (refundable)', r.amounts.deposit],
                 ['Total', r.amounts.total],
                 [`Advance (${r.amounts.advancePercent}%)`, r.amounts.advance],
                 ['Paid', r.amounts.paid],
@@ -691,6 +729,14 @@ export function RentalDetailPage() {
               ))}
             </dl>
             <p className="mt-2 text-[11px] text-[#5B6B82]">Balance due {r.balanceDuePolicy === 'on_delivery' ? 'on delivery' : 'before dispatch'}.</p>
+            {r.deposit?.mode === 'cheque' && r.amounts.deposit > 0 && (
+              <p className={`mt-1 text-[11px] font-semibold ${r.deposit.chequeReceived ? 'text-[#16A34A]' : 'text-[#B85A0E]'}`}>
+                {r.deposit.chequeReceived
+                  ? `Deposit cheque ${r.deposit.chequeNumber || ''}${r.deposit.chequeBank ? ` (${r.deposit.chequeBank})` : ''} received — refund it by bank transfer / UPI after return.`
+                  : `Deposit by cheque: ${formatINR(r.amounts.depositChequeDue)} still to collect (required before marking delivered). "Balance due" excludes it.`}
+              </p>
+            )}
+            {chequePending && r.status !== 'dispatched' && canEdit && <div className="mt-3">{chequeForm}</div>}
             {showPayment && <div className="mt-3">{paymentForm}</div>}
             {r.payments.length > 0 && (
               <ul className="mt-3 divide-y divide-[#DCE6F2] rounded-lg border border-[#DCE6F2] text-xs">
@@ -803,7 +849,7 @@ export function RentalDetailPage() {
             </div>
             <dl className="grid grid-cols-2 gap-1 border-t border-[#DCE6F2] pt-2">
               <dt className="text-[#5B6B82]">Requested start</dt>
-              <dd className="tabular-nums">{r.requestedStartDate ? formatShortDate(r.requestedStartDate) : '—'}</dd>
+              <dd className="tabular-nums">{r.requestedStartDate ? formatShortDate(r.requestedStartDate) : '—'}{r.requestedDeliveryTimeLabel ? `, ${r.requestedDeliveryTimeLabel}` : ''}</dd>
               <dt className="text-[#5B6B82]">Rental period</dt>
               <dd className="tabular-nums">{r.startDate && r.endDate ? `${formatShortDate(r.startDate)} → ${formatShortDate(r.endDate)}` : 'Starts on delivery'}</dd>
               <dt className="text-[#5B6B82]">Unit</dt>

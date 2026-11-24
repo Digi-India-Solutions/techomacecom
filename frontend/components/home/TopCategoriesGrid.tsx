@@ -50,24 +50,24 @@ export const TopCategoriesGrid: React.FC<TopCategoriesGridProps> = ({ categories
   };
 
   return (
-    <section className="my-10 sm:my-14">
-      <div className="max-w-[1320px] mx-auto px-4 sm:px-6">
+    <section className="my-6 sm:my-14">
+      <div className="max-w-[1320px] mx-auto px-3 sm:px-6">
         {/* Header */}
-        <div className="flex items-end justify-between mb-5 sm:mb-6">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-[#0F172A] font-heading relative inline-block">
+        <div className="flex items-start sm:items-end justify-between gap-3 mb-3.5 sm:mb-6">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg sm:text-2xl font-bold text-[#0F172A] font-heading relative inline-block">
               {title || 'Top Categories'}
-              <span className="absolute bottom-[-4px] left-0 w-10 h-[3px] bg-[#1D5FAF] rounded-full" />
+              <span className="absolute bottom-[-3px] sm:bottom-[-4px] left-0 w-8 sm:w-10 h-[2.5px] sm:h-[3px] bg-[#1D5FAF] rounded-full" />
             </h2>
-            <p className="text-xs sm:text-sm text-[#475569] font-body mt-2">
+            <p className="text-[11px] sm:text-sm text-[#475569] font-body mt-1 sm:mt-2 line-clamp-1 sm:line-clamp-none">
               Browse dental operatory, respiratory therapy, diagnostic monitors & clinic consumables
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 pt-0.5 sm:pt-0">
             <Link
               href="/categories"
-              className="text-xs sm:text-sm font-bold text-[#1D5FAF] hover:text-[#0B2545] flex items-center gap-1 font-heading transition-colors"
+              className="text-xs sm:text-sm font-bold text-[#1D5FAF] hover:text-[#0B2545] flex items-center gap-0.5 sm:gap-1 font-heading transition-colors whitespace-nowrap"
             >
               <span>All Categories</span>
               <span className="tracking-tighter">&gt;&gt;</span>
@@ -94,35 +94,35 @@ export const TopCategoriesGrid: React.FC<TopCategoriesGridProps> = ({ categories
           </div>
         </div>
 
-        {/* Categories scroll track — single row of vertical cards (image on top, text below) */}
+        {/* Categories scroll track — on mobile exactly 4 cards fit in view, on desktop scrollable cards */}
         <div
           ref={scrollRef}
-          className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1 scroll-smooth snap-x no-scrollbar"
+          className="flex gap-2 sm:gap-5 overflow-x-auto pb-3 sm:pb-4 pt-1 scroll-smooth snap-x no-scrollbar"
         >
           {categories.map((cat) => (
             <Link
               key={cat.id}
               href={`/category/${cat.slug}`}
-              className="group snap-start shrink-0 w-36 sm:w-44 bg-white rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-3 flex flex-col items-center text-center shadow-2xs"
+              className="group snap-start shrink-0 min-w-0 w-[calc((100%-24px)/4)] sm:w-44 bg-white rounded-xl sm:rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-1.5 sm:p-3 flex flex-col items-center text-center shadow-2xs"
             >
               {/* Image tile */}
-              <div className="relative w-full aspect-square rounded-xl bg-[#EAF2FC] group-hover:bg-[#D6E6F8] overflow-hidden transition-colors">
+              <div className="relative w-full aspect-square rounded-lg sm:rounded-xl bg-[#EAF2FC] group-hover:bg-[#D6E6F8] overflow-hidden transition-colors">
                 <SkeletonImage
                   src={getCategoryImage(cat)}
                   alt={cat.name}
                   fill
-                  className="object-contain p-2 transition-transform duration-300 group-hover:scale-110"
-                  sizes="176px"
+                  className="object-contain p-1 sm:p-2 transition-transform duration-300 group-hover:scale-110"
+                  sizes="(max-width: 640px) 25vw, 176px"
                   referrerPolicy="no-referrer"
                 />
               </div>
 
               {/* Text */}
-              <div className="w-full min-w-0 mt-3">
-                <h3 className="font-heading font-bold text-xs sm:text-sm text-[#12263F] group-hover:text-[#1D5FAF] leading-tight line-clamp-2 transition-colors">
+              <div className="w-full min-w-0 mt-1.5 sm:mt-3 px-0.5">
+                <h3 className="font-heading font-bold text-[9.5px] sm:text-sm text-[#12263F] group-hover:text-[#1D5FAF] leading-tight line-clamp-2 transition-colors break-words">
                   {cat.name}
                 </h3>
-                <p className="font-body text-xs text-[#5B6B82] leading-tight mt-1 line-clamp-1">
+                <p className="font-body text-[8.5px] sm:text-xs text-[#5B6B82] leading-tight mt-0.5 sm:mt-1 truncate">
                   {cat.description || `${cat.itemCount}+ Products`}
                 </p>
               </div>

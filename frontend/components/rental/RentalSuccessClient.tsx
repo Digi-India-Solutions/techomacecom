@@ -65,7 +65,7 @@ export default function RentalSuccessClient() {
     {
       icon: Truck,
       title: 'Delivery & installation',
-      text: `We deliver and set it up${rental.requestedStartDate ? ` around ${new Date(`${rental.requestedStartDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}. Your ${rental.plan.durationLabel} rental starts on the delivery day.`,
+      text: `We deliver and set it up${rental.requestedStartDate ? ` around ${new Date(`${rental.requestedStartDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}${rental.requestedDeliveryTimeLabel ? ` at ${rental.requestedDeliveryTimeLabel}` : ''}` : ''}. Your ${rental.plan.durationLabel} rental starts on the delivery day.`,
     },
   ].filter(Boolean) as { icon: React.ElementType; title: string; text: string }[];
 
@@ -95,7 +95,11 @@ export default function RentalSuccessClient() {
             <p className="text-[#5B6B82]">
               {rental.plan.durationLabel} · {inr(rental.plan.rate)}/{rental.plan.unit}
             </p>
-            <p className="text-[#5B6B82]">Booking total {inr(rental.amounts.total)} incl. {inr(rental.amounts.deposit)} refundable deposit</p>
+            <p className="text-[#5B6B82]">
+              {rental.deposit?.mode === 'cheque' && rental.amounts.deposit > 0
+                ? `Booking total ${inr(rental.amounts.total - rental.amounts.deposit)} + ${inr(rental.amounts.deposit)} refundable deposit by cheque (collected before installation)`
+                : `Booking total ${inr(rental.amounts.total)} incl. ${inr(rental.amounts.deposit)} refundable deposit`}
+            </p>
           </div>
         </div>
       </div>

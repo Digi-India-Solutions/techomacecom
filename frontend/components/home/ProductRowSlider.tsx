@@ -52,8 +52,8 @@ export const ProductRowSlider: React.FC<ProductRowSliderProps> = ({
           </div>
         </div>
 
-        {/* Product Cards Grid / Scroll Row */}
-        <CardCarousel ariaLabel={title} itemClassName={PRODUCT_SLIDE}>
+        {/* Product Cards Grid / Scroll Row — 2 cards on mobile, 5 on desktop */}
+        <CardCarousel ariaLabel={title} itemClassName={PRODUCT_SLIDE} rows={1}>
           {products.slice(0, 16).map((product) => (
             <ProductCard key={product.id} product={product} className="h-full" />
           ))}
