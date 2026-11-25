@@ -270,6 +270,7 @@ export interface Product {
   codEnabled: boolean;
   featured: boolean;
   bestSeller: boolean;
+  hotSelling?: boolean;
   dealOfTheDay: boolean;
   newArrival: boolean;
   showAvailableOnRent: boolean;

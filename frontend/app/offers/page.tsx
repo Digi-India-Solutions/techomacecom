@@ -68,9 +68,9 @@ export default async function OffersPage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3.5">
           {deals.map((prod) => (
-            <ProductCard key={prod.id} product={prod} />
+            <ProductCard key={prod.id} product={prod} className="h-full" />
           ))}
         </div>
       </div>
@@ -80,9 +80,9 @@ export default async function OffersPage() {
         <h2 className="text-xl font-bold text-[#12263F] font-heading">
           20%+ Discount Clearance & Equipment
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3.5">
           {discounted.products.map((prod) => (
-            <ProductCard key={prod.id} product={prod} />
+            <ProductCard key={prod.id} product={prod} className="h-full" />
           ))}
         </div>
       </div>

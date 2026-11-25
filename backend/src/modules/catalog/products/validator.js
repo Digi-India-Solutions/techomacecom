@@ -131,6 +131,7 @@ export const productSchema = z
     codEnabled: z.boolean().optional().default(true),
     featured: z.boolean().optional().default(false),
     bestSeller: z.boolean().optional().default(false),
+    hotSelling: z.boolean().optional().default(false),
     dealOfTheDay: z.boolean().optional().default(false),
     newArrival: z.boolean().optional().default(false),
     showAvailableOnRent: z.boolean().optional().default(false),

@@ -3,13 +3,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-/** Column widths (gap is a fixed 20px on desktop, 12px on mobile; widths subtract the gaps on each row). */
+/** Column widths (gap is a fixed 16px on desktop, 10px on mobile; widths subtract the gaps on each row). */
 export const PRODUCT_SLIDE =
-  'auto-cols-[calc((100%_-_12px)/2)] sm:auto-cols-[calc((100%_-_20px)/2)] md:auto-cols-[calc((100%_-_40px)/3)] lg:auto-cols-[calc((100%_-_80px)/5)]';
+  'auto-cols-[calc((100%_-_10px)/2)] sm:auto-cols-[calc((100%_-_16px)/2)] md:auto-cols-[calc((100%_-_48px)/4)] lg:auto-cols-[calc((100%_-_64px)/5)] xl:auto-cols-[calc((100%_-_80px)/6)]';
 export const TESTIMONIAL_SLIDE =
-  'auto-cols-[86%] sm:auto-cols-[calc((100%_-_20px)/2)] lg:auto-cols-[calc((100%_-_40px)/3)]';
+  'auto-cols-[86%] sm:auto-cols-[calc((100%_-_16px)/2)] lg:auto-cols-[calc((100%_-_32px)/3)]';
 
-const GAP = 20;
+const GAP = 16;
 
 interface CardCarouselProps {
   children: React.ReactNode;
@@ -51,7 +51,7 @@ export const CardCarousel: React.FC<CardCarouselProps> = ({
     setThumb({ width: ratio * 100, left: progress * (1 - ratio) * 100 });
     const cell = el.querySelector<HTMLElement>('[data-cell]');
     if (cell && cell.offsetWidth > 0) {
-      const currentGap = typeof window !== 'undefined' && window.innerWidth < 640 ? 12 : GAP;
+      const currentGap = typeof window !== 'undefined' && window.innerWidth < 640 ? 10 : GAP;
       setCols(Math.max(1, Math.round((el.clientWidth + currentGap) / (cell.offsetWidth + currentGap))));
     }
   }, []);
@@ -102,7 +102,7 @@ export const CardCarousel: React.FC<CardCarouselProps> = ({
         role="region"
         aria-roledescription="carousel"
         aria-label={ariaLabel}
-        className={`grid grid-flow-col ${rows === 2 ? 'grid-rows-2' : 'grid-rows-1'} ${itemClassName} gap-3 sm:gap-[20px] overflow-x-auto snap-x snap-mandatory scroll-smooth scroll-px-1 no-scrollbar -mx-1 px-1 pt-1.5 pb-4`}
+        className={`grid grid-flow-col ${rows === 2 ? 'grid-rows-2' : 'grid-rows-1'} ${itemClassName} gap-2.5 sm:gap-[16px] overflow-x-auto snap-x snap-mandatory scroll-smooth scroll-px-1 no-scrollbar -mx-1 px-1 pt-1.5 pb-4`}
       >
         {orderedItems.map((child, i) =>
           child === null ? (

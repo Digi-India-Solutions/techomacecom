@@ -706,17 +706,17 @@ export async function listPublicPageBanners(arg1, arg2, arg3) {
 export const DEFAULT_HOMEPAGE_SECTIONS = [
   { key: 'hero', defaultName: 'Hero', title: 'Featured Clinical Solutions', visible: true, sortOrder: 1, configurableType: 'none', selectedIds: [] },
   { key: 'trust_strip', defaultName: 'Trust Strip', title: 'Why Clinics & Families Trust Buy Denmed', visible: true, sortOrder: 2, configurableType: 'none', selectedIds: [] },
-  { key: 'top_categories', defaultName: 'Top Categories', title: 'Shop by Medical Department', visible: true, sortOrder: 3, configurableType: 'categories', selectedIds: ['cat-respiratory', 'cat-dental', 'cat-patient-monitoring', 'cat-hospital-mobility'] },
-  { key: 'deal_of_the_day', defaultName: 'Deal of the Day', title: 'Deal of the Day', visible: true, sortOrder: 4, configurableType: 'products', selectedIds: ['prod-dental-chair'] },
-  { key: 'featured_categories', defaultName: 'Featured Categories', title: 'Clinical & Homecare Essentials', visible: true, sortOrder: 5, configurableType: 'categories', selectedIds: ['cat-oxygen-therapy', 'cat-operatory'] },
+  { key: 'top_categories', defaultName: 'Top Categories', title: 'Shop by Medical Department', visible: true, sortOrder: 3, configurableType: 'categories', selectedIds: [] },
+  { key: 'deal_of_the_day', defaultName: 'Deal of the Day', title: 'Deal of the Day', visible: true, sortOrder: 4, configurableType: 'products', selectedIds: [] },
+  { key: 'featured_categories', defaultName: 'Featured Categories', title: 'Clinical & Homecare Essentials', visible: true, sortOrder: 5, configurableType: 'categories', selectedIds: [] },
   { key: 'promo_banner_1', defaultName: 'Promo Banner 1', title: 'Special Deals & Offers', visible: true, sortOrder: 6, configurableType: 'none', selectedIds: [] },
-  { key: 'hot_selling', defaultName: 'Hot Selling', title: 'Hot Selling Medical Devices', visible: true, sortOrder: 7, configurableType: 'products', selectedIds: ['prod-oxy-5l', 'prod-patient-monitor', 'prod-wheelchair'] },
+  { key: 'hot_selling', defaultName: 'Hot Selling', title: 'Hot Selling Medical Devices', visible: true, sortOrder: 7, configurableType: 'products', selectedIds: [] },
   { key: 'promo_banner_2', defaultName: 'Promo Banner 2', title: 'Featured Promotional Offers', visible: true, sortOrder: 8, configurableType: 'none', selectedIds: [] },
-  { key: 'rental_section', defaultName: 'Rental Section', title: 'Medical Equipment on Rent', visible: true, sortOrder: 9, configurableType: 'products', selectedIds: ['prod-oxy-5l', 'prod-icu-bed', 'prod-patient-monitor'] },
+  { key: 'rental_section', defaultName: 'Rental Section', title: 'Medical Equipment on Rent', visible: true, sortOrder: 9, configurableType: 'products', selectedIds: [] },
   { key: 'shop_by_brand', defaultName: 'Shop by Brand', title: 'Authorized Global Brands', visible: true, sortOrder: 10, configurableType: 'none', selectedIds: [] },
   { key: 'shop_by_need', defaultName: 'Shop by Care Setting', visible: true, sortOrder: 11, configurableType: 'none', selectedIds: [] },
   { key: 'sleep_test_banner', defaultName: 'Sleep Test Banner', title: 'Book a Home Sleep Apnea Study', visible: true, sortOrder: 12, configurableType: 'none', selectedIds: [] },
-  { key: 'new_arrivals', defaultName: 'New Arrivals', title: 'New Arrivals', visible: true, sortOrder: 13, configurableType: 'products', selectedIds: ['prod-patient-monitor', 'prod-autoclave'] },
+  { key: 'new_arrivals', defaultName: 'New Arrivals', title: 'New Arrivals', visible: true, sortOrder: 13, configurableType: 'products', selectedIds: [] },
   { key: 'why_buy_denmed', defaultName: 'Why Buy Denmed', title: 'Biomedical Service & Warranty Guarantee', visible: true, sortOrder: 14, configurableType: 'none', selectedIds: [] },
   { key: 'testimonials', defaultName: 'Testimonials', title: 'Trusted by 4,200+ Doctors & Caregivers', visible: true, sortOrder: 15, configurableType: 'none', selectedIds: [] },
   { key: 'blog', defaultName: 'Blog', title: 'Clinical Buyer Guides', visible: true, sortOrder: 16, configurableType: 'none', selectedIds: [] },
@@ -879,6 +879,41 @@ export async function getHomepageConfig() {
     });
   }
 
+  // Fetch active product and category IDs to sanitize stale or non-existent IDs
+  const [activeProducts, activeCategories] = await Promise.all([
+    prisma.product.findMany({ where: { deleted_at: null }, select: { id: true } }),
+    prisma.category.findMany({ where: { deleted_at: null }, select: { id: true } }),
+  ]);
+  const validProductIds = new Set(activeProducts.map((p) => p.id.toString()));
+  const validCategoryIds = new Set(activeCategories.map((c) => c.id.toString()));
+
+  // Sanitize any stale or mock IDs in sectionsFromDb and sync DB if needed
+  for (const s of sectionsFromDb) {
+    const cfg = s.config || {};
+    const type = cfg.configurableType || DEFAULT_META_MAP[s.key]?.configurableType || "none";
+    const rawIds = Array.isArray(cfg.selectedIds) ? cfg.selectedIds.map(String) : [];
+
+    let cleanIds = rawIds;
+    if (type === 'products') {
+      cleanIds = rawIds.filter((id) => validProductIds.has(id));
+    } else if (type === 'categories') {
+      cleanIds = rawIds.filter((id) => validCategoryIds.has(id));
+    }
+
+    if (cleanIds.length !== rawIds.length) {
+      cfg.selectedIds = cleanIds;
+      s.config = cfg;
+      try {
+        await prisma.homepageSection.update({
+          where: { id: s.id },
+          data: { config: cfg },
+        });
+      } catch (err) {
+        console.warn(`Could not sync sanitized section ${s.key}:`, err);
+      }
+    }
+  }
+
   const setting = await prisma.setting.findUnique({
     where: {
       group_key_key: {
@@ -908,6 +943,13 @@ export async function getHomepageConfig() {
 export async function saveHomepageConfig(payload, adminUser) {
   const { announcementStrip, sections } = payload;
 
+  const [activeProducts, activeCategories] = await Promise.all([
+    prisma.product.findMany({ where: { deleted_at: null }, select: { id: true } }),
+    prisma.category.findMany({ where: { deleted_at: null }, select: { id: true } }),
+  ]);
+  const validProductIds = new Set(activeProducts.map((p) => p.id.toString()));
+  const validCategoryIds = new Set(activeCategories.map((c) => c.id.toString()));
+
   await prisma.$transaction(async (tx) => {
     // 1. Update or create announcement strip in settings table
     if (announcementStrip !== undefined) {
@@ -935,11 +977,19 @@ export async function saveHomepageConfig(payload, adminUser) {
         const s = sections[i];
         const sortOrder = i + 1;
         const meta = DEFAULT_META_MAP[s.key] || { defaultName: s.key, configurableType: "none" };
+        const configurableType = s.configurableType || meta.configurableType || "none";
+
+        let cleanSelectedIds = Array.isArray(s.selectedIds) ? s.selectedIds.map(String) : [];
+        if (configurableType === 'products') {
+          cleanSelectedIds = cleanSelectedIds.filter((id) => validProductIds.has(id));
+        } else if (configurableType === 'categories') {
+          cleanSelectedIds = cleanSelectedIds.filter((id) => validCategoryIds.has(id));
+        }
 
         const config = {
           defaultName: s.defaultName || meta.defaultName || "",
-          configurableType: s.configurableType || meta.configurableType || "none",
-          selectedIds: Array.isArray(s.selectedIds) ? s.selectedIds : [],
+          configurableType,
+          selectedIds: cleanSelectedIds,
         };
 
         if (s.key === 'featured_categories') {
@@ -967,6 +1017,82 @@ export async function saveHomepageConfig(payload, adminUser) {
             config,
           },
         });
+
+        if (s.key === 'deal_of_the_day') {
+          try {
+            const selectedBigInts = cleanSelectedIds.map((id) => BigInt(id));
+            const now = new Date();
+
+            // Deactivate deals for products removed from Deal of the Day
+            await tx.deal.updateMany({
+              where: {
+                variant: { product_id: { notIn: selectedBigInts } },
+                is_active: true,
+              },
+              data: { is_active: false },
+            });
+
+            // Activate or create deals for products in Deal of the Day
+            for (const bId of selectedBigInts) {
+              const activeDeal = await tx.deal.findFirst({
+                where: {
+                  variant: { product_id: bId },
+                  is_active: true,
+                  ends_at: { gt: now },
+                },
+              });
+              if (!activeDeal) {
+                const defVar = await tx.productVariant.findFirst({
+                  where: { product_id: bId },
+                  orderBy: [{ is_default: 'desc' }, { id: 'asc' }],
+                });
+                if (defVar) {
+                  await tx.deal.create({
+                    data: {
+                      variant_id: defVar.id,
+                      deal_price_paise: defVar.price_paise,
+                      starts_at: now,
+                      ends_at: new Date(now.getTime() + 48 * 60 * 60 * 1000),
+                      is_active: true,
+                    },
+                  });
+                }
+              }
+            }
+          } catch (dealSyncErr) {
+            console.warn("Could not sync deal table in saveHomepageConfig:", dealSyncErr);
+          }
+        }
+
+        if (s.key === 'new_arrivals') {
+          try {
+            const selectedBigInts = cleanSelectedIds.map((id) => BigInt(id));
+            await tx.product.updateMany({
+              where: { id: { in: selectedBigInts }, deleted_at: null },
+              data: { is_new_arrival: true },
+            });
+            await tx.product.updateMany({
+              where: { id: { notIn: selectedBigInts }, deleted_at: null },
+              data: { is_new_arrival: false },
+            });
+          } catch (newArrErr) {
+            console.warn("Could not sync is_new_arrival in saveHomepageConfig:", newArrErr);
+          }
+        }
+
+        if (s.key === 'rental_section') {
+          try {
+            const selectedBigInts = cleanSelectedIds.map((id) => BigInt(id));
+            if (selectedBigInts.length > 0) {
+              await tx.product.updateMany({
+                where: { id: { in: selectedBigInts }, deleted_at: null },
+                data: { rent_enabled: true },
+              });
+            }
+          } catch (rentalSyncErr) {
+            console.warn("Could not sync rent_enabled in saveHomepageConfig:", rentalSyncErr);
+          }
+        }
       }
     }
   });

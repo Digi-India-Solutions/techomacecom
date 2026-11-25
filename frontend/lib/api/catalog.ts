@@ -75,9 +75,46 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
     if (aliased) return aliased;
   }
 
-  // Also try partial match against list of categories
+  // Also try exact ID match, subcategory match, or partial match against list of categories
   try {
     const all = await getCategories();
+    const rawId = cleanSlug.replace(/^cat-/, '');
+
+    for (const c of all) {
+      if (String(c.id).toLowerCase() === cleanSlug || String(c.id).replace(/^cat-/, '') === rawId) {
+        return c;
+      }
+      if (c.slug && c.slug.toLowerCase() === cleanSlug) {
+        return c;
+      }
+      if (c.subCategories?.length) {
+        for (const sub of c.subCategories) {
+          if (
+            String(sub.id).toLowerCase() === cleanSlug ||
+            String(sub.id).replace(/^cat-/, '') === rawId ||
+            (sub.slug && sub.slug.toLowerCase() === cleanSlug)
+          ) {
+            const fullSub = await one<Category>(`/categories/${slugPath(sub.slug)}`);
+            if (fullSub) return fullSub;
+            return {
+              id: String(sub.id),
+              name: sub.name,
+              slug: sub.slug,
+              icon: sub.icon || c.icon || '',
+              image: sub.image || c.image || '',
+              description: '',
+              itemCount: sub.itemCount || 0,
+              subCategories: [],
+              breadcrumbs: [
+                { id: String(c.id), name: c.name, slug: c.slug },
+                { id: String(sub.id), name: sub.name, slug: sub.slug },
+              ],
+            };
+          }
+        }
+      }
+    }
+
     const clean = cleanSlug.replace(/[-_]/g, '');
     const found = all.find((c) => {
       const cs = (c.slug || '').toLowerCase().replace(/[-_]/g, '');
@@ -181,15 +218,29 @@ export async function getDealsOfTheDay(): Promise<Product[]> {
 }
 
 export async function getBestSellers(): Promise<Product[]> {
-  return (await getProducts({ bestSeller: true, limit: 24, sortBy: 'popularity' })).products;
+  const res = await getProducts({ bestSeller: true, limit: 24, sortBy: 'popularity' });
+  if (res.products && res.products.length > 0) {
+    return res.products;
+  }
+  // Fallback: If no products are explicitly tagged with bestSeller in DB,
+  // return top products sorted by popularity so best-sellers is NEVER empty!
+  return (await getProducts({ limit: 24, sortBy: 'popularity' })).products;
 }
 
 export async function getNewArrivals(): Promise<Product[]> {
-  return (await getProducts({ newArrival: true, limit: 24, sortBy: 'newest' })).products;
+  const res = await getProducts({ newArrival: true, limit: 24, sortBy: 'newest' });
+  if (res.products && res.products.length > 0) {
+    return res.products;
+  }
+  return (await getProducts({ limit: 24, sortBy: 'newest' })).products;
 }
 
 export async function getFeaturedProducts(): Promise<Product[]> {
-  return (await getProducts({ featured: true, limit: 24 })).products;
+  const res = await getProducts({ featured: true, limit: 24 });
+  if (res.products && res.products.length > 0) {
+    return res.products;
+  }
+  return (await getProducts({ limit: 24, sortBy: 'popularity' })).products;
 }
 
 /** Products available on rent (at least one active rental plan). */

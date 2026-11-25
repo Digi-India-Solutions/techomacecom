@@ -40,7 +40,7 @@ export const DealOfDay: React.FC<DealOfDayProps> = ({ deals, title = "Deals of t
           <div className="flex items-center justify-between sm:justify-end gap-2.5 sm:gap-3 flex-wrap">
             <Link
               href="/deals"
-              className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-[#1D5FAF] hover:text-[#174D8F] bg-[#EAF2FC] hover:bg-[#DCE6F2] px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl transition-colors font-heading whitespace-nowrap"
+              className="text-xs sm:text-sm font-bold text-[#1D5FAF] hover:text-[#0B2545] flex items-center gap-1 font-heading transition-colors whitespace-nowrap"
             >
               <span>View All Deals</span>
               <span>&rarr;</span>
@@ -48,10 +48,10 @@ export const DealOfDay: React.FC<DealOfDayProps> = ({ deals, title = "Deals of t
           </div>
         </div>
 
-        {/* Deals Cards — individual countdown timer on each card */}
+        {/* Deals Cards */}
         <CardCarousel ariaLabel="Deals of the day" itemClassName={PRODUCT_SLIDE} rows={1}>
           {deals.slice(0, 16).map((deal) => (
-            <ProductCard key={deal.id} product={deal} showDealTimer={true} className="h-full" />
+            <ProductCard key={deal.id} product={deal} className="h-full" />
           ))}
         </CardCarousel>
       </div>

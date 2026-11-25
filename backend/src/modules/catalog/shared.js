@@ -77,12 +77,11 @@ export function tombstone(value, id, max) {
  * Storing the relative path means moving to a CDN later needs no data migration.
  */
 export const imageField = z
-  .string()
-  .trim()
-  .max(1000)
+  .union([z.string(), z.null()])
   .optional()
   .default("")
-  .transform((value, ctx) => {
+  .transform((val, ctx) => {
+    const value = val ? String(val).trim().slice(0, 1000) : "";
     if (!value) return null;
     const stored = parseStoredPath(value);
     if (stored) return stored.path;
@@ -103,12 +102,13 @@ export const imageOut = (path) => (path ? publicUrl(path) : "");
 /** Optional trimmed text; blank → null so the DB stores NULL, not "". */
 export const optionalText = (max) =>
   z
-    .string()
-    .trim()
-    .max(max, `Must be at most ${max} characters`)
+    .union([z.string(), z.null()])
     .optional()
     .default("")
-    .transform((v) => v || null);
+    .transform((val) => {
+      const v = val ? String(val).trim().slice(0, max) : "";
+      return v || null;
+    });
 
 /**
  * Product descriptions come from the admin rich-text editor and are rendered

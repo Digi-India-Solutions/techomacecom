@@ -160,7 +160,7 @@ export const SearchPageSkeleton: React.FC = () => (
       </div>
       <Skeleton className="h-8 w-28 rounded-lg" />
     </div>
-    <ProductGridSkeleton count={8} className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" />
+    <ProductGridSkeleton count={12} className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3.5" />
   </LoadingRegion>
 );
 
@@ -186,7 +186,7 @@ export const OffersPageSkeleton: React.FC = () => (
     {[0, 1].map((s) => (
       <div key={s} className="space-y-4">
         <Skeleton className="h-6 w-56" />
-        <ProductGridSkeleton count={4} className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" />
+        <ProductGridSkeleton count={6} className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3.5" />
       </div>
     ))}
   </LoadingRegion>
@@ -244,7 +244,7 @@ export const BrandPageSkeleton: React.FC = () => (
     </div>
     <div className="space-y-4">
       <Skeleton className="h-6 w-64" />
-      <ProductGridSkeleton count={8} className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" />
+      <ProductGridSkeleton count={12} className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3.5" />
     </div>
   </LoadingRegion>
 );

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Metadata } from 'next';
-import { getBestSellers, getPageBanners, getBrands } from '@/lib/api';
+import { getBestSellers, getProducts, getPageBanners, getBrands } from '@/lib/api';
 import ListingPageLayout from '@/components/listing/ListingPageLayout';
 
 export const metadata: Metadata = {
@@ -11,11 +11,17 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 export default async function BestSellersPage() {
-  const [products, banners, brands] = await Promise.all([
+  const [initialProducts, banners, brands] = await Promise.all([
     getBestSellers(),
     getPageBanners('best_sellers', 'all'),
     getBrands()
   ]);
+
+  let products = initialProducts;
+  if (!products || products.length === 0) {
+    const fallbackRes = await getProducts({ limit: 36, sortBy: 'popularity' });
+    products = fallbackRes.products || [];
+  }
 
   const defaultBanners = banners.length > 0 ? banners : [
     {

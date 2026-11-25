@@ -108,7 +108,8 @@ export async function categoryTree() {
 /** Any visible category (level 1–3) by slug, with breadcrumbs. */
 export async function categoryBySlug(slug) {
   const index = await getCategoryIndex();
-  const row = index.rows.find((r) => r.slug === slug);
+  const clean = String(slug).toLowerCase().trim().replace(/^cat-/, "");
+  const row = index.rows.find((r) => r.slug === slug || String(r.id) === clean || (r.slug && r.slug.toLowerCase() === clean));
   if (!row || !index.visible.has(String(row.id))) throw ApiError.notFound("Category not found");
   const counts = await visibleCountsByCategory(index);
   return {

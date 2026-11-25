@@ -47,6 +47,10 @@ const DetailDealCountdown: React.FC<{ product: Product }> = ({ product }) => {
 
   useEffect(() => {
     const targetMs = getProductDealTargetMs(product);
+    if (!targetMs) {
+      setTimeLeft(null);
+      return;
+    }
 
     const tick = () => {
       const now = Date.now();
@@ -262,7 +266,7 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
       <nav className="flex items-center gap-1.5 text-xs text-[#5B6B82] mb-6 flex-wrap font-body">
         <Link href="/" className="hover:text-[#1D5FAF] transition-colors">Home</Link>
         <ChevronRight className="w-3.5 h-3.5 text-[#5B6B82]" />
-        <Link href={`/category/${product.categoryId.replace('cat-', '')}`} className="hover:text-[#1D5FAF] transition-colors">
+        <Link href={`/category/${product.categorySlug || product.categoryId.replace('cat-', '')}`} className="hover:text-[#1D5FAF] transition-colors">
           {product.categoryName}
         </Link>
         <ChevronRight className="w-3.5 h-3.5 text-[#5B6B82]" />
@@ -690,7 +694,7 @@ export const ProductDetailClient: React.FC<ProductDetailClientProps> = ({
               Frequently Bought Together
             </h2>
             <Link
-              href={`/category/${product.categoryId.replace('cat-', '')}`}
+              href={`/category/${product.categorySlug || product.categoryId.replace('cat-', '')}`}
               className="text-xs font-semibold text-[#1D5FAF] hover:underline font-heading"
             >
               View More in {product.categoryName} →
