@@ -64,13 +64,13 @@ export const FeaturedCategoriesBento: React.FC<FeaturedCategoriesBentoProps> = (
 
   const scrollLeft = () => {
     if (scrollRef.current) {
-      scrollRef.current.scrollBy({ left: -300, behavior: 'smooth' });
+      scrollRef.current.scrollBy({ left: -260, behavior: 'smooth' });
     }
   };
 
   const scrollRight = () => {
     if (scrollRef.current) {
-      scrollRef.current.scrollBy({ left: 300, behavior: 'smooth' });
+      scrollRef.current.scrollBy({ left: 260, behavior: 'smooth' });
     }
   };
 
@@ -121,16 +121,16 @@ export const FeaturedCategoriesBento: React.FC<FeaturedCategoriesBentoProps> = (
           </div>
         </div>
 
-        {/* Categories scroll track — same clean category UI as TopCategoriesGrid (4 cards in mobile view) */}
+        {/* Categories scroll track — compact cards matching reference UI */}
         <div
           ref={scrollRef}
-          className="flex gap-2 sm:gap-5 overflow-x-auto pb-3 sm:pb-4 pt-1 scroll-smooth snap-x no-scrollbar"
+          className="flex gap-2 sm:gap-3 overflow-x-auto pb-3 sm:pb-4 pt-1 scroll-smooth snap-x no-scrollbar"
         >
           {categories.map((cat: any) => (
             <Link
               key={cat.id || cat.slug}
               href={`/category/${cat.slug || cat.id}`}
-              className="group snap-start shrink-0 min-w-0 w-[calc((100%-24px)/4)] sm:w-44 bg-white rounded-xl sm:rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-1.5 sm:p-3 flex flex-col items-center text-center shadow-2xs"
+              className="group snap-start shrink-0 min-w-0 w-[calc((100%-24px)/4)] sm:w-[124px] lg:w-[130px] bg-white rounded-xl sm:rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 p-1.5 sm:p-2 flex flex-col items-center text-center shadow-2xs"
             >
               {/* Image tile */}
               <div className="relative w-full aspect-square rounded-lg sm:rounded-xl bg-[#EAF2FC] group-hover:bg-[#D6E6F8] overflow-hidden transition-colors">
@@ -138,19 +138,19 @@ export const FeaturedCategoriesBento: React.FC<FeaturedCategoriesBentoProps> = (
                   src={getCategoryImage(cat)}
                   alt={cat.name}
                   fill
-                  className="object-contain p-1 sm:p-2 transition-transform duration-300 group-hover:scale-110"
-                  sizes="(max-width: 640px) 25vw, 176px"
+                  className="object-contain p-1 sm:p-1.5 transition-transform duration-300 group-hover:scale-110"
+                  sizes="(max-width: 640px) 25vw, 130px"
                   referrerPolicy="no-referrer"
                 />
               </div>
 
               {/* Text */}
-              <div className="w-full min-w-0 mt-1.5 sm:mt-3 px-0.5">
-                <h3 className="font-heading font-bold text-[9.5px] sm:text-sm text-[#12263F] group-hover:text-[#1D5FAF] leading-tight line-clamp-2 transition-colors break-words">
+              <div className="w-full min-w-0 mt-1 sm:mt-1.5 px-0.5">
+                <h3 className="font-heading font-bold text-[9.5px] sm:text-[11.5px] text-[#12263F] group-hover:text-[#1D5FAF] leading-tight line-clamp-2 min-h-[24px] sm:min-h-[28px] transition-colors break-words">
                   {cat.name}
                 </h3>
-                <p className="font-body text-[8.5px] sm:text-xs text-[#5B6B82] leading-tight mt-0.5 sm:mt-1 truncate">
-                  {cat.description || `${cat.itemCount || 1}+ Products`}
+                <p className="font-body text-[8.5px] sm:text-[10px] text-[#5B6B82] leading-tight mt-0.5 truncate">
+                  {cat.description || `${cat.itemCount || 1}+ Items`}
                 </p>
               </div>
             </Link>

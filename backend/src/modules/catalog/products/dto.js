@@ -27,9 +27,7 @@ export function productInclude(now = new Date()) {
         inventory: true,
         deals: {
           where: {
-            is_active: true,
-            starts_at: { lte: new Date(now.getTime() + 24 * 60 * 60 * 1000) },
-            ends_at: { gt: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+            ends_at: { gt: now },
           },
           orderBy: { ends_at: "asc" },
         },
@@ -82,12 +80,17 @@ function rentalSettings(product) {
 // Admin
 // ---------------------------------------------------------------------------
 
-export function toAdminProduct(product, categoryPath = "") {
+export function toAdminProduct(product, categoryPath = "", merchMap = null) {
   const { live, managed, defaultVariant } = variantParts(product);
   const activeLive = live.filter((v) => v.is_active);
   const stock = activeLive.reduce((s, v) => s + variantStock(v).qty, 0);
   const reserved = activeLive.reduce((s, v) => s + variantStock(v).reserved, 0);
   const rental = rentalSettings(product);
+  const pIdStr = String(product.id);
+
+  const isDeal = merchMap?.dealOfTheDay ? merchMap.dealOfTheDay.has(pIdStr) : Boolean(activeDealOf(live));
+  const isHot = merchMap?.hotSelling ? merchMap.hotSelling.has(pIdStr) : false;
+  const isNew = merchMap?.newArrivals ? merchMap.newArrivals.has(pIdStr) : product.is_new_arrival;
 
   return {
     id: String(product.id),
@@ -113,8 +116,9 @@ export function toAdminProduct(product, categoryPath = "") {
     codEnabled: product.cod_enabled,
     featured: product.is_featured,
     bestSeller: product.is_best_seller,
-    dealOfTheDay: Boolean(activeDealOf(live)),
-    newArrival: product.is_new_arrival,
+    hotSelling: isHot,
+    dealOfTheDay: isDeal,
+    newArrival: isNew,
     showAvailableOnRent: product.rent_enabled,
     variants: managed.map((v) => ({
       id: String(v.id),

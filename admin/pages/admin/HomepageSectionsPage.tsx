@@ -39,8 +39,28 @@ export function HomepageSectionsPage() {
     Promise.all([getHomepageConfig(), listProducts(), listCategories()])
       .then(([cfg, prods, cats]) => {
         if (cancelled) return;
+        const validProdIds = new Set(prods.map((p) => String(p.id)));
+        const flatCats = flattenCategories(cats);
+        const validCatIds = new Set(flatCats.map((c) => String(c.node.id)));
+
+        const sanitizedSections = (cfg.sections || []).map((sec) => {
+          if (sec.configurableType === 'products') {
+            return {
+              ...sec,
+              selectedIds: (sec.selectedIds || []).filter((id) => validProdIds.has(String(id))),
+            };
+          }
+          if (sec.configurableType === 'categories') {
+            return {
+              ...sec,
+              selectedIds: (sec.selectedIds || []).filter((id) => validCatIds.has(String(id))),
+            };
+          }
+          return sec;
+        });
+
         setAnnouncementStrip(cfg.announcementStrip);
-        setSections(cfg.sections);
+        setSections(sanitizedSections);
         setProducts(prods);
         setCategories(cats);
       })
@@ -53,6 +73,18 @@ export function HomepageSectionsPage() {
   }, []);
 
   const flatCategories = useMemo(() => flattenCategories(categories), [categories]);
+
+  const getSelectedCount = (sec: HomepageSection) => {
+    if (sec.configurableType === 'products') {
+      const validProductIds = new Set(products.map((p) => String(p.id)));
+      return sec.selectedIds.filter((id) => validProductIds.has(String(id))).length;
+    }
+    if (sec.configurableType === 'categories') {
+      const validCategoryIds = new Set(flatCategories.map((c) => String(c.node.id)));
+      return sec.selectedIds.filter((id) => validCategoryIds.has(String(id))).length;
+    }
+    return sec.selectedIds.length;
+  };
 
   const moveSection = (from: number, to: number) => {
     if (to < 0 || to >= sections.length || from === to) return;
@@ -74,11 +106,11 @@ export function HomepageSectionsPage() {
     if (sec.configurableType === 'categories') {
       const validCategoryIds = new Set(flatCategories.map((c) => String(c.node.id)));
       const cleaned = sec.selectedIds.filter((id) => validCategoryIds.has(String(id)));
-      setEditSelectedIds(cleaned.length > 0 ? cleaned : sec.selectedIds);
+      setEditSelectedIds(cleaned);
     } else if (sec.configurableType === 'products') {
       const validProductIds = new Set(products.map((p) => String(p.id)));
       const cleaned = sec.selectedIds.filter((id) => validProductIds.has(String(id)));
-      setEditSelectedIds(cleaned.length > 0 ? cleaned : sec.selectedIds);
+      setEditSelectedIds(cleaned);
     } else {
       setEditSelectedIds(sec.selectedIds);
     }
@@ -218,7 +250,7 @@ export function HomepageSectionsPage() {
                     </div>
                     {sec.configurableType !== 'none' && (
                       <p className="text-[11px] text-[#1D5FAF] font-medium">
-                        {sec.selectedIds.length} {sec.configurableType} selected
+                        {getSelectedCount(sec)} {sec.configurableType} selected
                       </p>
                     )}
                   </div>

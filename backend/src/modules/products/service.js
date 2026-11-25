@@ -100,6 +100,7 @@ export function formatProduct(p) {
     codEnabled: p.cod_enabled !== false,
     featured: Boolean(p.is_featured),
     bestSeller: Boolean(p.is_best_seller),
+    hotSelling: false,
     dealOfTheDay: false,
     newArrival: Boolean(p.is_new_arrival),
     showAvailableOnRent: Boolean(p.rent_enabled),

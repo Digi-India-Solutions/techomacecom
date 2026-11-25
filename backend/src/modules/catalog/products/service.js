@@ -38,8 +38,12 @@ export async function list(query) {
     { categoryIds, brandIds: brandId ? [brandId] : undefined, status, stockLevel, emi, rent, cod, q },
     { page, limit, sort }
   );
-  const [rows, index] = await Promise.all([loadInOrder(ids, productInclude()), getCategoryIndex()]);
-  return { rows: rows.map((p) => toAdminProduct(p, index.pathLabel(p.category_id))), meta };
+  const [rows, index, merchMap] = await Promise.all([
+    loadInOrder(ids, productInclude()),
+    getCategoryIndex(),
+    getMerchSectionsSelectedMap(),
+  ]);
+  return { rows: rows.map((p) => toAdminProduct(p, index.pathLabel(p.category_id), merchMap)), meta };
 }
 
 async function findProduct(id, client = prisma) {
@@ -49,8 +53,43 @@ async function findProduct(id, client = prisma) {
 }
 
 export async function getById(id) {
-  const [product, index] = await Promise.all([findProduct(id), getCategoryIndex()]);
-  return toAdminProduct(product, index.pathLabel(product.category_id));
+  const [product, index, merchMap] = await Promise.all([
+    findProduct(id),
+    getCategoryIndex(),
+    getMerchSectionsSelectedMap(),
+  ]);
+  return toAdminProduct(product, index.pathLabel(product.category_id), merchMap);
+}
+
+export async function getMerchSectionsSelectedMap() {
+  try {
+    const sections = await prisma.homepageSection.findMany({
+      where: { key: { in: ['deal_of_the_day', 'hot_selling', 'new_arrivals', 'rental_section'] } },
+      select: { key: true, config: true },
+    });
+    const map = {
+      dealOfTheDay: new Set(),
+      hotSelling: new Set(),
+      newArrivals: new Set(),
+      rentalSection: new Set(),
+    };
+    for (const s of sections) {
+      const ids = Array.isArray(s.config?.selectedIds) ? s.config.selectedIds.map(String) : [];
+      if (s.key === 'deal_of_the_day') map.dealOfTheDay = new Set(ids);
+      if (s.key === 'hot_selling') map.hotSelling = new Set(ids);
+      if (s.key === 'new_arrivals') map.newArrivals = new Set(ids);
+      if (s.key === 'rental_section') map.rentalSection = new Set(ids);
+    }
+    return map;
+  } catch (err) {
+    console.warn("Could not load merchSectionsSelectedMap:", err);
+    return {
+      dealOfTheDay: new Set(),
+      hotSelling: new Set(),
+      newArrivals: new Set(),
+      rentalSection: new Set(),
+    };
+  }
 }
 
 /** Is this SKU free for a product / variant? (the editor checks while typing) */
@@ -388,16 +427,87 @@ async function syncDeal(tx, productId, wanted, defaultVariant) {
     select: { id: true },
   });
   if (wanted && running.length === 0) {
-    await tx.deal.create({
-      data: {
-        variant_id: defaultVariant.id,
-        deal_price_paise: defaultVariant.price_paise,
-        starts_at: now,
-        ends_at: new Date(now.getTime() + 24 * 60 * 60 * 1000),
-      },
-    });
+    if (defaultVariant) {
+      await tx.deal.create({
+        data: {
+          variant_id: defaultVariant.id,
+          deal_price_paise: defaultVariant.price_paise,
+          starts_at: now,
+          ends_at: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+          is_active: true,
+        },
+      });
+    }
   } else if (!wanted && running.length) {
     await tx.deal.updateMany({ where: { id: { in: running.map((d) => d.id) } }, data: { is_active: false } });
+  }
+
+  // Also sync with homepage_sections (key: 'deal_of_the_day')
+  try {
+    const sec = await tx.homepageSection.findUnique({ where: { key: 'deal_of_the_day' } });
+    if (sec) {
+      const cfg = sec.config || {};
+      const rawIds = Array.isArray(cfg.selectedIds) ? cfg.selectedIds.map(String) : [];
+      const prodIdStr = productId.toString();
+      let updatedIds;
+      if (wanted) {
+        updatedIds = rawIds.includes(prodIdStr) ? rawIds : [...rawIds, prodIdStr];
+      } else {
+        updatedIds = rawIds.filter((id) => id !== prodIdStr);
+      }
+      if (updatedIds.length !== rawIds.length) {
+        cfg.selectedIds = updatedIds;
+        await tx.homepageSection.update({
+          where: { id: sec.id },
+          data: { config: cfg },
+        });
+      }
+    }
+  } catch (secErr) {
+    console.warn("Could not sync homepageSection deal_of_the_day:", secErr);
+  }
+}
+
+async function syncProductToMerchSections(tx, productId, data) {
+  const pIdStr = productId.toString();
+  try {
+    const sections = await tx.homepageSection.findMany({
+      where: { key: { in: ['hot_selling', 'new_arrivals', 'rental_section'] } },
+    });
+
+    for (const sec of sections) {
+      const cfg = sec.config || {};
+      const rawIds = Array.isArray(cfg.selectedIds) ? cfg.selectedIds.map(String) : [];
+      let wanted = null;
+
+      if (sec.key === 'hot_selling' && data.hotSelling !== undefined) {
+        wanted = Boolean(data.hotSelling);
+      } else if (sec.key === 'new_arrivals' && data.newArrival !== undefined) {
+        wanted = Boolean(data.newArrival);
+      } else if (sec.key === 'rental_section' && data.showAvailableOnRent !== undefined) {
+        if (!data.showAvailableOnRent) {
+          wanted = false;
+        }
+      }
+
+      if (wanted !== null) {
+        let updated;
+        if (wanted) {
+          updated = rawIds.includes(pIdStr) ? rawIds : [...rawIds, pIdStr];
+        } else {
+          updated = rawIds.filter((id) => id !== pIdStr);
+        }
+        if (updated.length !== rawIds.length) {
+          cfg.selectedIds = updated;
+          await tx.homepageSection.update({
+            where: { id: sec.id },
+            data: { config: cfg },
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Could not sync product to merch sections:", err);
   }
 }
 
@@ -428,7 +538,8 @@ export async function save(id, data, actor) {
     await syncStock(tx, product.id, saved, plan, data.lowStockThreshold, actor?.id);
     await replaceImagesAndSpecs(tx, product.id, data);
     await syncRentalPlans(tx, product.id, data);
-    await syncDeal(tx, product.id, data.dealOfTheDay, saved.find((v) => v.is_default));
+    await syncDeal(tx, product.id, Boolean(data.dealOfTheDay), saved.find((v) => v.is_default) || saved[0]);
+    await syncProductToMerchSections(tx, product.id, data);
     return product.id;
   }, TX_OPTIONS);
 
@@ -511,6 +622,25 @@ async function softDelete(tx, product) {
     await tx.productVariant.update({ where: { id: v.id }, data: { sku: tombstone(v.sku, v.id, SKU_MAX) } });
   }
   await tx.deal.updateMany({ where: { variant: { product_id: product.id }, is_active: true }, data: { is_active: false } });
+  try {
+    const sections = await tx.homepageSection.findMany({
+      where: { key: { in: ['deal_of_the_day', 'hot_selling', 'new_arrivals', 'rental_section'] } },
+    });
+    const pIdStr = product.id.toString();
+    for (const sec of sections) {
+      if (sec && sec.config && Array.isArray(sec.config.selectedIds)) {
+        const updated = sec.config.selectedIds.filter((id) => String(id) !== pIdStr);
+        if (updated.length !== sec.config.selectedIds.length) {
+          await tx.homepageSection.update({
+            where: { id: sec.id },
+            data: { config: { ...sec.config, selectedIds: updated } },
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Could not remove deleted product from homepage sections:", err);
+  }
   await tx.product.update({
     where: { id: product.id },
     data: {

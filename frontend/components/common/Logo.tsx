@@ -32,12 +32,12 @@ export const Logo: React.FC<LogoProps> = ({
 
   const heightClasses =
     size === 'sm'
-      ? 'h-7 sm:h-8'
+      ? 'h-6 sm:h-7'
       : size === 'lg'
-      ? 'h-10 sm:h-12'
+      ? 'h-7.5 sm:h-9 lg:h-12'
       : size === 'xl'
-      ? 'h-12 sm:h-14'
-      : 'h-8 sm:h-10';
+      ? 'h-11 sm:h-14'
+      : 'h-7 sm:h-9';
 
   return (
     <Link

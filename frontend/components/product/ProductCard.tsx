@@ -10,83 +10,56 @@ import { getProductImageUrl } from '@/lib/utils';
 import SkeletonImage from '@/components/common/SkeletonImage';
 import { useHydrated } from '@/hooks/use-hydrated';
 
-export function getProductDealTargetMs(product: Product): number {
-  if (product.dealExpiresAt) {
-    const exp = new Date(product.dealExpiresAt).getTime();
-    if (!Number.isNaN(exp)) {
-      const diff = exp - Date.now();
-      if (diff > 0 && diff <= 48 * 3600 * 1000) {
-        return exp;
-      }
-      if (diff > 48 * 3600 * 1000) {
-        // If set far in the future in DB (e.g. 30+ days),
-        // take the remaining time in the current 24h daily deal cycle
-        const cycle = diff % (24 * 3600 * 1000);
-        return Date.now() + Math.max(3600 * 1000, cycle);
-      }
-    }
-  }
-
-  // Deterministic 24-hr daily deal countdown per product based on ID
-  const idStr = String(product.id || product.slug || 'deal');
-  let hash = 0;
-  for (let i = 0; i < idStr.length; i++) {
-    hash = (hash << 5) - hash + idStr.charCodeAt(i);
-    hash |= 0;
-  }
-  const absHash = Math.abs(hash);
-
-  const now = new Date();
-  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
-  const diffToMidnight = midnight - now.getTime();
-
-  // Offset hours (1 to 14) so each product has its own individual remaining time
-  const offset = ((absHash % 14) + 1) * 3600 * 1000 + ((absHash % 60) * 60 * 1000);
-  const remaining = (diffToMidnight + offset) % (24 * 3600 * 1000);
-
-  return now.getTime() + Math.max(1800 * 1000, remaining);
+export function getProductDealTargetMs(product: Product): number | null {
+  if (!product.dealExpiresAt) return null;
+  const exp = new Date(product.dealExpiresAt).getTime();
+  if (Number.isNaN(exp)) return null;
+  const diff = exp - Date.now();
+  if (diff <= 0) return null;
+  return exp;
 }
 
-export const DealCardTimer: React.FC<{ product: Product }> = ({ product }) => {
-  const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number; seconds: number } | null>(null);
+export const DealCardTimer: React.FC<{ product: Product; className?: string }> = ({ product, className = '' }) => {
+  const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number } | null>(null);
 
   useEffect(() => {
     const targetMs = getProductDealTargetMs(product);
+    if (!targetMs) {
+      setTimeLeft(null);
+      return;
+    }
 
     const update = () => {
       const now = Date.now();
-      const diff = Math.max(0, targetMs - now);
+      const diff = targetMs - now;
+      if (diff <= 0) {
+        setTimeLeft(null);
+        return;
+      }
       const totalSec = Math.floor(diff / 1000);
       const hours = Math.floor(totalSec / 3600);
       const minutes = Math.floor((totalSec % 3600) / 60);
-      const seconds = totalSec % 60;
-      setTimeLeft({ hours, minutes, seconds });
+      setTimeLeft({ hours, minutes });
     };
 
     update();
-    const interval = setInterval(update, 1000);
+    const interval = setInterval(update, 10000);
     return () => clearInterval(interval);
   }, [product.id, product.dealExpiresAt]);
 
   if (!timeLeft) return null;
 
   return (
-    <div className="absolute bottom-1.5 sm:bottom-2 left-1.5 sm:left-2 z-10 pointer-events-none">
-      <div className="flex items-center gap-1 bg-[#0B2545]/92 backdrop-blur-xs text-white text-[9px] sm:text-[10px] font-mono font-bold px-1.5 sm:px-2 py-0.5 rounded-md shadow-xs border border-white/10">
-        <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#EA580C] shrink-0" />
-        <span className="text-slate-300 hidden sm:inline text-[9px] font-body">Ends:</span>
-        <span className="text-white tabular-nums">
-          {String(timeLeft.hours).padStart(2, '0')}h
-        </span>
-        <span className="text-[#EA580C] font-black">:</span>
-        <span className="text-white tabular-nums">
-          {String(timeLeft.minutes).padStart(2, '0')}m
-        </span>
-        <span className="text-[#EA580C] font-black">:</span>
-        <span className="text-[#EA580C] tabular-nums">
-          {String(timeLeft.seconds).padStart(2, '0')}s
-        </span>
-      </div>
+    <div className={`inline-flex items-center gap-0.5 sm:gap-1 bg-transparent text-[9px] sm:text-[10px] font-bold ${className}`}>
+      <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#EA580C] shrink-0" />
+      <span className="text-[#5B6B82] text-[8.5px] sm:text-[9px] font-body">Ends:</span>
+      <span className="text-[#0B2545] font-bold tabular-nums">
+        {timeLeft.hours}h
+      </span>
+      <span className="text-[#EA580C] font-black">:</span>
+      <span className="text-[#0B2545] font-bold tabular-nums">
+        {String(timeLeft.minutes).padStart(2, '0')}m
+      </span>
     </div>
   );
 };
@@ -167,35 +140,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   return (
     <div
-      className={`group bg-white rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden relative p-2.5 sm:p-3 h-full hover:-translate-y-1 shadow-xs ${className}`}
+      className={`group bg-white rounded-2xl border border-[#DCE6F2] hover:border-[#1D5FAF] hover:shadow-lg transition-all duration-300 flex flex-col justify-between overflow-hidden relative p-2 sm:p-2.5 h-full hover:-translate-y-1 shadow-xs ${className}`}
     >
       <div>
         {/* ===================================================
             IMAGE CONTAINER: Clean Buy Denmed #F6F9FD surface
             =================================================== */}
-        <div className="relative w-full h-32 sm:h-44 shrink-0 bg-white rounded-xl overflow-hidden flex items-center justify-center mb-2 sm:mb-2.5">
-          {/* Top-Left Pill Badges */}
+        <div className="relative w-full h-28 sm:h-36 shrink-0 bg-white rounded-xl overflow-hidden flex items-center justify-center mb-1.5 sm:mb-2">
+          {/* Top-Left Pill Badges & Timer */}
           <div className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 flex flex-col gap-1 items-start z-10 pointer-events-none">
-            {/* {product.discountPercentage > 0 && (
-              <span className="bg-[#F28C38] text-white text-[12px] font-bold px-2 py-0.5 rounded-md shadow-xs font-heading">
-                {product.discountPercentage}% OFF
-              </span>
-            )} */}
-            {product.isDealOfDay && (
-              <span className="bg-[#EA580C] text-white text-[9.5px] sm:text-[11px] font-black px-1.5 sm:px-2 py-0.5 rounded-md uppercase tracking-wider font-heading shadow-xs flex items-center gap-0.5 sm:gap-1">
-                ⚡ DEAL
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {product.isDealOfDay && (
+                <span className="bg-[#EA580C] text-white text-[9.5px] sm:text-[11px] font-black px-1.5 sm:px-2 py-0.5 rounded-md uppercase tracking-wider font-heading shadow-xs flex items-center gap-0.5 sm:gap-1">
+                  ⚡ DEAL
+                </span>
+              )}
+              {Boolean(product.dealExpiresAt) && (
+                <DealCardTimer product={product} />
+              )}
+            </div>
             {product.isBestSeller && (
               <span className="bg-[#F5B841] text-[#12263F] text-[9.5px] sm:text-[11px] font-extrabold px-1.5 sm:px-2 py-0.5 rounded-md uppercase tracking-wider font-heading">
                 BEST SELLER
               </span>
             )}
-            {/* {product.rentEnabled && (
-              <span className="bg-[#EAF2FC] text-[#174E90] border border-[#1D5FAF]/20 text-[11px] font-bold px-2 py-0.5 rounded-md font-heading">
-                Rent Available
-              </span>
-            )} */}
           </div>
 
           {/* Top-Right: Wishlist Button */}
@@ -245,11 +213,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 Sold Out
               </span>
             </div>
-          )}
-
-          {/* Bottom-Left: Individual Deal Countdown Timer */}
-          {(showDealTimer || product.isDealOfDay || Boolean(product.dealExpiresAt)) && (
-            <DealCardTimer product={product} />
           )}
 
           {/* Bottom-Right "ADD +" Button or Stepper */}
@@ -303,55 +266,55 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <div className="flex items-center justify-between text-xs text-[#5B6B82] font-body">
             <Link
               href={`/brand/${product.brandId.replace('brand-', '')}`}
-              className="font-bold uppercase tracking-wider text-[#5B6B82] hover:text-[#1D5FAF] truncate max-w-[55%] font-heading text-[10.5px] sm:text-[12px]"
+              className="font-bold uppercase tracking-wider text-[#5B6B82] hover:text-[#1D5FAF] truncate max-w-[55%] font-heading text-[10px] sm:text-[11px]"
             >
               {product.brandName}
             </Link>
             <div className="flex items-center gap-0.5 sm:gap-1 font-bold text-[#12263F] shrink-0">
-              <span className="inline-flex items-center justify-center bg-[#16A34A] text-white text-[9.5px] sm:text-[11px] font-bold px-1.5 py-0.2 rounded-sm gap-0.5 font-heading">
+              <span className="inline-flex items-center justify-center bg-[#16A34A] text-white text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-sm gap-0.5 font-heading">
                 ★ {product.rating}
               </span>
-              <span className="text-[#5B6B82] text-[10px] sm:text-[12px] font-normal">({product.reviewsCount})</span>
+              <span className="text-[#5B6B82] text-[9.5px] sm:text-[11px] font-normal">({product.reviewsCount})</span>
             </div>
           </div>
 
-          {/* Product Name (14px, readable) */}
+          {/* Product Name (readable, compact) */}
           <Link
             href={`/product/${product.slug}`}
-            className="block font-heading font-semibold text-xs sm:text-sm text-[#12263F] group-hover:text-[#1D5FAF] transition-colors line-clamp-2 leading-snug min-h-[32px] sm:h-[38px]"
+            className="block font-heading font-semibold text-xs sm:text-[13px] text-[#12263F] group-hover:text-[#1D5FAF] transition-colors line-clamp-2 leading-snug min-h-[30px] sm:min-h-[34px]"
             title={product.name}
           >
             {product.name}
           </Link>
 
-          {/* Short Description (small, 1 line) */}
+          {/* Short Description (up to 2 lines with ellipsis) */}
           <p
-            className="font-body text-[11px] sm:text-[12px] text-[#5B6B82] leading-snug line-clamp-1 h-3.5 sm:h-4"
+            className="font-body text-[10.5px] sm:text-[11.5px] text-[#5B6B82] leading-snug line-clamp-2 [overflow-wrap:anywhere] min-h-[28px] sm:min-h-[32px]"
             title={cardDescription || undefined}
           >
             {cardDescription}
           </p>
 
           {/* Price Row */}
-          <div className="flex items-baseline gap-1 sm:gap-2 pt-0.5 flex-wrap">
-            <span className="font-heading font-bold text-sm sm:text-lg text-[#12263F]">
+          <div className="flex items-baseline gap-1 sm:gap-1.5 pt-0.5 flex-wrap">
+            <span className="font-heading font-bold text-sm sm:text-base text-[#12263F]">
               ₹{product.price.toLocaleString('en-IN')}
             </span>
             {product.regularPrice && product.regularPrice > product.price ? (
               <>
-                <span className="text-[10px] sm:text-[13px] text-[#5B6B82] line-through font-body">
+                <span className="text-[10px] sm:text-xs text-[#5B6B82] line-through font-body">
                   ₹{product.regularPrice.toLocaleString('en-IN')}
                 </span>
-                <span className="text-[9.5px] sm:text-xs font-bold text-[#EA580C] bg-[#FFF7ED] px-1 sm:px-1.5 py-0.2 rounded font-body">
+                <span className="text-[9px] sm:text-[10px] font-bold text-[#EA580C] bg-[#FFF7ED] px-1 py-0.2 rounded font-body">
                   Save ₹{(product.regularPrice - product.price).toLocaleString('en-IN')}
                 </span>
               </>
             ) : product.mrp > product.price ? (
               <>
-                <span className="text-[11px] sm:text-sm text-[#5B6B82] line-through font-body">
+                <span className="text-[10px] sm:text-xs text-[#5B6B82] line-through font-body">
                   ₹{product.mrp.toLocaleString('en-IN')}
                 </span>
-                <span className="text-[10px] sm:text-sm font-bold text-[#16A34A] font-body">
+                <span className="text-[9px] sm:text-[11px] font-bold text-[#16A34A] font-body">
                   ↓ {product.discountPercentage}% off
                 </span>
               </>
@@ -382,10 +345,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
       {/* Similar Products link at bottom */}
       {showSimilarStrip && (
-        <div className="pt-1.5 sm:pt-2 mt-2 sm:mt-2.5 border-t border-[#DCE6F2]">
+        <div className="pt-1 sm:pt-1.5 mt-1.5 sm:mt-2 border-t border-[#DCE6F2]">
           <Link
-            href={`/category/${product.categoryId.replace('cat-', '')}`}
-            className="flex items-center justify-between text-[11px] sm:text-xs font-bold text-[#1D5FAF] hover:text-[#174E90] transition-colors py-0.5 px-0.5 sm:px-1 rounded-md hover:bg-[#EAF2FC]"
+            href={
+              product.categorySlug
+                ? `/category/${product.categorySlug}${product.subCategorySlug ? `?sub=${encodeURIComponent(product.subCategorySlug)}` : ''}`
+                : `/category/${product.subCategorySlug || product.categoryId.replace(/^cat-/, '')}`
+            }
+            className="flex items-center justify-between text-[10.5px] sm:text-[11px] font-bold text-[#1D5FAF] hover:text-[#174E90] transition-colors py-0.5 px-0.5 sm:px-1 rounded-md hover:bg-[#EAF2FC]"
           >
             <span>View Similar Equipment</span>
             <ChevronRight className="w-3.5 h-3.5" />

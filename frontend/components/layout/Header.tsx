@@ -70,26 +70,43 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false);
   const [activeCategoryIndex, setActiveCategoryIndex] = useState(0);
   const [marqueeNotices, setMarqueeNotices] = useState(TOP_NOTICES);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 30);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     let active = true;
     getHomepageConfig()
       .then((cfg) => {
-        if (!active || !cfg?.announcementStrip) return;
-        const text = cfg.announcementStrip.trim();
-        if (!text) return;
-        const parts = text
-          .split(/[·•|]/)
-          .map((s) => s.trim())
-          .filter(Boolean);
-        if (parts.length > 0) {
-          const icons = [Truck, ShieldCheck, FileText, CreditCard, Sparkles, Activity];
-          const dynamicList = parts.map((partText, idx) => ({
-            icon: icons[idx % icons.length],
-            text: partText,
-            highlight: idx === 1 || partText.toLowerCase().includes('gst')
-          }));
-          setMarqueeNotices(dynamicList);
+        if (!active) return;
+        if (cfg && typeof cfg.announcementStrip === 'string') {
+          const text = cfg.announcementStrip.trim();
+          if (!text) {
+            setMarqueeNotices([]);
+            return;
+          }
+          const parts = text
+            .split(/[·•|]/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (parts.length > 0) {
+            const icons = [Truck, ShieldCheck, FileText, CreditCard, Sparkles, Activity];
+            const dynamicList = parts.map((partText, idx) => ({
+              icon: icons[idx % icons.length],
+              text: partText,
+              highlight: idx === 1 || partText.toLowerCase().includes('gst')
+            }));
+            setMarqueeNotices(dynamicList);
+          } else {
+            setMarqueeNotices([]);
+          }
         }
       })
       .catch(() => {});
@@ -159,51 +176,69 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
       {/* ========================================================
           1. TOP UTILITY STRIP (MEDICAL BLUE #1D5FAF)
           ======================================================== */}
-      <div className="bg-[#1D5FAF] text-white text-xs sm:text-[11px] font-semibold py-2 px-4 sm:px-8 border-b border-white/10">
-        <div className="max-w-[1440px] mx-auto flex items-center">
-          {/* Full-width scrolling notice marquee (pauses on hover) */}
-          <div
-            className="marquee relative flex-1 min-w-0 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)]"
-            aria-label="Store notices"
-          >
-            <div className="marquee-track flex w-max">
-              {[0, 1].map((copy) => (
-                <ul
-                  key={copy}
-                  className="flex shrink-0 items-center"
-                  aria-hidden={copy === 1 ? true : undefined}
-                >
-                  {marqueeNotices.map((notice, i) => (
-                    <li key={i} className="flex items-center gap-1.5 whitespace-nowrap px-5">
-                      <notice.icon className="w-3.5 h-3.5 text-[#F28C38] shrink-0" />
-                      <span className={notice.highlight ? 'text-[#BFDBFE] font-bold' : 'text-white'}>
-                        {notice.text}
-                      </span>
-                      <span className="ml-5 text-white/40">•</span>
-                    </li>
-                  ))}
-                </ul>
-              ))}
+      {marqueeNotices.length > 0 && (
+        <div
+          className={`bg-[#1D5FAF] text-white text-xs sm:text-[11px] font-semibold px-4 sm:px-8 border-b border-white/10 transition-all duration-300 overflow-hidden ${
+            isScrolled
+              ? 'max-h-0 py-0 opacity-0 border-b-0 pointer-events-none'
+              : 'max-h-12 py-2 opacity-100'
+          }`}
+        >
+          <div className="max-w-[1440px] mx-auto flex items-center">
+            {/* Full-width scrolling notice marquee (pauses on hover) */}
+            <div
+              className="marquee relative flex-1 min-w-0 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%-24px),transparent)]"
+              aria-label="Store notices"
+            >
+              <div className="marquee-track flex w-max">
+                {[0, 1].map((copy) => (
+                  <ul
+                    key={copy}
+                    className="flex shrink-0 items-center"
+                    aria-hidden={copy === 1 ? true : undefined}
+                  >
+                    {marqueeNotices.map((notice, i) => (
+                      <li key={i} className="flex items-center gap-1.5 whitespace-nowrap px-5">
+                        <notice.icon className="w-3.5 h-3.5 text-[#F28C38] shrink-0" />
+                        <span className={notice.highlight ? 'text-[#BFDBFE] font-bold' : 'text-white'}>
+                          {notice.text}
+                        </span>
+                        <span className="ml-5 text-white/40">•</span>
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+              </div>
             </div>
-          </div>
 
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ========================================================
           2. MAIN HEADER BAR (NAVY #0B2545)
           ======================================================== */}
-      <div className="bg-[#0B2545] text-white px-4 sm:px-8 lg:px-10 py-3.5 sm:py-4">
-        <div className="max-w-[1440px] mx-auto flex items-center justify-between gap-3 lg:gap-6 xl:gap-10">
+      <div
+        className={`bg-[#0B2545] text-white px-2.5 sm:px-8 lg:px-10 transition-all duration-300 ${
+          isScrolled ? 'py-2 sm:py-4' : 'py-3 sm:py-4'
+        }`}
+      >
+        <div
+          className={`max-w-[1440px] mx-auto flex items-center justify-between gap-1 sm:gap-3 lg:gap-6 xl:gap-10 transition-all duration-300 ${
+            isScrolled
+              ? 'max-h-0 opacity-0 pointer-events-none md:max-h-20 md:opacity-100 md:pointer-events-auto overflow-hidden'
+              : 'max-h-20 opacity-100'
+          }`}
+        >
           {/* Left: Mobile Menu Trigger + Brand Logo */}
-          <div className="flex items-center gap-3.5 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3.5 shrink-0 min-w-0">
             <button
               onClick={onOpenMobileMenu}
-              className="lg:hidden p-2 text-slate-200 hover:text-white rounded-xl hover:bg-[#13335E] transition-colors cursor-pointer"
+              className="lg:hidden p-1.5 sm:p-2 text-slate-200 hover:text-white rounded-xl hover:bg-[#13335E] transition-colors cursor-pointer shrink-0"
               aria-label="Open Navigation Menu"
               suppressHydrationWarning
             >
-              <Menu className="w-6 h-6" />
+              <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
             <Logo variant="dark" size="lg" showTagline={false} centerWordmark />
           </div>
@@ -369,18 +404,18 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
           </div>
 
           {/* Right: plain icon + label actions (Login · Track Order · Wishlist · Cart) */}
-          <div className="flex items-center gap-1 sm:gap-2 xl:gap-4 shrink-0">
+          <div className="flex items-center gap-0.5 sm:gap-2 xl:gap-4 shrink-0">
             {!hydrated ? (
-              <div className="flex items-center gap-2 px-2 py-2" aria-hidden="true">
-                <Skeleton dark className="w-6 h-6 rounded-full" />
+              <div className="flex items-center gap-1 px-1.5 sm:px-2 py-1.5 sm:py-2" aria-hidden="true">
+                <Skeleton dark className="w-5 h-5 sm:w-6 sm:h-6 rounded-full" />
                 <Skeleton dark className="hidden sm:block h-3 w-16" />
               </div>
             ) : isAuthenticated && user ? (
               <Link
                 href="/account"
-                className="flex items-center gap-2 px-2 py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors"
+                className="flex items-center gap-1.5 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors"
               >
-                <CircleUserRound className="w-6 h-6" />
+                <CircleUserRound className="w-5 h-5 sm:w-6 sm:h-6" />
                 <span className="hidden sm:inline text-[13px] font-medium truncate max-w-[120px]">
                   Hi, {user.name.split(' ')[0]}
                 </span>
@@ -389,10 +424,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
               <button
                 type="button"
                 onClick={() => setAuthModalOpen(true)}
-                className="flex items-center gap-2 px-2 py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors cursor-pointer"
                 suppressHydrationWarning
               >
-                <CircleUserRound className="w-6 h-6" />
+                <CircleUserRound className="w-5 h-5 sm:w-6 sm:h-6" />
                 <span className="hidden sm:inline text-[13px] font-medium" suppressHydrationWarning>Login Now</span>
               </button>
             )}
@@ -407,13 +442,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
 
             <Link
               href="/account?tab=wishlist"
-              className="relative flex items-center gap-2 px-2 py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors"
+              className="relative flex items-center gap-1.5 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors"
               aria-label="Wishlist"
             >
               <span className="relative">
-                <Heart className="w-6 h-6" />
+                <Heart className="w-5 h-5 sm:w-6 sm:h-6" />
                 {hydrated && wishlistItems.length > 0 && (
-                  <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F28C38] text-white text-[9px] font-bold flex items-center justify-center">
+                  <span className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] sm:min-w-[18px] sm:h-[18px] px-1 rounded-full bg-[#F28C38] text-white text-[9px] font-bold flex items-center justify-center">
                     {wishlistItems.length}
                   </span>
                 )}
@@ -424,14 +459,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
             <button
               type="button"
               onClick={() => setIsCartOpen(true)}
-              className="flex items-center gap-2 px-2 py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-white hover:text-[#93C5FD] transition-colors cursor-pointer"
               aria-label="Shopping Cart"
               suppressHydrationWarning
             >
               <span className="relative">
-                <ShoppingBag className="w-6 h-6" />
+                <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6" />
                 {hydrated && getItemCount() > 0 && (
-                  <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F28C38] text-white text-[9px] font-bold flex items-center justify-center">
+                  <span className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] sm:min-w-[18px] sm:h-[18px] px-1 rounded-full bg-[#F28C38] text-white text-[9px] font-bold flex items-center justify-center">
                     {getItemCount()}
                   </span>
                 )}
@@ -442,7 +477,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
         </div>
 
         {/* Mobile Search Bar Row (Small Screens) */}
-        <div className="mt-3 md:hidden">
+        <div className={`transition-all duration-300 ${isScrolled ? 'mt-0' : 'mt-3'} md:hidden`}>
           <form onSubmit={handleSearchSubmit} className="relative flex items-center">
             <input
               id="header-search-mobile"

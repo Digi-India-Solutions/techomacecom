@@ -22,28 +22,26 @@ export const AuthModal: React.FC = () => {
       aria-modal="true"
       aria-labelledby="auth-modal-title"
     >
-      <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-[#DCE6F2]">
-        {/* Navy Header */}
-        <div className="bg-[#0B2545] p-6 text-white text-center relative border-b border-[#13335E]">
+      <div className="relative w-full max-w-lg max-h-[92vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-[#DCE6F2] overflow-hidden">
+        {/* Navy Header — fixed, never scrolls off or gets cut off */}
+        <div className="bg-[#0B2545] px-6 py-4 text-white text-center relative border-b border-[#13335E] shrink-0">
           <button
             onClick={() => setAuthModalOpen(false)}
-            className="absolute top-4 right-4 text-white/70 hover:text-white p-1 rounded-lg hover:bg-[#13335E] transition-colors cursor-pointer"
+            className="absolute top-3.5 right-4 text-white/70 hover:text-white p-1.5 rounded-lg hover:bg-[#13335E] transition-colors cursor-pointer z-10"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
-          <div className="flex justify-center mb-2">
+          <div className="flex justify-center mb-1">
             <Logo variant="dark" size="md" showTagline={false} />
           </div>
-          <h3 id="auth-modal-title" className="font-bold text-xl mt-1 font-heading">
+          <h3 id="auth-modal-title" className="font-bold text-lg font-heading">
             Welcome to Buy Denmed
           </h3>
-          <p className="text-xs sm:text-sm text-[#EAF2FC]/80 mt-1 max-w-sm mx-auto leading-relaxed">
-            GST invoices, order tracking and equipment rentals in one place
-          </p>
         </div>
 
-        <div className="p-6 sm:p-8">
+        {/* Scrollable Form Body only if viewport is small */}
+        <div className="p-5 sm:p-7 overflow-y-auto flex-1 overscroll-contain">
           <CustomerAuthForm onSuccess={() => setAuthModalOpen(false)} />
 
           <div className="mt-5 pt-4 border-t border-[#DCE6F2] text-center space-y-2">

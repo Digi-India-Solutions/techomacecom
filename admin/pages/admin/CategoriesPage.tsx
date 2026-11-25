@@ -43,6 +43,17 @@ const EMPTY_CATEGORY: CategoryPayload = {
   status: 'active',
 };
 
+function getAllCategoryIds(nodes: CategoryNode[]): string[] {
+  const ids: string[] = [];
+  for (const n of nodes) {
+    ids.push(n.id);
+    if (n.children && n.children.length > 0) {
+      ids.push(...getAllCategoryIds(n.children));
+    }
+  }
+  return ids;
+}
+
 export function CategoriesPage() {
   const { showToast } = useToast();
   // Buttons follow the role's permissions (the API enforces them too)
@@ -75,7 +86,7 @@ export function CategoriesPage() {
     try {
       const data = await listCategories();
       setTree(data);
-      setExpanded((prev) => (prev.size ? prev : new Set(data.map((n) => n.id))));
+      setExpanded((prev) => (prev.size ? prev : new Set(getAllCategoryIds(data))));
     } catch (err) {
       showToast({
         title: 'Could not load categories',
@@ -101,6 +112,9 @@ export function CategoriesPage() {
   };
 
   const openCreateDrawer = (parentId: string | null = null) => {
+    if (parentId) {
+      setExpanded((prev) => new Set(prev).add(parentId));
+    }
     setForm({ ...EMPTY_CATEGORY, parentId });
     setSlugTouched(false);
     setDrawerOpen(true);
@@ -138,6 +152,12 @@ export function CategoriesPage() {
     try {
       const next = await saveCategory(form);
       setTree(next);
+      setExpanded((prev) => {
+        const nextSet = new Set(prev);
+        if (form.parentId) nextSet.add(form.parentId);
+        getAllCategoryIds(next).forEach((id) => nextSet.add(id));
+        return nextSet;
+      });
       setDrawerOpen(false);
       showToast({
         title: form.id ? 'Category updated' : 'Category created',
@@ -427,16 +447,33 @@ export function CategoriesPage() {
             Organize the 3-level medical catalog taxonomy. Drag rows to reorder or nest under a parent category.
           </p>
         </div>
-        {canCreate && (
-          <button
-            type="button"
-            onClick={() => openCreateDrawer(null)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F]"
-          >
-            <Plus className="h-4 w-4" />
-            Add Category
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {tree.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (expanded.size > 0) {
+                  setExpanded(new Set());
+                } else {
+                  setExpanded(new Set(getAllCategoryIds(tree)));
+                }
+              }}
+              className="rounded-lg border border-[#DCE6F2] bg-white px-3 py-2 text-xs font-semibold text-[#12263F] hover:bg-[#F6F9FD] cursor-pointer"
+            >
+              {expanded.size > 0 ? 'Collapse All' : 'Expand All'}
+            </button>
+          )}
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => openCreateDrawer(null)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#1D5FAF] px-4 py-2 text-xs font-semibold text-white hover:bg-[#174D8F] cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              Add Category
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (

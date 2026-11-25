@@ -7,7 +7,7 @@ export const categorySchema = z.object({
   slug: slugField(140),
   // null / "" / missing → top-level (Level 1) category
   parentId: z
-    .union([idString, z.literal(""), z.null()])
+    .union([idString, z.number().int().positive().transform(String), z.literal(""), z.null()])
     .optional()
     .transform((v) => (v ? BigInt(v) : null)),
   iconUrl: imageField,

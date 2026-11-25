@@ -341,8 +341,7 @@ export default async function HomePage() {
         const selectedIds = sec?.selectedIds || sec?.targetIds;
         if (selectedIds && selectedIds.length > 0) {
           const curated = resolveCuratedProducts('deal_of_the_day', deals);
-          const remaining = deals.filter((d) => !curated.some((c) => c.id === d.id));
-          activeDeals = [...curated, ...remaining];
+          activeDeals = curated.length > 0 ? curated : deals;
         }
         return (
           <DealOfDay
@@ -360,7 +359,7 @@ export default async function HomePage() {
             <ProductRowSlider
               title={getSectionTitle('hot_selling', 'Hot Selling Medical Devices')}
               subtitle="Most ordered operatory handpieces, oxygen concentrators & clinical disposables"
-              viewAllLink="/best-sellers"
+              viewAllLink="/hot-selling"
               products={curatedHotSelling}
             />
             {!hasSeparatePromo2 && <PromoBannerGrid banners={activePromo2Banners} />}

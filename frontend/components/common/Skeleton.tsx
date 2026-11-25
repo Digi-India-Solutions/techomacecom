@@ -115,10 +115,10 @@ export const ProductCardSkeleton: React.FC<{ className?: string }> = ({ classNam
   </div>
 );
 
-/** Product grid as used by listing / search / brand pages (2 → 3 → 4 columns) */
+/** Product grid as used by listing / search / brand pages (2 → 4 → 5 → 6 columns) */
 export const ProductGridSkeleton: React.FC<{ count?: number; className?: string }> = ({
-  count = 8,
-  className = 'grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-4'
+  count = 12,
+  className = 'grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3.5'
 }) => (
   <div className={className}>
     {Array.from({ length: count }).map((_, i) => (
