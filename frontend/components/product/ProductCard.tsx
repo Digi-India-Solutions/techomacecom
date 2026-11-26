@@ -146,25 +146,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* ===================================================
             IMAGE CONTAINER: Clean Buy Denmed #F6F9FD surface
             =================================================== */}
-        <div className="relative w-full h-28 sm:h-36 shrink-0 bg-white rounded-xl overflow-hidden flex items-center justify-center mb-1.5 sm:mb-2">
-          {/* Top-Left Pill Badges & Timer */}
+        <div className="relative w-full h-32 sm:h-40 shrink-0 bg-white rounded-xl overflow-hidden flex items-center justify-center mb-1.5 sm:mb-2">
+          {/* Top-Left Pill Badges */}
           <div className="absolute top-1.5 sm:top-2 left-1.5 sm:left-2 flex flex-col gap-1 items-start z-10 pointer-events-none">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {product.isDealOfDay && (
-                <span className="bg-[#EA580C] text-white text-[9.5px] sm:text-[11px] font-black px-1.5 sm:px-2 py-0.5 rounded-md uppercase tracking-wider font-heading shadow-xs flex items-center gap-0.5 sm:gap-1">
-                  ⚡ DEAL
-                </span>
-              )}
-              {Boolean(product.dealExpiresAt) && (
-                <DealCardTimer product={product} />
-              )}
-            </div>
+            {product.isDealOfDay && (
+              <span className="bg-[#EA580C] text-white text-[9.5px] sm:text-[11px] font-black px-1.5 sm:px-2 py-0.5 rounded-md uppercase tracking-wider font-heading shadow-xs flex items-center gap-0.5 sm:gap-1">
+                ⚡ DEAL
+              </span>
+            )}
             {product.isBestSeller && (
               <span className="bg-[#F5B841] text-[#12263F] text-[9.5px] sm:text-[11px] font-extrabold px-1.5 sm:px-2 py-0.5 rounded-md uppercase tracking-wider font-heading">
                 BEST SELLER
               </span>
             )}
           </div>
+
+          {/* Bottom-Left: Deal Countdown Timer */}
+          {Boolean(product.dealExpiresAt) && (
+            <div className="absolute bottom-1.5 sm:bottom-2 left-1.5 sm:left-2 z-20 pointer-events-none">
+              <DealCardTimer product={product} />
+            </div>
+          )}
 
           {/* Top-Right: Wishlist Button */}
           <button
@@ -217,7 +219,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
           {/* Bottom-Right "ADD +" Button or Stepper */}
           {product.inStock && (
-            <div className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 z-20">
+            <div className="absolute bottom-1.5 sm:bottom-2 right-1 sm:right-1 z-20">
               {cartQty === 0 ? (
                 <button
                   type="button"
